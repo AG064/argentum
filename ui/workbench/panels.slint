@@ -725,7 +725,9 @@ export component GoalCard inherits Rectangle {
                 padding: Theme.sp8;
                 spacing: Theme.sp6;
                 Text {
-                    text: "The agent reports this goal is done";
+                    text: App.goal_report_status == "partial" ? "The agent reports this goal is partly done"
+                        : App.goal_report_status == "needs_input" ? "The agent needs your input"
+                        : "The agent reports this goal is done";
                     color: Theme.text;
                     font-size: Theme.fs-xs;
                     font-weight: Theme.w-semibold;
@@ -740,13 +742,13 @@ export component GoalCard inherits Rectangle {
                     spacing: Theme.sp4;
                     alignment: end;
                     Btn {
-                        label: "Not yet";
+                        label: App.goal_report_status == "complete" ? "Not yet" : "Dismiss";
                         small: true;
-                        kind: "ghost";
+                        kind: App.goal_report_status == "complete" ? "ghost" : "primary";
                         enabled: !App.goal_action_pending && !App.running;
                         clicked => { App.dismiss_goal_report(); }
                     }
-                    Btn {
+                    if App.goal_report_status == "complete": Btn {
                         label: "Confirm done";
                         small: true;
                         enabled: !App.goal_action_pending && !App.running;

@@ -17,7 +17,13 @@ The first stable release, for Windows x64 and Android arm64:
   answer it wrote, then the tools it ran, each group at its own point, folded
   into a "Worked for" block above the final answer when the run finishes;
 - steering notes that show in the chat with their state, approvals that show
-  the full command, and shell failures that report why they failed.
+  the full command, and shell failures that report why they failed;
+- a rejected approval goes back to the agent as an answer, so it carries on with
+  what it can do or tells you what was rejected;
+- goal reports that say whether a goal is done, partly done, or needs your
+  input;
+- starting normally after a crash or a forced close, with no recovery command;
+- opening another workspace in the same window, without restarting the app.
 
 ## Planned for 0.1.1
 
@@ -43,8 +49,15 @@ The first stable release, for Windows x64 and Android arm64:
   (argon2, chacha20poly1305, sha2, getrandom, base64) after their own review,
   and Android Gradle plugin 9.5 with Gradle 9.9, once their checksums are added
   to the Android build's dependency verification.
-- **Plan in the terminal:** the stages of the current task in `argentum chat`,
-  as the Plan module shows them in the app.
+- **Plan:** the real stages of the current task as the agent plans them, in the
+  app's Plan module and in `argentum chat`. Until then the Plan module is listed
+  as coming soon.
+- **Files panel:** browse the workspace's files and the files a session wrote,
+  from the side panel.
+- **Questions from the agent:** the agent asks you when something is unclear and
+  waits for your answer before it goes on.
+- **Search in sessions:** find a sentence or a message in past sessions, from an
+  index that stays fast as history grows.
 - **Changes panel:** every file a session changed, not only the latest run's.
 - **Phone touch:** larger touch targets, a clearer context meter, and fast
   swipes that always scroll a long session.
@@ -66,6 +79,12 @@ The first stable release, for Windows x64 and Android arm64:
 
 ## Planned for 0.2.0
 
+- **Accessibility:** every control reachable by keyboard and named for screen
+  readers on Windows and Android, visible focus everywhere, text that scales,
+  contrast that meets WCAG 2.1 AA in every theme, and reduced motion respected.
+- **Languages:** every interface string translatable, with the language chosen
+  in Settings or taken from the system, dates and numbers in the local format,
+  and layouts that hold up with longer text.
 - **Marketplace:** browse and install add-ons, such as modules, themes, skills and
   MCP servers, and local models from inside the app, with each item's source,
   permissions and checksum shown before it installs.
@@ -79,6 +98,9 @@ The first stable release, for Windows x64 and Android arm64:
 
 - **Computer use:** the agent works in desktop applications, with each action
   shown and approved.
+- **Browser:** a full web browser in the side panel, with normal pages and
+  sign-in, in its own profile separate from your usual browser. Until then the
+  Browser module is listed as coming soon.
 - **Browser use:** the agent opens and works in web pages, with the same
   approvals as other tools.
 - **Customizable themes:** create your own themes, beyond the five built in.

@@ -489,10 +489,14 @@ export component CapabilitiesPage inherits VerticalLayout {
         spacing: Theme.sp4;
         SectionHead {
             title: "BROWSER CONTROL";
-            action: "Refresh";
-            busy: App.browser_status_loading;
+            action: App.browser_extensions_built ? "Refresh" : "";
+            busy: App.browser_extensions_built && App.browser_status_loading;
             activated => { App.refresh_browser_status(); }
         }
+        if !App.browser_extensions_built: Notice { text: "Coming soon: the agent opens and works in web pages, with the same approvals as other tools."; tone: "muted"; }
+    }
+    if App.browser_extensions_built: VerticalLayout {
+        spacing: Theme.sp4;
         Notice { text: "Optional Playwright component the agent can drive. Installing it is not the same as activating it, and neither starts a browser."; tone: "muted"; }
         Fact { name: "Status"; value: App.browser_summary; }
         Fact { name: "Built in"; value: App.browser_extensions_built ? "Yes" : "No, this build omits extensions"; }
@@ -508,10 +512,14 @@ export component CapabilitiesPage inherits VerticalLayout {
         spacing: Theme.sp4;
         SectionHead {
             title: "DESKTOP CONTROL";
-            action: "Refresh";
-            busy: App.desktop_status_loading;
+            action: App.desktop_built ? "Refresh" : "";
+            busy: App.desktop_built && App.desktop_status_loading;
             activated => { App.refresh_desktop_status(); }
         }
+        if !App.desktop_built: Notice { text: "Coming soon: the agent works in desktop applications, with each action shown and approved."; tone: "muted"; }
+    }
+    if App.desktop_built: VerticalLayout {
+        spacing: Theme.sp4;
         Notice { text: "Windows UI Automation for the agent. Every invoke, type, and key action is confirmed for one exact window."; tone: "muted"; }
         Fact { name: "Status"; value: App.desktop_summary; }
         Fact { name: "Built in"; value: App.desktop_built ? "Yes" : "No, this build omits desktop control"; }

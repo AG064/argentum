@@ -1975,7 +1975,7 @@ async fn selection_recovery_multibyte_foreign_path_feedback_stays_bounded() {
 }
 
 #[tokio::test]
-async fn actual_unreadable_instruction_source_remains_fatal_before_write() {
+async fn unreadable_instruction_source_refuses_the_write_and_tells_the_model() {
     let root = tempfile::tempdir().unwrap();
     std::fs::create_dir(root.path().join("nested")).unwrap();
     std::fs::write(root.path().join("nested/AGENTS.md"), [0xff, 0xfe, 0xff]).unwrap();
@@ -1989,15 +1989,19 @@ async fn actual_unreadable_instruction_source_remains_fatal_before_write() {
         true,
     )
     .await;
-    let error = runtime
+    // The write never runs without its instructions. The model hears why in
+    // the call's answer, and the run goes on instead of failing.
+    let _ = runtime
         .dispatch(AppCommand::SubmitTask {
             prompt: "Create the file".into(),
         })
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("instruction_loading_failed"));
-    assert_eq!(requests.lock().unwrap().len(), 1);
+        .await;
     assert!(!root.path().join("nested/hello.txt").exists());
+    let requests = requests.lock().unwrap();
+    assert!(requests.len() >= 2, "the model gets the refusal");
+    let answer = &requests[1].tool_exchanges[0].results[0].content;
+    assert!(answer.contains("path_unavailable"), "{answer}");
+    assert!(answer.contains("instruction_loading_failed"), "{answer}");
 }
 
 #[tokio::test]

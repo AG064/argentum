@@ -53,7 +53,10 @@ the next is a conversation. Modules are harness surfaces (`SurfaceId`).
 | `trajectory` | Side panel | The saved record of one session |
 | `requests` | Side panel | Every model request in this session: when, how long, which endpoint, and what filled its context. Kept for this session only |
 
-`files`, `terminal`, and `preview` are listed in Settings as not in this build.
+`files`, `terminal`, and `preview` are listed in Settings as coming soon. `browser`
+and `plan` work in development builds and are listed as coming soon in release
+builds, as is the `browser.reader` permission. In a release build a link in chat
+shows a notice instead of opening.
 
 Module sets (`module_profile`) switch several at once: `focused` (shown as
 Minimal), `standard`, `review`, `trace`, and `full` (shown as Everything). The

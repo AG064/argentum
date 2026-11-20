@@ -379,23 +379,27 @@ fn f05_junction_scope_fails_without_outside_content() {
         let first = server.request();
         assert!(!first.to_string().contains("F05_JUNCTION"));
         server.tool("escape", "read_text", json!({"path":"linked/file.txt"}));
+        // The read is refused and the model hears why, without any outside
+        // content, and the run goes on to its answer.
+        let second = server.request();
+        assert!(!second.to_string().contains("F05_JUNCTION"));
+        assert!(second.to_string().contains("path_unavailable"));
+        assert!(second.to_string().contains("instruction_loading_failed"));
+        server.complete();
         process.join().unwrap()
     });
-    assert_eq!(output.status.code(), Some(1));
     let replies: Vec<Value> = String::from_utf8(output.stdout)
         .unwrap()
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
-    assert_eq!(
-        replies.last().unwrap()["code"],
-        "instruction_loading_failed"
-    );
     assert!(!replies
         .iter()
         .any(|reply| reply.to_string().contains("F05_JUNCTION")));
     assert!(server.requests.try_recv().is_err());
-    println!("F05 packaged HTTP: junction scope rejected with no outside content or next provider request");
+    println!(
+        "F05 packaged HTTP: junction scope refused with no outside content reaching the provider"
+    );
 }
 
 #[test]

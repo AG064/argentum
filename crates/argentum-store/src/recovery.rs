@@ -1545,6 +1545,69 @@ impl Store {
             Ok(claim)
         }
     }
+
+    /// Recovery an app runs by itself when it starts after an unclean exit.
+    ///
+    /// It takes the lifetime lock first, so it only proceeds once the previous
+    /// owner is proven gone, and a live second copy fails closed with
+    /// `HostOwnershipLive`. It records interrupted work, retires approvals,
+    /// pauses goals, and replays nothing. Interrupted runs that admitted no
+    /// external effect, such as a reply cut off mid-stream whose only unknown
+    /// is the model request's outcome, are acknowledged so their sessions stay
+    /// usable. Any run that may have changed something keeps its hold until
+    /// the owner reviews it.
+    pub fn recover_after_unclean_exit(
+        path: impl AsRef<Path>,
+    ) -> Result<StartupRecovery, StoreError> {
+        // Each reconciliation settles one bounded batch. A long session can
+        // leave several, and the app can only start once all are settled.
+        const MAX_BATCHES: usize = 256;
+        let path = path.as_ref();
+        let mut settlement = Self::reconcile_recovery(path)?;
+        let mut batches = 1;
+        while settlement.incomplete && batches < MAX_BATCHES {
+            let next = Self::reconcile_recovery(path)?;
+            settlement.recovered_run_ids.extend(next.recovered_run_ids);
+            settlement
+                .recovered_invocation_ids
+                .extend(next.recovered_invocation_ids);
+            settlement.mutation_performed |= next.mutation_performed;
+            settlement.incomplete = next.incomplete;
+            settlement.ownership = next.ownership;
+            settlement.recovery_revision = next.recovery_revision.or(settlement.recovery_revision);
+            batches += 1;
+        }
+        let inspection = Self::inspect_recovery(path)?;
+        let mut acknowledged = 0_usize;
+        for run in inspection.runs.iter().filter(|run| {
+            run.execution_state == RecoveryExecutionState::Interrupted
+                && run.admission_blocked
+                && run.owner_reviewed_at.is_none()
+                && run.effect_state != RecoveryEffectState::Admitted
+                && run
+                    .unresolved_effects
+                    .iter()
+                    .all(|reason| reason == "provider_request_outcome_unknown")
+        }) {
+            let Some(revision) = run.recovery_revision else {
+                continue;
+            };
+            Self::review_recovery(path, run.run_id, revision)?;
+            acknowledged += 1;
+        }
+        Ok(StartupRecovery {
+            settlement,
+            acknowledged,
+        })
+    }
+}
+
+/// What [`Store::recover_after_unclean_exit`] did.
+#[derive(Debug, Clone)]
+pub struct StartupRecovery {
+    pub settlement: RecoverySettlement,
+    /// Interrupted runs with no external effect that were acknowledged.
+    pub acknowledged: usize,
 }
 
 fn unsupported_owner_evidence(outcome: OwnershipOutcome, reason: &str) -> HostOwnerEvidence {

@@ -579,6 +579,77 @@ enum ModelToolStep {
     Failed(RuntimeError),
 }
 
+/// Tool failures the model can act on. They answer the call and the run goes
+/// on. Everything else, such as cancellation, an exhausted goal or delegation
+/// budget, a storage or integrity failure, shutdown, or an approval with
+/// nobody to answer it, still ends the run.
+fn tool_failure_reaches_model(error: &RuntimeError) -> bool {
+    match error {
+        RuntimeError::Tool(tool_error) => !matches!(
+            tool_error,
+            ToolError::Cancelled | ToolError::MissingPreparedMutation
+        ),
+        RuntimeError::Workspace(_)
+        | RuntimeError::Security(_)
+        | RuntimeError::Skill(_)
+        | RuntimeError::Harness(_)
+        | RuntimeError::UiPreferences(_)
+        | RuntimeError::Platform(_)
+        | RuntimeError::Instructions(_)
+        | RuntimeError::CapabilityDisabled(_)
+        | RuntimeError::ApprovalDenied(_)
+        | RuntimeError::StaleApproval
+        | RuntimeError::ToolBindingUnavailable
+        | RuntimeError::RestoreBusy
+        | RuntimeError::RestoreSnapshotUnavailable
+        | RuntimeError::DelegationTimedOut
+        | RuntimeError::DelegationResultTooLarge
+        | RuntimeError::DelegationSourceUnavailable
+        | RuntimeError::UnknownModule
+        | RuntimeError::ModuleNotInstalled
+        | RuntimeError::ModuleBusy
+        | RuntimeError::ModuleDisabled
+        | RuntimeError::TrajectoryDisabled => true,
+        _ => false,
+    }
+}
+
+/// The answer the model receives for a call that failed.
+fn tool_failure_result(call_id: String, error: &RuntimeError) -> ModelToolResult {
+    ModelToolResult {
+        images: Default::default(),
+        call_id,
+        content: serde_json::json!({
+            "outcome": "tool_failed",
+            "executed": "unknown",
+            "error": error.to_string(),
+            "detail": "This call failed and the run goes on. If it started a process it may have partly run, so check before relying on it. Do not repeat the same call unchanged. Try another approach, or tell the owner what failed.",
+        })
+        .to_string(),
+    }
+}
+
+/// Adds a warning to the second identical failure: one more stops the run.
+fn with_repeat_warning(content: &str) -> String {
+    const WARNING: &str = "This exact call has failed the same way twice. A third identical attempt stops the run. Change the approach or tell the owner what is blocked.";
+    match serde_json::from_str::<serde_json::Value>(content) {
+        Ok(serde_json::Value::Object(mut object)) => {
+            object.insert("repeat_warning".into(), WARNING.into());
+            serde_json::Value::Object(object).to_string()
+        }
+        _ => format!("{content}\n{WARNING}"),
+    }
+}
+
+/// The tool result the model receives when the owner rejects its action.
+fn owner_rejection(call_id: String) -> ModelToolResult {
+    ModelToolResult {
+        images: Default::default(),
+        call_id,
+        content: "{\"outcome\":\"rejected_by_owner\",\"executed\":false,\"detail\":\"The owner rejected this action, so it was not run and nothing changed. Do not request the same action again. Continue with the parts of the task that do not need it, or tell the owner what was rejected and what is left.\"}".into(),
+    }
+}
+
 fn instruction_refresh(call_id: String) -> ModelToolStep {
     ModelToolStep::Ready(ModelToolResult { images: Default::default(),
         call_id,
@@ -5547,7 +5618,7 @@ impl RuntimeService {
                         step = Err(error);
                     }
                     match step {
-                        Ok(ModelToolStep::Ready(result)) => {
+                        Ok(ModelToolStep::Ready(mut result)) => {
                             if let Some(code) = tool_feedback::rejected_code(&result.content) {
                                 let signature =
                                     tool_feedback::rejection_signature(call, &result.content, code);
@@ -5561,6 +5632,8 @@ impl RuntimeService {
                                     settlement = Some(Err(RuntimeError::RepeatedToolRejection(
                                         format!("{code:?}"),
                                     )));
+                                } else if rejected_streak == 2 {
+                                    result.content = with_repeat_warning(&result.content);
                                 }
                             } else {
                                 rejected_streak = 0;
@@ -5592,6 +5665,23 @@ impl RuntimeService {
                                 .map_err(|_| RuntimeError::ContextRecording)?,
                             );
                             settlement = Some(Ok(RunCompletion::Cancelled));
+                        }
+                        Ok(ModelToolStep::Failed(error_value)) | Err(error_value)
+                            if tool_failure_reaches_model(&error_value) =>
+                        {
+                            let result = tool_failure_result(call.id.clone(), &error_value);
+                            observations.push(
+                                self.capture_observation(
+                                    context.session_id,
+                                    context.run_id,
+                                    call,
+                                    Some(runtime_call_id),
+                                    Some(&result),
+                                    ObservationState::ResultAvailable,
+                                )
+                                .map_err(|_| RuntimeError::ContextRecording)?,
+                            );
+                            results.push(result);
                         }
                         Ok(ModelToolStep::Failed(error_value)) | Err(error_value) => {
                             let observation_state = if matches!(
@@ -6312,8 +6402,24 @@ impl RuntimeService {
             }
             Err(error_value) => return Err(error_value),
         }
-        if instruction_run.encounter(&self.workspace, &request.input, policy.sandbox_scope)? {
-            return Ok(instruction_refresh(call.id));
+        // A path whose project instructions cannot be read, such as a system
+        // folder the account cannot open, answers this call without running
+        // it. The run goes on so the model can pick another path.
+        match instruction_run.encounter(&self.workspace, &request.input, policy.sandbox_scope) {
+            Ok(true) => return Ok(instruction_refresh(call.id)),
+            Ok(false) => {}
+            Err(error_value) => {
+                return Ok(ModelToolStep::Ready(ModelToolResult {
+                    images: Default::default(),
+                    call_id: call.id,
+                    content: serde_json::json!({
+                        "outcome": "path_unavailable",
+                        "executed": false,
+                        "detail": format!("{error_value}. This call was not run and nothing changed. The path may be a protected system folder. Use another path, or tell the owner what could not be read."),
+                    })
+                    .to_string(),
+                }));
+            }
         }
         let instruction_check = instruction_run.check();
         if let ToolInput::UpdateUi { patch } = &request.input {
@@ -8422,13 +8528,14 @@ impl RuntimeService {
                 Ok(())
             }
             PendingToolContinuation::Model {
-                provider_call_id: _,
+                provider_call_id,
                 sender,
                 ..
             } => {
-                let _ = sender.send(ModelToolStep::Failed(RuntimeError::ApprovalDenied(
-                    denial_context,
-                )));
+                // A rejection answers this one call. The run goes on, so the
+                // agent can do what does not need the action, or tell the owner
+                // what was rejected. It grants nothing and is not retried.
+                let _ = sender.send(ModelToolStep::Ready(owner_rejection(provider_call_id)));
                 Ok(())
             }
             PendingToolContinuation::Supervisor { sender, .. } => {
@@ -20840,5 +20947,50 @@ mod process_tool_tests {
         for id in ["tool.read-text", "tool.edit-text", "tool.ui-inspect"] {
             assert!(!spawns_process(id), "{id}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tool_failure_tests {
+    use super::{tool_failure_reaches_model, tool_failure_result, with_repeat_warning};
+    use super::{RuntimeError, ToolError};
+
+    #[test]
+    fn tool_failures_answer_the_call_and_run_ending_errors_still_end_it() {
+        let listing = RuntimeError::Workspace(argentum_workspaces::WorkspaceError::LimitExceeded(
+            "directory entries",
+        ));
+        assert!(tool_failure_reaches_model(&listing));
+        assert!(tool_failure_reaches_model(&RuntimeError::Tool(
+            ToolError::InvalidInput("bad".into())
+        )));
+        for fatal in [
+            RuntimeError::Tool(ToolError::Cancelled),
+            RuntimeError::GoalDeadline,
+            RuntimeError::ContextRecording,
+            RuntimeError::ShuttingDown,
+            RuntimeError::ToolContinuationClosed,
+        ] {
+            assert!(!tool_failure_reaches_model(&fatal), "{fatal}");
+        }
+        let answer: serde_json::Value =
+            serde_json::from_str(&tool_failure_result("call".into(), &listing).content).unwrap();
+        assert_eq!(answer["outcome"], "tool_failed");
+        assert!(answer["error"]
+            .as_str()
+            .unwrap()
+            .contains("directory entries"));
+    }
+
+    #[test]
+    fn the_second_identical_failure_warns_before_the_guard_stops_the_run() {
+        let warned: serde_json::Value =
+            serde_json::from_str(&with_repeat_warning(r#"{"success":false}"#)).unwrap();
+        assert_eq!(warned["success"], false);
+        assert!(warned["repeat_warning"]
+            .as_str()
+            .unwrap()
+            .contains("third identical attempt"));
+        assert!(with_repeat_warning("plain").starts_with("plain\n"));
     }
 }

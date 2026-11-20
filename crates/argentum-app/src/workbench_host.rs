@@ -12,7 +12,12 @@ use argentum_platform::AppPaths;
 use argentum_ui::{App, UiHandle};
 use slint::{ComponentHandle, SharedString};
 
-pub(crate) fn connect(ui: &UiHandle, app_paths: &AppPaths, runtime: &tokio::runtime::Handle) {
+pub(crate) fn connect(
+    ui: &UiHandle,
+    app_paths: &AppPaths,
+    runtime: &tokio::runtime::Handle,
+    workspace_switch: argentum_app::WorkspaceSwitch,
+) {
     connect_updates(ui, app_paths, runtime);
     ui.window().global::<App>().on_report_problem(|| {
         // A fixed github.com address; explorer hands it to the default browser.
@@ -30,20 +35,26 @@ pub(crate) fn connect(ui: &UiHandle, app_paths: &AppPaths, runtime: &tokio::runt
         let Some(window) = reopen_ui.upgrade() else {
             return;
         };
-        match paths.save_workspace(Path::new(path.trim())) {
-            Ok(_) => match env::current_exe().and_then(|executable| {
-                std::process::Command::new(executable)
-                    .env_remove("ARGENTUM_WORKSPACE")
-                    .spawn()
-            }) {
-                Ok(_) => {
-                    let _ = slint::quit_event_loop();
-                }
-                Err(_) => window.set_workspace_notice(
-                    "The folder is saved. Restart Argentum to open it.".into(),
-                ),
-            },
-            Err(_) => {
+        // A run belongs to the workspace it started in, so it finishes first.
+        if window.global::<App>().get_running() {
+            window.set_workspace_notice(
+                "Wait for the current run to finish, then open the folder.".into(),
+            );
+            return;
+        }
+        // The app stays open: the current workspace closes cleanly and the
+        // chosen one opens in the same window.
+        let opened = paths
+            .save_workspace(Path::new(path.trim()))
+            .ok()
+            .and_then(|root| {
+                argentum_cli::HostConfig::discover(&root)
+                    .ok()
+                    .map(|config| (config, argentum_ui::display_workspace_label(&root)))
+            });
+        match opened {
+            Some((config, label)) => workspace_switch.request(config, label),
+            None => {
                 window.set_workspace_notice("That folder cannot be opened.".into());
             }
         }

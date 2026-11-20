@@ -87,6 +87,42 @@ pub enum WorkspaceEntryKind {
     Directory,
 }
 
+/// Most directory entries one listing looks at. A larger folder is listed
+/// from its first entries by name, and the count says it is a lower bound.
+pub const MAX_SCANNED_DIRECTORY_ENTRIES: usize = 20_000;
+
+/// One page of a directory: the first entries by name, and how many there are.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectoryListing {
+    pub entries: Vec<WorkspaceDirectoryEntry>,
+    /// Entries seen in the folder. When `total_is_lower_bound` is true the
+    /// scan stopped at [`MAX_SCANNED_DIRECTORY_ENTRIES`].
+    pub total_entries: usize,
+    pub total_is_lower_bound: bool,
+}
+
+impl DirectoryListing {
+    /// Whether some entries were left out.
+    pub fn truncated(&self) -> bool {
+        self.total_entries > self.entries.len()
+    }
+
+    fn from_scan(
+        mut entries: Vec<WorkspaceDirectoryEntry>,
+        max_entries: usize,
+        capped: bool,
+    ) -> Self {
+        entries.sort_by(|left, right| left.name.cmp(&right.name));
+        let total_entries = entries.len();
+        entries.truncate(max_entries);
+        Self {
+            entries,
+            total_entries,
+            total_is_lower_bound: capped,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceDirectoryEntry {
     pub path: String,
@@ -1007,7 +1043,7 @@ impl WorkspaceManager {
         &self,
         path: impl AsRef<Path>,
         max_entries: usize,
-    ) -> Result<Vec<WorkspaceDirectoryEntry>, WorkspaceError> {
+    ) -> Result<DirectoryListing, WorkspaceError> {
         if max_entries == 0 {
             return Err(WorkspaceError::LimitExceeded("directory entries"));
         }
@@ -1025,18 +1061,21 @@ impl WorkspaceManager {
         }
 
         let mut entries = Vec::new();
+        let mut capped = false;
         for entry in fs::read_dir(&absolute).map_err(|source| WorkspaceError::Io {
             path: absolute.clone(),
             source,
         })? {
-            let entry = entry.map_err(|source| WorkspaceError::Io {
-                path: absolute.clone(),
-                source,
-            })?;
-            let file_type = entry.file_type().map_err(|source| WorkspaceError::Io {
-                path: entry.path(),
-                source,
-            })?;
+            if entries.len() >= MAX_SCANNED_DIRECTORY_ENTRIES {
+                capped = true;
+                break;
+            }
+            let Ok(entry) = entry else {
+                continue;
+            };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
             if file_type.is_symlink() {
                 continue;
             }
@@ -1047,10 +1086,9 @@ impl WorkspaceManager {
             } else {
                 continue;
             };
-            let metadata = entry.metadata().map_err(|source| WorkspaceError::Io {
-                path: entry.path(),
-                source,
-            })?;
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
             let name = entry.file_name().to_string_lossy().into_owned();
             entries.push(WorkspaceDirectoryEntry {
                 path: normalize_display_path(&relative.join(&name)),
@@ -1058,12 +1096,8 @@ impl WorkspaceManager {
                 kind,
                 size_bytes: metadata.len(),
             });
-            if entries.len() > max_entries {
-                return Err(WorkspaceError::LimitExceeded("directory entries"));
-            }
         }
-        entries.sort_by(|left, right| left.name.cmp(&right.name));
-        Ok(entries)
+        Ok(DirectoryListing::from_scan(entries, max_entries, capped))
     }
 
     pub fn list_directory_bounded_with_scope(
@@ -1071,7 +1105,7 @@ impl WorkspaceManager {
         path: impl AsRef<Path>,
         max_entries: usize,
         scope: SandboxScope,
-    ) -> Result<Vec<WorkspaceDirectoryEntry>, WorkspaceError> {
+    ) -> Result<DirectoryListing, WorkspaceError> {
         match self.resolve_path_with_scope(path, scope)? {
             ScopedPath::Workspace { relative, .. } => {
                 self.list_directory_bounded(relative, max_entries)
@@ -1570,7 +1604,7 @@ fn capture_ambient_file(
 fn list_ambient_directory(
     absolute: &Path,
     max_entries: usize,
-) -> Result<Vec<WorkspaceDirectoryEntry>, WorkspaceError> {
+) -> Result<DirectoryListing, WorkspaceError> {
     if max_entries == 0 {
         return Err(WorkspaceError::LimitExceeded("directory entries"));
     }
@@ -1586,19 +1620,22 @@ fn list_ambient_directory(
     }
 
     let mut entries = Vec::new();
+    let mut capped = false;
     for entry in fs::read_dir(absolute).map_err(|source| WorkspaceError::Io {
         path: absolute.to_path_buf(),
         source,
     })? {
-        let entry = entry.map_err(|source| WorkspaceError::Io {
-            path: absolute.to_path_buf(),
-            source,
-        })?;
+        if entries.len() >= MAX_SCANNED_DIRECTORY_ENTRIES {
+            capped = true;
+            break;
+        }
+        let Ok(entry) = entry else {
+            continue;
+        };
         let entry_path = entry.path();
-        let file_type = entry.file_type().map_err(|source| WorkspaceError::Io {
-            path: entry_path.clone(),
-            source,
-        })?;
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         if file_type.is_symlink() {
             continue;
         }
@@ -1609,22 +1646,17 @@ fn list_ambient_directory(
         } else {
             continue;
         };
-        let metadata = entry.metadata().map_err(|source| WorkspaceError::Io {
-            path: entry_path.clone(),
-            source,
-        })?;
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
         entries.push(WorkspaceDirectoryEntry {
             path: entry_path.to_string_lossy().into_owned(),
             name: entry.file_name().to_string_lossy().into_owned(),
             kind,
             size_bytes: metadata.len(),
         });
-        if entries.len() > max_entries {
-            return Err(WorkspaceError::LimitExceeded("directory entries"));
-        }
     }
-    entries.sort_by(|left, right| left.name.cmp(&right.name));
-    Ok(entries)
+    Ok(DirectoryListing::from_scan(entries, max_entries, capped))
 }
 
 fn ambient_metadata(absolute: &Path) -> Result<WorkspaceMetadata, WorkspaceError> {
@@ -1814,9 +1846,11 @@ mod tests {
             CapabilityBroker::new(workspace.path(), ApprovalPolicy::default()).expect("broker");
         let manager = WorkspaceManager::new(broker);
 
-        let entries = manager
+        let listing = manager
             .list_directory_bounded("src", 8)
             .expect("directory listing");
+        assert!(!listing.truncated());
+        let entries = listing.entries;
         assert_eq!(
             entries
                 .iter()
@@ -1873,10 +1907,20 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["src/lib.rs", "src/nested/mod.rs"]
         );
-        assert!(matches!(
-            manager.list_directory_bounded("src", 2),
-            Err(WorkspaceError::LimitExceeded("directory entries"))
-        ));
+        // A folder larger than the limit lists its first entries by name and
+        // says how many it has, so the caller can narrow down instead of
+        // failing on every attempt.
+        let all = manager
+            .list_directory_bounded("src", 1024)
+            .expect("whole folder");
+        assert!(all.entries.len() > 2);
+        let page = manager
+            .list_directory_bounded("src", 2)
+            .expect("first page of a large folder");
+        assert_eq!(page.entries, all.entries[..2]);
+        assert_eq!(page.total_entries, all.entries.len());
+        assert!(page.truncated());
+        assert!(!page.total_is_lower_bound);
     }
 
     #[test]
@@ -1893,7 +1937,8 @@ mod tests {
 
         let entries = manager
             .list_directory_bounded_with_scope(&ambient, 8, SandboxScope::Unrestricted)
-            .expect("ambient directory listing");
+            .expect("ambient directory listing")
+            .entries;
         assert_eq!(
             entries
                 .iter()

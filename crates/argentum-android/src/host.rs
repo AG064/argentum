@@ -176,6 +176,7 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
             seed_profiles: android_provider_profiles().into(),
             inference_foreground: Some(inference_foreground),
             session_export: Some(share_session_export_sink(app.clone())),
+            workspace_switch: None,
         },
         move |ui| {
             ui.window().set_touch_device(true);
@@ -370,16 +371,20 @@ impl NativeInferenceForeground for AndroidInferenceForeground {
 
 /// Android ends app processes as a matter of routine, including when the owner
 /// swipes the app away, and it has no console for the recovery command. The
-/// trusted store reconciliation runs here instead. It acquires the lifetime
-/// lock first, so it only proceeds once the previous owner is proven gone, and
-/// a live second instance fails closed. It records interrupted work, retires
-/// approvals, pauses goals, and replays nothing.
+/// store's startup recovery runs here instead: it proceeds only once the
+/// previous owner is proven gone, and a live second instance fails closed.
 fn reconcile_abandoned_owner(config: &HostConfig) -> Result<(), AndroidHostError> {
     let Some(database) = config.database.as_ref().filter(|path| path.exists()) else {
         return Ok(());
     };
-    let settlement = argentum_store::Store::reconcile_recovery(database)
+    let recovery = argentum_store::Store::recover_after_unclean_exit(database)
         .map_err(|error| AndroidHostError::new("recovery", error))?;
+    log_startup_recovery(&recovery);
+    Ok(())
+}
+
+fn log_startup_recovery(recovery: &argentum_store::StartupRecovery) {
+    let settlement = &recovery.settlement;
     if settlement.mutation_performed {
         eprintln!(
             "argentum recovered after an unclean exit: {} runs, {} goal invocations interrupted{}",
@@ -392,44 +397,12 @@ fn reconcile_abandoned_owner(config: &HostConfig) -> Result<(), AndroidHostError
             }
         );
     }
-    acknowledge_effect_free_interruptions(database)
-}
-
-/// A reconciled run blocks its session until the owner reviews it, which on
-/// desktop is `argentum recovery review`. A phone has no console, and the app
-/// is ended routinely, so a chat cut off mid-reply would block its session for
-/// good. Runs that admitted no external effect are acknowledged here, such as
-/// a reply in progress, whose only unknown is the model request's outcome and
-/// usage. Any run that may have changed something keeps its hold.
-fn acknowledge_effect_free_interruptions(
-    database: &std::path::Path,
-) -> Result<(), AndroidHostError> {
-    use argentum_domain::recovery::{RecoveryEffectState, RecoveryExecutionState};
-
-    let inspection = argentum_store::Store::inspect_recovery(database)
-        .map_err(|error| AndroidHostError::new("recovery-inspect", error))?;
-    let mut acknowledged = 0_usize;
-    for run in inspection.runs.iter().filter(|run| {
-        run.execution_state == RecoveryExecutionState::Interrupted
-            && run.admission_blocked
-            && run.owner_reviewed_at.is_none()
-            && run.effect_state != RecoveryEffectState::Admitted
-            && run
-                .unresolved_effects
-                .iter()
-                .all(|reason| reason == "provider_request_outcome_unknown")
-    }) {
-        let Some(revision) = run.recovery_revision else {
-            continue;
-        };
-        argentum_store::Store::review_recovery(database, run.run_id, revision)
-            .map_err(|error| AndroidHostError::new("recovery-review", error))?;
-        acknowledged += 1;
+    if recovery.acknowledged > 0 {
+        eprintln!(
+            "argentum acknowledged {} interrupted runs with no external effects",
+            recovery.acknowledged
+        );
     }
-    if acknowledged > 0 {
-        eprintln!("argentum acknowledged {acknowledged} interrupted runs with no external effects");
-    }
-    Ok(())
 }
 
 fn read_activity_generation(app: &AndroidApp) -> Result<u64, AndroidHostError> {

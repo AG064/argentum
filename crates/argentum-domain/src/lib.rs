@@ -1257,10 +1257,37 @@ pub struct Goal {
 /// Largest summary a model may attach to a goal completion report.
 pub const MAX_GOAL_COMPLETION_REPORT_BYTES: usize = 1024;
 
-/// A model-authored report that a goal-bound run achieved the objective.
+/// Where a goal stands, as the agent reports it at the end of a run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalReportStatus {
+    /// The objective is fully achieved.
+    #[default]
+    Complete,
+    /// Some of it is done and the rest is left.
+    Partial,
+    /// The agent cannot go on without the owner's answer.
+    NeedsInput,
+}
+
+impl GoalReportStatus {
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::NeedsInput => "needs_input",
+        }
+    }
+}
+
+/// A model-authored report on a goal-bound run: done, partly done, or
+/// waiting for the owner. It is a claim until the owner settles it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoalCompletionReport {
     pub run_id: RunId,
+    /// Reports saved before this field existed were completion reports.
+    #[serde(default)]
+    pub status: GoalReportStatus,
     pub summary: String,
     pub reported_at: OffsetDateTime,
 }

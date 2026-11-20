@@ -306,7 +306,7 @@ component ModulesPage inherits VerticalLayout {
         spacing: Theme.sp0;
         for surface in App.harness_surfaces: VerticalLayout {
             SettingRow {
-                title: surface.label + (surface.state == "unavailable" ? " (not in this build)" : "");
+                title: surface.label;
                 detail: surface.detail;
                 icon: surface.icon;
                 if surface.configurable: Switch {
@@ -317,6 +317,7 @@ component ModulesPage inherits VerticalLayout {
                     toggled(v) => { App.set_harness_surface_visibility(surface.id, v); }
                 }
                 if !surface.configurable && surface.state != "unavailable": Badge { y: (parent.height - self.height) / 2; text: surface.id == "approvals" ? "When needed" : "Always on"; }
+                if surface.state == "unavailable": Badge { y: (parent.height - self.height) / 2; text: "Coming soon"; }
             }
             Divider { }
         }
@@ -560,7 +561,7 @@ component WorkspacePage inherits VerticalLayout {
             clicked => { App.open_workspace(project.path); }
         }
     }
-    Text { text: "Argentum restarts to open a different folder. Sessions stay with the folder they belong to."; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
+    Text { text: "Opening a different folder keeps Argentum open. Sessions stay with the folder they belong to."; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
 }
 
 // Updates live in Settings rather than in a module: keeping up to date should not
@@ -712,6 +713,7 @@ export component Settings inherits Rectangle {
                 spacing: Theme.sp2;
                 tab-scroll := Flickable {
                     horizontal-stretch: 1;
+                    mouse-drag-pan-enabled: App.touch_device;
                     content-width: max(self.width, tab-row.preferred-width);
                     content-height: self.height;
                     tab-row := HorizontalLayout {

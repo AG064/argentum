@@ -1137,25 +1137,38 @@ async fn execute_builtin(
                     "directory entry limit is invalid".into(),
                 ));
             }
-            let entries = context.workspace.list_directory_bounded_with_scope(
+            let listing = context.workspace.list_directory_bounded_with_scope(
                 path,
                 usize::from(max_entries),
                 context.policy.sandbox_scope,
             )?;
-            let output = serde_json::to_string(
-                &entries
-                    .iter()
-                    .map(|entry| {
-                        serde_json::json!({
-                            "path": entry.path,
-                            "name": entry.name,
-                            "kind": format!("{:?}", entry.kind).to_ascii_lowercase(),
-                            "size_bytes": entry.size_bytes,
-                        })
+            let entries = listing
+                .entries
+                .iter()
+                .map(|entry| {
+                    serde_json::json!({
+                        "path": entry.path,
+                        "name": entry.name,
+                        "kind": format!("{:?}", entry.kind).to_ascii_lowercase(),
+                        "size_bytes": entry.size_bytes,
                     })
-                    .collect::<Vec<_>>(),
-            )
-            .map_err(|error_value| ToolError::Execution(error_value.to_string()))?;
+                })
+                .collect::<Vec<_>>();
+            let mut body = serde_json::json!({
+                "entries": entries,
+                "truncated": listing.truncated(),
+                "total_entries": listing.total_entries,
+            });
+            if listing.truncated() {
+                body["note"] = serde_json::Value::String(format!(
+                    "Showing the first {} of {}{} entries by name. List a subfolder or use search_filenames to find specific entries instead of listing this folder again.",
+                    listing.entries.len(),
+                    if listing.total_is_lower_bound { "at least " } else { "" },
+                    listing.total_entries,
+                ));
+            }
+            let output = serde_json::to_string(&body)
+                .map_err(|error_value| ToolError::Execution(error_value.to_string()))?;
             Ok(success("Listed directory", output))
         }
         ToolInput::FileMetadata { path } => {

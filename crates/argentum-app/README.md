@@ -77,9 +77,9 @@ in Settings, or pick a set: Minimal, Standard, Review, Trace, or Everything.
 | Status bar | Workspace, run state, changed files, and provider |
 | Changes | Files the agent changed, with a per-file diff and restore |
 | Git diff | Working tree status and diffs from Git |
-| Browser | A script-free page reader |
+| Browser | Coming soon: a full web browser in the side panel |
 | Usage | Tokens reported per provider |
-| Plan | Plan stages for the current task |
+| Plan | Coming soon: plan stages for the current task |
 | Activity | Recent run, tool, and approval events |
 | Trajectory | Durable records for one session |
 | Requests | Every model request in this session, with timing, endpoint, and what filled its context |
@@ -88,14 +88,13 @@ in Settings, or pick a set: Minimal, Standard, Review, Trace, or Everything.
 
 A module changes what you see. It never grants permission. The capability behind it
 is decided separately by the saved project policy, so Git runs only after a click
-and only when `git.read` allows it. The Browser fetches only after a click and only
-when `browser.reader` allows it, which is off by default. See
+and only when `git.read` allows it. See
 [Interface modules](../../docs/UI_MODULES.md).
 
-The Browser is a reader, not a web engine. It runs no scripts, keeps no cookies, and
-never passes pages to the model, so sites that need JavaScript will not work in it.
-
-![The Browser module reading a page](../../docs/screenshots/desktop-browser.png)
+Release builds list the Browser and Plan modules as coming soon. Development
+builds keep them working: there the Browser is a reader, not a web engine. It runs
+no scripts, keeps no cookies, and never passes pages to the model, so sites that
+need JavaScript will not work in it.
 
 ## Make it yours
 
@@ -142,8 +141,11 @@ not who made it. To check where a file was built, run
 
 - **Renderer:** the app draws with the CPU by default on Windows. The GPU renderer
   shows a blank window on some graphics drivers. Set `SLINT_BACKEND` to choose another.
-- **Recovery:** if the app did not close cleanly, the next start stops and names the
-  command to run, `argentum recovery inspect`. It never takes over by itself.
+- **Recovery:** if the app did not close cleanly, the next start recovers by itself once
+  it has proven the previous copy is gone. It records the interrupted work, retires its
+  approvals, pauses goals and replays nothing. A run that may have changed something
+  keeps its hold until you review it. If another copy is still open, the new one says so
+  and leaves the data alone.
 - **Database upgrades:** opening an older database upgrades it, and older builds cannot
   open it afterwards. Back up your data folder first.
 - **ChatGPT sign-in:** it runs only from a terminal, with `argentum provider login chatgpt`.

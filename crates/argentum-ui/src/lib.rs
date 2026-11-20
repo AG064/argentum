@@ -2790,6 +2790,13 @@ impl UiHandle {
                 .set_goal_progress_summary(goal_progress_summary(goal).into());
             self.window
                 .set_goal_report_pending(goal.completion_report.is_some());
+            self.window.set_goal_report_status(
+                goal.completion_report
+                    .as_ref()
+                    .map(|report| report.status.id())
+                    .unwrap_or_default()
+                    .into(),
+            );
             self.window.set_goal_report_summary(
                 goal.completion_report
                     .as_ref()
@@ -2934,6 +2941,7 @@ impl UiHandle {
             self.window
                 .set_goal_progress_summary(SharedString::default());
             self.window.set_goal_report_pending(false);
+            self.window.set_goal_report_status(SharedString::default());
             self.window.set_goal_report_summary(SharedString::default());
             self.window.set_goal_next_action(SharedString::default());
             self.window
@@ -7989,6 +7997,7 @@ Second grows
                 completion: None,
                 completion_report: Some(argentum_domain::GoalCompletionReport {
                     run_id: RunId::new_v4(),
+                    status: argentum_domain::GoalReportStatus::Complete,
                     summary: "Shipped the slice.".into(),
                     reported_at: now(),
                 }),

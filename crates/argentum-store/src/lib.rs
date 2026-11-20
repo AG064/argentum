@@ -73,7 +73,7 @@ pub use command_identity::{
 };
 pub use context_summary::{ContextCommitToken, SummarySnapshot};
 pub use devices::PairedDeviceRecord;
-pub use recovery::StoreHostOwner;
+pub use recovery::{StartupRecovery, StoreHostOwner};
 pub use working_context::{ContextSource, ContextSourceWindow};
 
 #[derive(Debug, Error)]

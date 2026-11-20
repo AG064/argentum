@@ -734,7 +734,9 @@ async fn rejection_closure_and_cancellation_are_distinct_and_retire_approval() {
         }
         let result = Fixture::finish(run).await;
         match outcome {
-            "deny" => assert!(matches!(result, Err(RuntimeError::ApprovalDenied(_)))),
+            // A rejection answers the call, and the run goes on to tell the
+            // model it was not run.
+            "deny" => assert!(result.is_ok(), "{result:?}"),
             "close" => assert!(matches!(result, Err(RuntimeError::ApprovalRequired(_)))),
             _ => assert!(result.is_ok()),
         }
@@ -746,16 +748,24 @@ async fn rejection_closure_and_cancellation_are_distinct_and_retire_approval() {
             })
             .await
             .unwrap();
-        fixture.assert_settled(if outcome == "cancel" {
-            TaskLifecycle::Cancelled
-        } else {
-            TaskLifecycle::Failed
+        fixture.assert_settled(match outcome {
+            "cancel" => TaskLifecycle::Cancelled,
+            "deny" => TaskLifecycle::Complete,
+            _ => TaskLifecycle::Failed,
         });
         assert_eq!(
             std::fs::read(fixture.directory.path().join("fixture.txt")).unwrap(),
             b"before\r\n"
         );
-        assert_eq!(fixture.requests.lock().unwrap().len(), 1);
+        let requests = fixture.requests.lock().unwrap();
+        if outcome == "deny" {
+            assert_eq!(requests.len(), 2);
+            let answer = &requests[1].tool_exchanges[0].results[0].content;
+            assert!(answer.contains("rejected_by_owner"), "{answer}");
+            assert!(answer.contains("\"executed\":false"), "{answer}");
+        } else {
+            assert_eq!(requests.len(), 1);
+        }
     }
 }
 

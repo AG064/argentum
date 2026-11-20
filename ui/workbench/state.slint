@@ -105,6 +105,8 @@ export global App {
     // The model reported the goal achieved; the owner confirms or dismisses.
     in-out property <bool> goal_report_pending: false;
     in-out property <string> goal_report_summary: "";
+    // "complete", "partial" or "needs_input".
+    in-out property <string> goal_report_status: "";
     in-out property <int> goal_iteration: 0;
     in-out property <int> goal_tokens_used: 0;
     in-out property <int> goal_token_budget: 0;

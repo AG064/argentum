@@ -987,13 +987,22 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             "Fixed read-only Git operations are available.",
             vec![],
         ),
-        disabled_configurable_capability(
-            "browser.reader",
-            "Page reader",
-            HarnessCapabilityKind::Integration,
-            "Lets you open a web page as text in the Browser module. It runs no scripts and keeps no cookies. Only a direct click fetches anything, and the agent cannot use it.",
-            vec![],
-        ),
+        if PREVIEW_MODULES {
+            disabled_configurable_capability(
+                "browser.reader",
+                "Page reader",
+                HarnessCapabilityKind::Integration,
+                "Lets you open a web page as text in the Browser module. It runs no scripts and keeps no cookies. Only a direct click fetches anything, and the agent cannot use it.",
+                vec![],
+            )
+        } else {
+            unavailable_capability(
+                "browser.reader",
+                "Page reader",
+                HarnessCapabilityKind::Integration,
+                "Coming soon, with the Browser module.",
+            )
+        },
         configurable_capability(
             "tool.ui-inspect",
             "Interface awareness",
@@ -1150,6 +1159,10 @@ fn unavailable_capability(
     }
 }
 
+/// Modules that are still being built. Release builds list them as coming
+/// soon; debug builds, used for development, keep them working.
+const PREVIEW_MODULES: bool = cfg!(debug_assertions);
+
 fn built_in_surfaces() -> Vec<SurfaceRegistration> {
     vec![
         available_surface(
@@ -1202,21 +1215,35 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
             true,
             "Working tree status and diff from Git. Runs git only when you ask, and needs Git inspection turned on in Settings > Permissions.",
         ),
-        available_surface(
-            SurfaceId::Browser,
-            true,
-            "Reader-mode pages with no scripts or cookies. Needs the Page reader turned on in Settings > Permissions.",
-        ),
+        if PREVIEW_MODULES {
+            available_surface(
+                SurfaceId::Browser,
+                true,
+                "Reader-mode pages with no scripts or cookies. Needs the Page reader turned on in Settings > Permissions.",
+            )
+        } else {
+            unavailable_surface(
+                SurfaceId::Browser,
+                "Coming soon: a full web browser in the side panel, with normal pages and sign-in.",
+            )
+        },
         available_surface(
             SurfaceId::Usage,
             true,
             "Tokens reported by each provider in this workspace.",
         ),
-        available_surface(
-            SurfaceId::Plan,
-            true,
-            "The stages of the current task: what is done, running, and next.",
-        ),
+        if PREVIEW_MODULES {
+            available_surface(
+                SurfaceId::Plan,
+                true,
+                "The stages of the current task: what is done, running, and next.",
+            )
+        } else {
+            unavailable_surface(
+                SurfaceId::Plan,
+                "Coming soon: the stages of the current task as the agent plans them.",
+            )
+        },
         available_surface(
             SurfaceId::Activity,
             true,
@@ -1234,13 +1261,16 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
         ),
         unavailable_surface(
             SurfaceId::Files,
-            "The workspace file browser is not implemented.",
+            "Coming soon: browse the workspace's files.",
         ),
         unavailable_surface(
             SurfaceId::Terminal,
-            "The persistent terminal backend and surface are not implemented.",
+            "Coming soon: a terminal you and the agent can share.",
         ),
-        unavailable_surface(SurfaceId::Preview, "No preview renderer is registered."),
+        unavailable_surface(
+            SurfaceId::Preview,
+            "Coming soon: a preview of what the agent builds.",
+        ),
     ]
 }
 
@@ -1333,7 +1363,10 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
                 Activity,
                 Trajectory,
                 Requests,
-            ],
+            ]
+            .into_iter()
+            .filter(|surface| PREVIEW_MODULES || !matches!(surface, Plan | Browser))
+            .collect::<Vec<_>>(),
         ),
     ]
 }
@@ -1530,6 +1563,59 @@ mod tests {
                 && capability.availability == HarnessAvailability::Unavailable
                 && !capability.unavailable_reason.is_empty()
         }));
+    }
+
+    #[test]
+    fn unready_modules_are_listed_as_coming_soon() {
+        let registry = HarnessRegistry::built_in().expect("registry");
+        let snapshot = registry.snapshot(
+            &LayoutProfile::default(),
+            &HarnessExecutionPolicy::default(),
+            &HarnessFacts::default(),
+        );
+        let surface = |id| {
+            snapshot
+                .surfaces
+                .iter()
+                .find(|surface| surface.id == id)
+                .expect("surface")
+        };
+        for id in [SurfaceId::Files, SurfaceId::Terminal, SurfaceId::Preview] {
+            assert_eq!(surface(id).availability, HarnessAvailability::Unavailable);
+            assert!(surface(id).unavailable_reason.starts_with("Coming soon"));
+        }
+        // Plan and Browser work in development builds and are coming soon in
+        // releases, and the Everything profile still applies in both.
+        let full = registry
+            .apply_profile(&LayoutProfile::default(), "full")
+            .expect("full profile");
+        for id in [SurfaceId::Plan, SurfaceId::Browser] {
+            let preview = surface(id);
+            assert_eq!(
+                preview.availability == HarnessAvailability::Available,
+                PREVIEW_MODULES
+            );
+            if !PREVIEW_MODULES {
+                assert!(preview.unavailable_reason.starts_with("Coming soon"));
+            }
+            assert_eq!(
+                full.visible.get(&id).copied().unwrap_or(false),
+                PREVIEW_MODULES
+            );
+        }
+        // The Page reader permission only serves the Browser module.
+        let reader = snapshot
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == "browser.reader")
+            .expect("page reader");
+        assert_eq!(
+            reader.availability == HarnessAvailability::Available,
+            PREVIEW_MODULES
+        );
+        if !PREVIEW_MODULES {
+            assert!(reader.unavailable_reason.starts_with("Coming soon"));
+        }
     }
 
     #[test]
@@ -1923,7 +2009,10 @@ mod tests {
         policy = registry.reconcile_execution_policy(&policy);
 
         assert_eq!(policy.profile_id, CUSTOM_EXECUTION_PROFILE_ID);
-        assert_eq!(policy.capability_enabled.len(), 23);
+        // Release builds list the Page reader as coming soon, so it is not
+        // configurable there.
+        let configurable = if PREVIEW_MODULES { 23 } else { 22 };
+        assert_eq!(policy.capability_enabled.len(), configurable);
         assert_eq!(
             policy
                 .capability_enabled

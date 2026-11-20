@@ -58,7 +58,7 @@ component CodeBlock inherits Rectangle {
                     mono: true;
                     horizontal-stretch: 1;
                 }
-                CopyBtn { text: block.text; tip: "Copy code"; y: (parent.height - self.height) / 2; }
+                CopyBtn { text: block.text; tip: "Copy code"; tip-beside: true; y: (parent.height - self.height) / 2; }
             }
         }
         VerticalLayout {
@@ -165,7 +165,7 @@ component TableView inherits Rectangle {
                     mono: true;
                     horizontal-stretch: 1;
                 }
-                CopyBtn { text: block.text; tip: "Copy table"; y: (parent.height - self.height) / 2; }
+                CopyBtn { text: block.text; tip: "Copy table"; tip-beside: true; y: (parent.height - self.height) / 2; }
             }
         }
         Rectangle {
@@ -176,6 +176,8 @@ component TableView inherits Rectangle {
             // On touch the chat's gesture handler scrolls the table, so a
             // swipe moves along one axis only.
             interactive: !App.touch_device;
+            // Shift and the wheel, or a touchpad, scroll it sideways.
+            mouse-drag-pan-enabled: false;
             // Fixed bounds keep the columns from feeding their own width back.
             x: 0;
             y: 0;

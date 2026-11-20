@@ -13,7 +13,7 @@ pub mod windows_dialogs;
 pub mod workspace_choice;
 
 pub use native_host::{
-    run_native_host, NativeHostError, NativeHostOptions, NativeInferenceForeground,
+    run_native_host, NativeHostError, NativeHostOptions, NativeInferenceForeground, WorkspaceSwitch,
 };
 pub use startup_error::{issue_report_url, startup_error_message};
 

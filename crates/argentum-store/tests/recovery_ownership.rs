@@ -1046,6 +1046,67 @@ fn owned_host_fixture_process() {
 }
 
 #[test]
+fn startup_recovery_opens_after_a_crash_and_refuses_a_live_copy() {
+    let fixture = tempfile::tempdir().expect("fixture");
+    let workspace = fixture.path().join("workspace");
+    std::fs::create_dir(&workspace).expect("workspace");
+    let database = fixture.path().join("state.db");
+    let boundary = fixture.path().join("owner-boundary.txt");
+    let mut owner = spawn_owner(&database, &workspace, &boundary);
+    wait_for_boundary(&boundary);
+
+    // A copy that is still open keeps its data.
+    assert!(matches!(
+        Store::recover_after_unclean_exit(&database),
+        Err(StoreError::HostOwnershipLive)
+    ));
+    assert_eq!(
+        Store::inspect_recovery(&database)
+            .expect("live inspection")
+            .ownership
+            .outcome,
+        OwnershipOutcome::Live
+    );
+
+    owner.terminate();
+    let recovery = Store::recover_after_unclean_exit(&database).expect("startup recovery");
+    assert!(recovery.settlement.mutation_performed);
+    assert!(!recovery.settlement.incomplete);
+    assert_eq!(recovery.settlement.recovered_run_ids.len(), 4);
+
+    let settled = Store::inspect_recovery(&database).expect("settled inspection");
+    assert_eq!(settled.ownership.outcome, OwnershipOutcome::NoActiveOwner);
+    let mut reviewed = 0;
+    for run in &settled.runs {
+        let effect_free = run.effect_state != RecoveryEffectState::Admitted
+            && run
+                .unresolved_effects
+                .iter()
+                .all(|reason| reason == "provider_request_outcome_unknown");
+        if run.execution_state != RecoveryExecutionState::Interrupted {
+            continue;
+        }
+        if effect_free {
+            assert!(!run.admission_blocked, "effect-free run stays blocked");
+            assert!(run.owner_reviewed_at.is_some());
+            reviewed += 1;
+        } else {
+            assert!(run.admission_blocked, "a run with effects lost its hold");
+            assert!(run.owner_reviewed_at.is_none());
+        }
+    }
+    assert_eq!(reviewed, recovery.acknowledged);
+
+    // The app can now start, and a second recovery changes nothing.
+    let (store, owner) = Store::open_for_host(&database).expect("host after recovery");
+    drop(owner);
+    drop(store);
+    let again = Store::recover_after_unclean_exit(&database).expect("clean start");
+    assert!(!again.settlement.mutation_performed);
+    assert_eq!(again.acknowledged, 0);
+}
+
+#[test]
 fn live_owner_is_protected_and_killed_owner_reconciles_once_without_replay() {
     let fixture = tempfile::tempdir().expect("fixture");
     let workspace = fixture.path().join("workspace");

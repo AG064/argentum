@@ -183,9 +183,10 @@ for a goal whose criteria require owner attestation (`goal criteria
 (`cargo-fmt-check`, `cargo-check-locked`, `cargo-test-locked` and `cargo-clippy-strict`)
 need no approval, and approving one fails with `invalid_argument`.
 
-After a crash or a forced close, Argentum does not take over by itself. If the writable
-session was truly abandoned, close any other Argentum windows and follow the recovery
-command that `--help` and `recovery inspect` show. Review uncertain work before you
+After a crash or a forced close, the desktop and Android apps recover by themselves on
+the next start, once they have proven the previous copy is gone. The CLI does not take
+over by itself. If the writable session was truly abandoned, close any other Argentum
+windows and follow the recovery command that `--help` and `recovery inspect` show. Review uncertain work before you
 resume. Usage that could not be counted stays marked unknown. Never delete the database,
 clear grants or copy the database to remove a hold.
 

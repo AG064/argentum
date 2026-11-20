@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
 
+// A windowed program on Windows, so starting or restarting the app never opens a
+// console window. Startup errors show in a dialog. Debug builds keep the console
+// for developer logs.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::env;
 use std::path::{Path, PathBuf};
 
-use argentum_app::{run_native_host, NativeHostOptions};
+use argentum_app::{run_native_host, NativeHostOptions, WorkspaceSwitch};
 // Desktop and Android share the wording shown when startup fails.
 use argentum_app::startup_error_message as safe_startup_error;
 use argentum_cli::HostConfig;
@@ -75,6 +80,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .then(legacy_minimax_profile)
         .into_iter()
         .collect();
+    let workspace_switch = WorkspaceSwitch::default();
+    let switch_for_ui = workspace_switch.clone();
     run_native_host(
         host_config,
         NativeHostOptions {
@@ -82,12 +89,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             seed_profiles,
             inference_foreground: None,
             session_export: workbench_host::session_export_sink(),
+            workspace_switch: Some(workspace_switch),
         },
         move |ui| {
             if let Some(size) = preview_size {
                 ui.window().window().set_size(size);
             }
-            workbench_host::connect(ui, &app_paths, &runtime_handle);
+            workbench_host::connect(ui, &app_paths, &runtime_handle, switch_for_ui);
         },
     )?;
     Ok(())

@@ -15,7 +15,13 @@ pub fn startup_error_message(error_value: &(dyn std::error::Error + 'static)) ->
         error_value.downcast_ref::<NativeHostError>(),
         Some(NativeHostError::RecoveryRequired)
     ) {
-        return "Argentum did not close cleanly last time, or another copy is still running, so it will not take over this data on its own. Close any other copy, then run 'argentum recovery inspect' for this database and follow the command it gives.".into();
+        return "Argentum did not close cleanly last time and could not recover this data on its own. Close any other copy, then run 'argentum recovery inspect' for this database and follow the command it gives.".into();
+    }
+    if matches!(
+        error_value.downcast_ref::<NativeHostError>(),
+        Some(NativeHostError::AlreadyRunning)
+    ) {
+        return "Argentum is already open. Switch to the open window, or close it and start Argentum again.".into();
     }
     if matches!(
         error_value.downcast_ref::<NativeHostError>(),

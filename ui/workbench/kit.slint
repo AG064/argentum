@@ -257,6 +257,9 @@ export component Btn inherits Rectangle {
 export component IconBtn inherits Rectangle {
     in property <string> icon;
     in property <string> tip;
+    // Show the tooltip to the left of the button instead of below it, for a
+    // button in a header row whose next sibling would cover the tooltip.
+    in property <bool> tip-beside: false;
     in property <bool> active: false;
     in property <bool> enabled: true;
     in property <length> size: Theme.control;
@@ -304,8 +307,8 @@ export component IconBtn inherits Rectangle {
         pointer-event(event) => { if enabled { ink.react(event, self.mouse-x, self.mouse-y); } }
     }
     if touch.has-hover && root.tip != "" && !Theme.coarse: Tooltip {
-        x: min(0px, (parent.width - self.width) / 2);
-        y: parent.height + 4px;
+        x: root.tip-beside ? -self.width - 4px : min(0px, (parent.width - self.width) / 2);
+        y: root.tip-beside ? (parent.height - self.height) / 2 : parent.height + 4px;
         text: root.tip;
     }
 }
@@ -614,6 +617,9 @@ export component Scroller inherits Rectangle {
         content-height: max(root.content-height, self.height);
         content-width: root.width;
         interactive: true;
+        // Dragging with a mouse selects and clicks on a computer. Only touch
+        // pans, and the wheel and the scrollbar still scroll.
+        mouse-drag-pan-enabled: App.touch_device;
         flicked => { root.tailing = root.at-tail; }
         @children
     }
@@ -791,6 +797,7 @@ export component EmptyState inherits VerticalLayout {
 export component CopyBtn inherits Rectangle {
     in property <string> text;
     in property <string> tip: "Copy";
+    in property <bool> tip-beside: false;
     private property <bool> copied: false;
     width: Theme.control - 6px;
     height: Theme.control - 6px;
@@ -799,6 +806,7 @@ export component CopyBtn inherits Rectangle {
         glyph: Theme.icon-sm;
         icon: copied ? "check" : "copy";
         tip: root.tip;
+        tip-beside: root.tip-beside;
         tint: copied ? Theme.ok : Theme.text-3;
         clicked => {
             if !App.copy_text(root.text) {

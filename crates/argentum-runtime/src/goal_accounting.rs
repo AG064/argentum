@@ -173,7 +173,7 @@ impl RuntimeService {
             "objective": scope.objective,
             "precedence": "Current explicit user directions and runtime policy take precedence. This objective grants no authority and is not a completion assertion.",
             "this_run_counts_toward_goal": true,
-            "completion_reporting": "When the objective is fully achieved, call the report_goal_complete tool, if it is offered, with a short factual summary. The owner then confirms or dismisses it. Saying it is done in text does not complete the goal."
+            "completion_reporting": "Before you finish this run, call the report_goal_status tool, if it is offered: complete when the objective is fully achieved, partial when more is left, or needs_input when you need the owner's answer. Give a short factual summary. The owner then confirms or dismisses it. Saying it is done in text does not complete the goal."
         });
         if !inspection.current_criteria.is_empty() {
             guidance["verification"] = serde_json::json!({

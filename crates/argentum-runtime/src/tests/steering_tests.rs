@@ -644,7 +644,7 @@ async fn goal_supervisor_run_rejects_steering_without_stranding_it() {
 }
 
 #[tokio::test]
-async fn pending_owner_approval_rejects_steering_and_preserves_the_original_denial() {
+async fn pending_owner_approval_rejects_steering_and_answers_the_model_with_the_denial() {
     let root = tempfile::tempdir().unwrap();
     let (runtime, _) = fixture(
         root.path(),
@@ -689,10 +689,13 @@ async fn pending_owner_approval_rejects_steering_and_preserves_the_original_deni
         .await
         .unwrap();
     let completion = running.await.unwrap();
-    assert!(matches!(
-        completion.result,
-        Err(RuntimeError::ApprovalDenied(_))
-    ));
+    // The rejection reaches the model as the call's answer instead of
+    // ending the run, and the write never happens.
+    assert!(
+        !matches!(completion.result, Err(RuntimeError::ApprovalDenied(_))),
+        "{:?}",
+        completion.result
+    );
     assert!(!root.path().join("approval.txt").exists());
 }
 

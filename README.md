@@ -263,11 +263,11 @@ A request that would not fit is refused before it is sent.
 - **Guarded edits:** an edit must match the exact source the agent read. A stale or ambiguous edit is rejected.
 - **Review and restore:** look through the files a run changed, then restore them, checking first that they have not changed since.
 - **Verification:** fixed runners produce receipts tied to the source they checked.
-- **Recovery:** after a crash, `argentum recovery inspect` shows what happened, and takeover is never automatic.
+- **Recovery:** after a crash or a forced close, the app starts as usual. It first proves the previous copy is gone, records the interrupted work and replays nothing, and a run that may have changed something waits for your review. `argentum recovery inspect` shows what happened.
 
 ### Desktop app
 
-- **Modules:** turn on only what you want: Sessions, Context meter, Reasoning, Goal, Command palette, Status bar, Changes, Git diff, Browser, Usage, Plan, Activity, and Trajectory.
+- **Modules:** turn on only what you want: Sessions, Context meter, Reasoning, Goal, Command palette, Status bar, Changes, Git diff, Usage, Activity, and Trajectory. Browser and Plan are listed as coming soon.
 - **Sessions:** search, rename, pin, archive, and fork.
 - **Themes:** Argentum, Obsidian, Graphite, Ember, and Silver, plus density, text size, corners, colors, and fonts.
 - **Interface tools:** the agent can adjust the interface when you approve it, and can never touch permissions or the approval prompt.

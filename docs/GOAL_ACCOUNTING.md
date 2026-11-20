@@ -115,10 +115,13 @@ feedback turn. See [Goal delivery](NATIVE_DELIVERY.md).
 
 ### Model completion reports
 
-In a run tied to a goal, the model can call `report_goal_complete` with a summary of up to
-1 KiB. This records a report on the goal and tells the model the goal is not complete yet.
-It does not complete the goal. The goal panel shows the report with two buttons. **Confirm
-done** marks the goal complete. **Not yet** drops the report and keeps the goal active.
+In a run tied to a goal, the model is asked to call `report_goal_status` before it finishes,
+with a status and a summary of up to 1 KiB. The status is `complete` when the objective is
+achieved, `partial` when more is left, or `needs_input` when the model needs your answer.
+This records a report on the goal. It does not complete the goal. For a completion report,
+the goal panel shows two buttons. **Confirm done** marks the goal complete. **Not yet** drops
+the report and keeps the goal active. A partial or needs-input report shows what is left or
+the question, with **Dismiss**, and the goal stays active.
 Changing the objective clears a pending report. A report from a run outside the goal, for a
 goal that has since changed, or with an empty or oversized summary, is refused and the run
 continues.

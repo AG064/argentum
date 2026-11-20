@@ -967,6 +967,19 @@ where
         let weak = window.as_weak();
         app.on_open_link(move |url| {
             let Some(window) = weak.upgrade() else { return };
+            let surfaces = window.get_harness_surfaces();
+            let browser_unavailable = (0..surfaces.row_count())
+                .filter_map(|index| surfaces.row_data(index))
+                .any(|surface| {
+                    surface.id == SurfaceId::Browser.id() && surface.state == "unavailable"
+                });
+            if browser_unavailable {
+                window.set_toast_undo_token(SharedString::default());
+                window.set_toast_text(
+                    "Links will open in the Browser module, which is coming soon.".into(),
+                );
+                return;
+            }
             let modes = window.get_inspector_modes();
             let browser_on = (0..modes.row_count())
                 .filter_map(|index| modes.row_data(index))

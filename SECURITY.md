@@ -60,7 +60,7 @@ Argentum is a single-user app. It limits what the agent can do on your behalf an
 
 | Feature | Default |
 | --- | --- |
-| Page reader module | Off. Loads a page as plain text only when you click Open. It runs no scripts, keeps no cookies, and never sends page content to a model. The agent cannot use it. |
+| Page reader module | Not in release builds, where it is listed as coming soon. In development builds it is off, and loads a page as plain text only when you click Open. It runs no scripts, keeps no cookies, and never sends page content to a model. The agent cannot use it. |
 | Local model add-on (Windows) | Not installed. Downloads llama.cpp and a model only when you ask, from pinned addresses, and checks their SHA-256. It runs as a separate process on 127.0.0.1. |
 | Interface changes by the agent | Each change asks first and can be undone. The agent cannot change permissions or the approval prompt. |
 | Device pairing | Off until you pair a device. A paired device cannot choose Full Access, and the device doing the work keeps its own approvals. |

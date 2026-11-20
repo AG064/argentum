@@ -161,6 +161,7 @@ component PanelTabs inherits Rectangle {
         spacing: Theme.sp2;
         tab-scroll := Flickable {
             horizontal-stretch: 1;
+            mouse-drag-pan-enabled: App.touch_device;
             height: Theme.header;
             content-width: max(self.width, tabs.preferred-width);
             content-height: Theme.header;

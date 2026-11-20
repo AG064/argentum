@@ -10,7 +10,7 @@ const OBJECTIVE: &str = "Keep the changelog current";
 
 struct UsageProvider {
     requests: Arc<Mutex<Vec<ModelRequest>>>,
-    /// Arguments for a report_goal_complete call on a run's first request.
+    /// Arguments for a report_goal_status call on a run's first request.
     report: Arc<Mutex<Option<String>>>,
 }
 
@@ -31,14 +31,14 @@ impl ModelProvider for UsageProvider {
         let offered = request
             .tools
             .iter()
-            .any(|tool| tool.name == "report_goal_complete");
+            .any(|tool| tool.name == "report_goal_status");
         self.requests.lock().unwrap().push(request);
         let report = self.report.lock().unwrap().clone();
         if let Some(arguments) = report.filter(|_| first && offered) {
             sender
                 .send(ProviderEvent::ToolCall(ModelToolCall {
                     id: "report-1".into(),
-                    name: "report_goal_complete".into(),
+                    name: "report_goal_status".into(),
                     arguments,
                 }))
                 .await
@@ -285,7 +285,7 @@ fn offers_report_tool(request: &ModelRequest) -> bool {
     request
         .tools
         .iter()
-        .any(|tool| tool.name == "report_goal_complete")
+        .any(|tool| tool.name == "report_goal_status")
 }
 
 fn goal_context(request: &ModelRequest) -> Option<serde_json::Value> {

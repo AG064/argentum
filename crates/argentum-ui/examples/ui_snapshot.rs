@@ -629,6 +629,11 @@ fn scenes() -> Vec<Scene> {
             ui.window().set_settings_open(true);
             ui.window().set_settings_section("modules".into());
         }),
+        s("11b-settings-modules-tall", (1280, 1500), |ui| {
+            modules(ui, "standard");
+            ui.window().set_settings_open(true);
+            ui.window().set_settings_section("modules".into());
+        }),
         s("12-settings-appearance", D, |ui| {
             modules(ui, "standard");
             ui.window().set_settings_open(true);
@@ -775,9 +780,20 @@ fn scenes() -> Vec<Scene> {
             conversation(ui);
             goal(ui, argentum_domain::GoalLifecycle::Active, 12_400, None);
             ui.window().set_goal_report_pending(true);
+            ui.window().set_goal_report_status("complete".into());
             ui.window().set_goal_report_summary(
                 "Batched the inserts and added a busy timeout. The sample import now takes 2.1 s."
                     .into(),
+            );
+        }),
+        s("39b-goal-card-needs-input", (360, 760), |ui| {
+            modules(ui, "full");
+            conversation(ui);
+            goal(ui, argentum_domain::GoalLifecycle::Active, 12_400, None);
+            ui.window().set_goal_report_pending(true);
+            ui.window().set_goal_report_status("needs_input".into());
+            ui.window().set_goal_report_summary(
+                "The import has two schemas. Should the old one keep working?".into(),
             );
         }),
         s("33-session-actions", D, |ui| {

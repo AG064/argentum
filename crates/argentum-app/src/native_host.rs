@@ -488,9 +488,11 @@ mod tests {
         ));
     }
 }
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt;
 use std::future::Future;
+use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     Arc, Mutex,
@@ -501,7 +503,7 @@ use argentum_cli::{CommandHost, CommandHostObserver, HostConfig, HostError, Loca
 use argentum_domain::{AppCommand, AppEvent, ProviderProfile};
 use argentum_security::SecretValue;
 use argentum_ui::{connect_commands, connect_provider_credentials, App, UiHandle, WeakUiHandle};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -519,6 +521,28 @@ pub struct NativeHostOptions {
     pub inference_foreground: Option<Arc<dyn NativeInferenceForeground>>,
     /// Where an in-app session export goes. None hides the Export actions.
     pub session_export: Option<crate::session_export::SessionExportSink>,
+    /// Lets the app open another workspace while it runs. None keeps one
+    /// workspace for the life of the process.
+    pub workspace_switch: Option<WorkspaceSwitch>,
+}
+
+/// A request to open another workspace in the running app. The window stays
+/// open. The current workspace's host shuts down cleanly, and the next one
+/// starts in its place.
+#[derive(Clone, Default)]
+pub struct WorkspaceSwitch(Rc<RefCell<Option<(HostConfig, String)>>>);
+
+impl WorkspaceSwitch {
+    /// Asks the running app to open `config` and show `label` for it. It
+    /// stops the event loop, so call it from the UI thread.
+    pub fn request(&self, config: HostConfig, label: String) {
+        *self.0.borrow_mut() = Some((config, label));
+        let _ = slint::quit_event_loop();
+    }
+
+    fn take(&self) -> Option<(HostConfig, String)> {
+        self.0.borrow_mut().take()
+    }
 }
 
 pub trait NativeInferenceForeground: Send + Sync {
@@ -530,6 +554,38 @@ pub trait NativeInferenceForeground: Send + Sync {
 /// Records why the host failed before returning the opaque error. Stderr reaches
 /// logcat on Android and the console on desktop. Error descriptions do not
 /// contain secrets.
+/// Starting after a crash or a forced close should just work. The store's
+/// startup recovery proceeds only once the previous owner is proven gone, by
+/// taking its lifetime lock, so a second copy that is still open is refused
+/// and this one reports that instead. Interrupted work is recorded, approvals
+/// are retired, goals pause, and nothing is replayed. A run that may have
+/// changed something keeps its hold until the owner reviews it.
+fn recover_after_unclean_exit(database: Option<&std::path::Path>) -> Result<(), NativeHostError> {
+    let Some(database) = database.filter(|path| path.exists()) else {
+        return Ok(());
+    };
+    match argentum_store::Store::recover_after_unclean_exit(database) {
+        Ok(recovery) => {
+            let settlement = &recovery.settlement;
+            if settlement.mutation_performed {
+                tracing::warn!(
+                    runs = settlement.recovered_run_ids.len(),
+                    goal_invocations = settlement.recovered_invocation_ids.len(),
+                    incomplete = settlement.incomplete,
+                    acknowledged = recovery.acknowledged,
+                    "recovered after an unclean exit"
+                );
+            }
+            Ok(())
+        }
+        Err(argentum_store::StoreError::HostOwnershipLive) => Err(NativeHostError::AlreadyRunning),
+        Err(error) => {
+            tracing::error!(error = ?error, "startup recovery failed");
+            Err(NativeHostError::RecoveryRequired)
+        }
+    }
+}
+
 fn host_failure(stage: &str, error: &dyn std::fmt::Debug) -> NativeHostError {
     eprintln!("argentum host failed at {stage}: {error:?}");
     tracing::error!(stage, error = ?error, "native host failed");
@@ -542,8 +598,11 @@ pub enum NativeHostError {
     Host,
     /// Saved data could not be read. Nothing was changed.
     SavedData,
-    /// The last session did not close cleanly, and takeover is never automatic.
+    /// The last session did not close cleanly, and automatic recovery could not
+    /// prove the previous owner gone.
     RecoveryRequired,
+    /// Another copy of Argentum has this data open.
+    AlreadyRunning,
     Ui,
     EventLoop,
     EventRelay,
@@ -572,6 +631,7 @@ impl fmt::Display for NativeHostError {
             Self::RecoveryRequired => {
                 formatter.write_str("Argentum did not close cleanly last time and needs recovery.")
             }
+            Self::AlreadyRunning => formatter.write_str("Argentum is already open."),
             Self::Ui | Self::EventLoop => {
                 formatter.write_str("Argentum could not run the native interface.")
             }
@@ -599,72 +659,120 @@ where
         .enable_all()
         .build()
         .map_err(|_| NativeHostError::Runtime)?;
-    let database = config.database.clone();
-    let secrets = config.secret_store();
-    let config_database = database.clone();
-    let config_secrets = secrets.clone();
-    let mut host = runtime
+    let NativeHostOptions {
+        workspace_label,
+        seed_profiles,
+        inference_foreground,
+        session_export,
+        workspace_switch,
+    } = options;
+
+    let ui = UiHandle::new().map_err(|_| NativeHostError::Ui)?;
+    ui.window()
+        .set_workspace_label(workspace_label.clone().into());
+    // Export reads the app's own database, which every workspace shares.
+    if let Some(sink) = session_export {
+        crate::session_export::connect(&ui, config.database.clone(), config.secret_store(), sink);
+    }
+    configure_ui(&ui);
+
+    let mut current = (config, workspace_label);
+    let mut seed_profiles = Some(seed_profiles);
+    let mut shown = false;
+    let application = loop {
+        let mut host = match start_host(&runtime, current.0.clone()) {
+            Ok(host) => host,
+            Err(error) => break Err(error),
+        };
+        let mut session = NativeHostSession::new(runtime.handle().clone());
+        let application = wire_host_to_ui(
+            &runtime,
+            &mut host,
+            &ui,
+            &current.0,
+            seed_profiles.take().unwrap_or_default(),
+            inference_foreground.clone(),
+            &mut session,
+        )
+        .and_then(|()| {
+            if !shown {
+                ui.show().map_err(|_| NativeHostError::Ui)?;
+                shown = true;
+            }
+            slint::run_event_loop().map_err(|_| NativeHostError::EventLoop)
+        });
+        let cleanup = runtime.block_on(shutdown_native_owner(
+            &mut host,
+            &session.command_tasks,
+            session.relay_lifecycle.clone(),
+            session.relay_cancellation.clone(),
+            session.relay.take(),
+        ));
+        drop(host);
+        let result = combine_application_and_cleanup(application, cleanup);
+        let next = workspace_switch.as_ref().and_then(WorkspaceSwitch::take);
+        match (result, next) {
+            (Ok(()), Some(next)) => {
+                // Opening the chosen workspace can fail, for example when
+                // another copy holds it. Then the previous one opens again.
+                if let Err(error) = start_host(&runtime, next.0.clone())
+                    .and_then(|probe| close_probe(&runtime, probe))
+                {
+                    tracing::warn!(error = ?error, "could not open the chosen workspace");
+                    ui.window().set_workspace_notice(
+                        "That folder could not be opened, so the previous workspace is open again."
+                            .into(),
+                    );
+                } else {
+                    ui.window().set_workspace_notice(SharedString::default());
+                    ui.window().set_workspace_label(next.1.clone().into());
+                    current = next;
+                }
+            }
+            (result, _) => break result,
+        }
+    };
+    let hide = if shown {
+        ui.hide().map_err(|_| NativeHostError::Ui)
+    } else {
+        Ok(())
+    };
+    if let Some(foreground) = inference_foreground {
+        if !foreground.stop_active() {
+            tracing::warn!("Android inference foreground cleanup was not confirmed");
+        }
+    }
+    drop(ui);
+    drop(runtime);
+    application.and(hide)
+}
+
+/// Starts the command host for one workspace, after recovering from an
+/// unclean exit if the last owner is proven gone.
+fn start_host(runtime: &Runtime, config: HostConfig) -> Result<CommandHost, NativeHostError> {
+    recover_after_unclean_exit(config.database.as_deref())?;
+    runtime
         .block_on(CommandHost::start_composed(config))
         .map_err(|error_value| match error_value {
             HostError::Store(argentum_store::StoreError::HostRecoveryRequired) => {
                 NativeHostError::RecoveryRequired
+            }
+            HostError::Store(argentum_store::StoreError::HostOwnershipLive) => {
+                NativeHostError::AlreadyRunning
             }
             HostError::Store(store_error) => {
                 let _ = host_failure("start-host", &store_error);
                 NativeHostError::SavedData
             }
             other => host_failure("start-host", &other),
-        })?;
-    // Settings > Devices reads the identity and paired devices itself, and can
-    // offer this app's runtime to paired devices while the owner allows it.
-    let devices = crate::devices_ui::DevicesContext {
-        database,
-        secrets,
-        remote: Some(crate::remote_control::RemoteHost {
-            client: host.client(),
-            workspace: host.workspace_root().to_path_buf(),
-            runtime: runtime.handle().clone(),
-        }),
-    };
-    // Settings > Providers > Local model add-on, for installing llama.cpp.
-    let addon = crate::local_addon::Context {
-        local: host.local_handle(),
-        runtime: runtime.handle().clone(),
-    };
-    let mut options = options;
-    let export = options
-        .session_export
-        .take()
-        .map(|sink| (config_database.clone(), config_secrets.clone(), sink));
-    let configure_ui = move |ui: &UiHandle| {
-        if let Some((database, secrets, sink)) = export {
-            crate::session_export::connect(ui, database, secrets, sink);
-        }
-        crate::devices_ui::connect(ui, devices);
-        crate::local_addon::connect(ui, addon);
-        configure_ui(ui);
-    };
-    let mut session = NativeHostSession::new(runtime.handle().clone());
-    let inference_foreground = options.inference_foreground.clone();
+        })
+}
 
-    let application =
-        run_event_loop_with_owner(&runtime, &mut host, options, configure_ui, &mut session);
-    let cleanup = runtime.block_on(shutdown_native_owner(
-        &mut host,
-        &session.command_tasks,
-        session.relay_lifecycle.clone(),
-        session.relay_cancellation.clone(),
-        session.relay.take(),
-    ));
-    if let Some(foreground) = inference_foreground {
-        if !foreground.stop_active() {
-            tracing::warn!("Android inference foreground cleanup was not confirmed");
-        }
-    }
-
-    drop(host);
-    drop(runtime);
-    combine_application_and_cleanup(application, cleanup)
+/// Shuts down a host that was started only to check that a workspace opens.
+fn close_probe(runtime: &Runtime, mut host: CommandHost) -> Result<(), NativeHostError> {
+    let _ = host.request_shutdown();
+    runtime.block_on(shutdown_native_owner_until_complete(&mut host));
+    Ok(())
 }
 
 struct NativeHostSession {
@@ -685,69 +793,70 @@ impl NativeHostSession {
     }
 }
 
-fn run_event_loop_with_owner<F>(
+/// Connects one workspace's host to the window. Every handler that reaches a
+/// host is replaced here, so nothing keeps talking to a host that has stopped.
+fn wire_host_to_ui(
     runtime: &Runtime,
     host: &mut CommandHost,
-    options: NativeHostOptions,
-    configure_ui: F,
+    ui: &UiHandle,
+    config: &HostConfig,
+    seed_profiles: Vec<ProviderProfile>,
+    inference_foreground: Option<Arc<dyn NativeInferenceForeground>>,
     session: &mut NativeHostSession,
-) -> Result<(), NativeHostError>
-where
-    F: FnOnce(&UiHandle),
-{
-    seed_missing_profiles(runtime, host, options.seed_profiles)?;
+) -> Result<(), NativeHostError> {
+    seed_missing_profiles(runtime, host, seed_profiles)?;
 
-    let result = {
-        let ui = UiHandle::new().map_err(|_| NativeHostError::Ui)?;
-        ui.window()
-            .set_workspace_label(options.workspace_label.into());
-        configure_ui(&ui);
+    // Settings > Devices reads the identity and paired devices itself, and can
+    // offer this app's runtime to paired devices while the owner allows it.
+    crate::devices_ui::connect(
+        ui,
+        crate::devices_ui::DevicesContext {
+            database: config.database.clone(),
+            secrets: config.secret_store(),
+            remote: Some(crate::remote_control::RemoteHost {
+                client: host.client(),
+                workspace: host.workspace_root().to_path_buf(),
+                runtime: runtime.handle().clone(),
+            }),
+        },
+    );
+    // Settings > Providers > Local model add-on, for installing llama.cpp.
+    crate::local_addon::connect(
+        ui,
+        crate::local_addon::Context {
+            local: host.local_handle(),
+            runtime: runtime.handle().clone(),
+        },
+    );
 
-        let events = host.subscribe();
-        let observer = host.lifecycle_observer();
-        let weak_ui = ui.weak_handle();
-        session.relay = Some(runtime.spawn(event_relay(
-            events,
-            observer,
-            weak_ui,
-            session.relay_lifecycle.clone(),
-            session.relay_cancellation.clone(),
-        )));
-        if let Some(foreground) = options.inference_foreground.as_ref() {
-            let foreground = foreground.clone();
-            host.set_android_foreground_stop(Arc::new(move |generation| {
-                foreground.stop_generation(generation)
-            }))
-            .map_err(|error| host_failure("set-android-foreground-stop", &error))?;
-        }
-        connect_native_commands(
-            host,
-            &ui,
-            &session.command_tasks,
-            options.inference_foreground,
-        );
-        host.lifecycle_observer()
-            .publish_ui_state()
-            .map_err(|error| host_failure("publish-ui-state", &error))?;
-        runtime
-            .block_on(host.client().dispatch(AppCommand::LoadUiPreferences))
-            .map_err(|error| host_failure("load-ui-preferences", &error))?;
-        runtime
-            .block_on(host.client().dispatch(AppCommand::ListProviderPresets))
-            .map_err(|error| host_failure("list-provider-presets", &error))?;
-
-        let show_result = ui.show().map_err(|_| NativeHostError::Ui);
-        let event_loop_result = if show_result.is_ok() {
-            slint::run_event_loop().map_err(|_| NativeHostError::EventLoop)
-        } else {
-            Ok(())
-        };
-        let hide_result = ui.hide().map_err(|_| NativeHostError::Ui);
-
-        combine_ui_results(show_result, event_loop_result, hide_result)
-    };
-
-    result
+    let events = host.subscribe();
+    let observer = host.lifecycle_observer();
+    let weak_ui = ui.weak_handle();
+    session.relay = Some(runtime.spawn(event_relay(
+        events,
+        observer,
+        weak_ui,
+        session.relay_lifecycle.clone(),
+        session.relay_cancellation.clone(),
+    )));
+    if let Some(foreground) = inference_foreground.as_ref() {
+        let foreground = foreground.clone();
+        host.set_android_foreground_stop(Arc::new(move |generation| {
+            foreground.stop_generation(generation)
+        }))
+        .map_err(|error| host_failure("set-android-foreground-stop", &error))?;
+    }
+    connect_native_commands(host, ui, &session.command_tasks, inference_foreground);
+    host.lifecycle_observer()
+        .publish_ui_state()
+        .map_err(|error| host_failure("publish-ui-state", &error))?;
+    runtime
+        .block_on(host.client().dispatch(AppCommand::LoadUiPreferences))
+        .map_err(|error| host_failure("load-ui-preferences", &error))?;
+    runtime
+        .block_on(host.client().dispatch(AppCommand::ListProviderPresets))
+        .map_err(|error| host_failure("list-provider-presets", &error))?;
+    Ok(())
 }
 
 fn seed_missing_profiles(
@@ -1206,14 +1315,6 @@ impl NativeOwner for CommandHost {
     async fn shutdown(&mut self) -> Result<(), Self::Error> {
         CommandHost::shutdown(self).await
     }
-}
-
-fn combine_ui_results(
-    show: Result<(), NativeHostError>,
-    event_loop: Result<(), NativeHostError>,
-    hide: Result<(), NativeHostError>,
-) -> Result<(), NativeHostError> {
-    show.and(event_loop).and(hide)
 }
 
 fn combine_application_and_cleanup(

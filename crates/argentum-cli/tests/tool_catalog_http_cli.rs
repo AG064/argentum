@@ -492,12 +492,12 @@ fn assert_catalog(request: &Value) {
     // A goal-bound run is also offered the goal completion report, and only
     // a goal-bound run: its request carries the goal task guidance.
     let goal_bound = request.to_string().contains("explicit_goal_task_guidance");
-    let offered_report = names.contains(&"report_goal_complete");
+    let offered_report = names.contains(&"report_goal_status");
     assert_eq!(
         offered_report, goal_bound,
         "report tool only for goal-bound runs"
     );
-    names.retain(|name| *name != "report_goal_complete");
+    names.retain(|name| *name != "report_goal_status");
     assert_eq!(names, EXPECTED_TOOLS);
 }
 

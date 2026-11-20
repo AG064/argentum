@@ -136,6 +136,10 @@ impl InstructionRun {
         scope: SandboxScope,
     ) -> Result<bool, InstructionError> {
         let (paths, mutation) = file_paths(input);
+        // Folders join the run's instruction set only once their instructions
+        // load. A call on a folder that cannot be read fails alone, and the
+        // next request does not trip over it.
+        let mut directories = self.directories.clone();
         for (path, directory) in paths {
             let resolved = workspace
                 .resolve_path_with_scope(path, scope)
@@ -158,13 +162,14 @@ impl InstructionRun {
             } else {
                 relative.parent().unwrap_or(Path::new(""))
             };
-            add_chain(&mut self.directories, directory)?;
+            add_chain(&mut directories, directory)?;
         }
-        if mutation {
-            let current = resolve(workspace, &self.directories)?;
-            return Ok(current.preview.documents != self.snapshot.documents);
+        if directories.len() == self.directories.len() && !mutation {
+            return Ok(false);
         }
-        Ok(false)
+        let current = resolve(workspace, &directories)?;
+        self.directories = directories;
+        Ok(mutation && current.preview.documents != self.snapshot.documents)
     }
 }
 
