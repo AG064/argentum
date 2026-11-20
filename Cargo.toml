@@ -106,3 +106,8 @@ zeroize = { version = "1", features = ["derive"] }
 windows = "0.62.2"
 windows-sys = "0.61.2"
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2", "deflate-zopfli"] }
+
+# Tests run unoptimized, where SHA-256 is slow enough that hashing the toolchain for a
+# sandboxed Rust check used up its 60 second limit. Release builds are optimized anyway.
+[profile.dev.package.sha2]
+opt-level = 3
