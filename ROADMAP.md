@@ -77,6 +77,86 @@ The first stable release, for Windows x64 and Android arm64:
 - **Execution environment:** a plain description, for the agent and for you, of
   what the shell can reach on each platform.
 
+## Planned for 0.1.5
+
+Larger tool limits, faster long sessions, and clearer control over how models
+are used, including ideas from Claude Code and Codex.
+
+### Speed measured first
+
+- **Benchmarks before each release:** long-session tests that time requests,
+  drawing, memory and startup, so every change below is checked against numbers.
+
+### Tools and limits
+
+- **Larger limits:** limits that grow with the model's context window, such as
+  reading about 2,000 lines at a time, writing files up to 1 MB, and searching
+  the whole workspace page by page instead of stopping at a fixed number of
+  files.
+- **Long output kept:** output past about 30 to 50 KB is saved to a file the
+  agent can read in pages, instead of being cut off.
+- **Long commands:** a command that runs past its time limit carries on in the
+  background, and the agent checks on it later.
+- **Run budgets:** a run stops at a token, time or cost budget you set, in place
+  of the fixed limit of 120 model requests per run.
+- **Helpers:** the agent can hand part of a task to a helper with its own
+  context window and budget, and gets back only the result.
+- **Limits page:** Settings shows every limit and lets you change it, and
+  `argentum` accepts the same settings from a file and on the command line.
+
+### Model use
+
+- **Prompt caching:** requests mark the parts that stay the same, so providers
+  that cache can reuse them, which makes long sessions cheaper and faster.
+- **Parallel reads:** the agent reads and searches several files at once.
+- **Smaller requests:** request bodies are compressed for providers that accept
+  it.
+- **One picker for model and thinking:** the model chooser sets the thinking
+  level for every provider that has levels, not only DeepSeek, and asks whether
+  a switch is for this session or the new default.
+- **A model for side work:** a cheaper model of your choice writes titles,
+  recaps and compaction summaries.
+- **Plan and work models:** one model plans the task and another carries it
+  out.
+- **Retries you can see:** the app shows "Retrying in 12s, attempt 2 of 6" and
+  waits as long as the provider asks, up to 2 minutes. Spend limits and plan
+  limits are never retried.
+- **At a usage limit:** a warning as a provider's limit gets close, and when it
+  is reached a choice to wait and carry on when it resets, switch model, or
+  stop. Waiting still keeps to goal budgets, the spend limit and approvals.
+- **Fallback model:** when a model is overloaded or retired, the run moves to
+  another model from the same provider and says so. Falling back to a different
+  provider happens only if you set it up, because it sends the conversation to
+  another company. Switching model never changes permissions.
+
+### Seeing and controlling usage
+
+- **Usage while you work:** the context meter shows how much is left and how far
+  it is until compaction, and the line under a working run shows its time and
+  tokens so far.
+- **Session cost:** a session's usage shows tokens by model, cache hits, and an
+  estimated cost from prices you can edit.
+- **Status bar:** you choose what it shows, such as model, thinking level,
+  context left, cost, limits and cache hits.
+- **Context control:** compact with a note on what to keep, summarize from or up
+  to a chosen message, and set where compaction starts for each model.
+- **Recaps:** a short summary of a session without compacting it, and one when
+  you come back to a session after time away. You can turn them off.
+- **Rewind:** from any message, go back with its files and conversation, the
+  conversation only, or the files only, then edit that prompt and send it again.
+  Changes made by shell commands cannot be restored, and the menu says so.
+- **Side questions:** ask something quick that does not stay in the session.
+- **Drafts kept:** an unsent or cleared draft can be brought back.
+
+### Speed
+
+- **Long sessions:** the conversation draws only the messages on screen,
+  streamed text is added in place instead of copying the whole reply, and
+  session history loads in pages.
+- **Storage:** database work runs off the interface thread, with one connection
+  for writing and a pool for reading.
+- **Startup and idle:** less work when the app starts and while it sits idle.
+
 ## Planned for 0.2.0
 
 - **Accessibility:** every control reachable by keyboard and named for screen
@@ -106,8 +186,9 @@ The first stable release, for Windows x64 and Android arm64:
 - **Customizable themes:** create your own themes, beyond the five built in.
 - **Longer sessions:** sessions that keep working well over many more turns
   before they need compaction.
-- **System prompt presets:** saved instructions you can pick for a session, such
-  as a reviewer or a careful refactorer.
+- **Saved setups:** presets of model, thinking level, permission profile and
+  instructions that you pick for a session in one click, such as a reviewer or
+  a careful refactorer.
 - **Interface:** a refreshed interface for desktop and phone, including
   two-handle text selection on Android.
 - **Agent-made widgets:** the agent adds its own widgets to the interface and
@@ -127,7 +208,8 @@ The first stable release, for Windows x64 and Android arm64:
   type into, such as a dev server or a test watcher.
 - **Stronger verification:** checks that a verified file is not a link and is
   not changed while it is checked.
-- **Phone notifications:** a notice when a run finishes or an approval waits.
+- **Notifications:** a notice on the desktop and the phone when a run finishes
+  or an approval waits.
 - **Voice:** talking to the agent and having replies read aloud.
 - **Benchmarks:** published results against other coding agents on public task sets.
 
