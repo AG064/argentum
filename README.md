@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/AG064/argentum/releases/latest"><b>Download</b></a> &nbsp;&middot;&nbsp;
+  <a href="https://youtu.be/JqPv5CDH4nU">Video</a> &nbsp;&middot;&nbsp;
   <a href="docs/SUPPORT_MATRIX.md">Requirements</a> &nbsp;&middot;&nbsp;
   <a href="docs/README.md">Documentation</a> &nbsp;&middot;&nbsp;
   <a href="https://ag064.eu/argentum">Website</a> &nbsp;&middot;&nbsp;
