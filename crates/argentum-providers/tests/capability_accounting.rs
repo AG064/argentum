@@ -54,6 +54,7 @@ fn final_contained_representation_accounts_for_embedded_catalog_and_exact_output
     let profile = profile();
     let budget = budget(&profile);
     let request = ModelRequest {
+        disable_thinking: false,
         require_tool_call: false,
         continuation_scope: None,
         output_limit: 64,
@@ -85,6 +86,7 @@ fn final_contained_representation_accounts_for_embedded_catalog_and_exact_output
 fn unsupported_backend_and_impossible_owner_limits_fail_before_dispatch() {
     let profile = profile();
     let request = ModelRequest {
+        disable_thinking: false,
         require_tool_call: false,
         continuation_scope: None,
         output_limit: 64,

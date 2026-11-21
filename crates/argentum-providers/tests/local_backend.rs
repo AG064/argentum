@@ -230,6 +230,7 @@ async fn active_stream_drains_before_replacement_and_cancelled_wait_keeps_old_ba
         provider
             .stream(
                 ModelRequest {
+                    disable_thinking: false,
                     require_tool_call: false,
                     continuation_scope: None,
                     output_limit: 4096,

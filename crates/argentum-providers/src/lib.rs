@@ -229,6 +229,11 @@ pub struct ModelRequest {
     pub prompt: String,
     pub tools: Vec<ModelToolDefinition>,
     pub tool_exchanges: Vec<ModelToolExchange>,
+    /// Asks for an answer without thinking, on providers that have a switch
+    /// for it, whatever the owner's thinking mode is. Host work such as a
+    /// compaction summary sets it, so thinking cannot use up its output limit.
+    #[serde(skip_serializing_if = "tool_requirement_absent")]
+    pub disable_thinking: bool,
 }
 
 fn tool_requirement_absent(value: &bool) -> bool {
@@ -3614,6 +3619,7 @@ fn build_chat_request_with_effort(
     sidecar: bool,
     effort: Option<&'static str>,
 ) -> Result<ChatCompletionRequest, ProviderError> {
+    let effort = effort.filter(|_| !request.disable_thinking);
     // A thinking response with tool calls must be replayed with its reasoning. Earlier
     // turns have none retained, so they travel as labelled context, as MiniMax's do.
     let replay_reasoning = minimax || effort.is_some();
@@ -5416,6 +5422,7 @@ mod tests {
 
     pub(super) fn empty_model_request() -> ModelRequest {
         ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: 4096,
@@ -7084,6 +7091,25 @@ mod tests {
         )
         .unwrap();
         assert!(other.get("thinking").is_none() && other.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn a_request_without_thinking_overrides_the_owner_thinking_mode() {
+        let mut request = tool_catalog_request(1);
+        request.disable_thinking = true;
+        let body = serde_json::to_value(
+            build_chat_request_with_effort(request, false, true, false, Some("high")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["thinking"]["type"], "disabled");
+        assert!(body.get("reasoning_effort").is_none());
+        let mut plain = empty_model_request();
+        plain.disable_thinking = true;
+        assert!(serde_json::to_value(&plain).unwrap()["disable_thinking"] == true);
+        assert!(serde_json::to_value(empty_model_request())
+            .unwrap()
+            .get("disable_thinking")
+            .is_none());
     }
 
     #[test]

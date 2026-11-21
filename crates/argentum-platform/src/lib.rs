@@ -285,6 +285,19 @@ pub fn check_workspace_folder(path: impl AsRef<Path>) -> Result<PathBuf, Platfor
     validate_workspace(path.as_ref())
 }
 
+/// An `Argentum` folder in the owner's Documents folder, created when it is
+/// missing. The desktop app opens it on the first start when the owner does
+/// not choose a project folder, instead of the folder it was started from.
+pub fn default_project_folder() -> Option<PathBuf> {
+    project_folder_in(directories::UserDirs::new()?.document_dir()?)
+}
+
+fn project_folder_in(documents: &Path) -> Option<PathBuf> {
+    let folder = documents.join("Argentum");
+    fs::create_dir_all(&folder).ok()?;
+    validate_workspace(&folder).ok()
+}
+
 fn validate_workspace(path: &Path) -> Result<PathBuf, PlatformError> {
     let canonical = fs::canonicalize(path).map_err(|_| PlatformError::WorkspaceUnavailable)?;
     if !canonical.is_dir() {
@@ -1006,6 +1019,24 @@ mod tests {
             std::fs::canonicalize(workspace.path()).expect("canonical")
         );
         assert_eq!(paths.load_workspace().expect("load workspace"), Some(saved));
+    }
+
+    #[test]
+    fn the_default_project_folder_is_created_once_and_kept() {
+        let documents = tempfile::tempdir().expect("documents");
+        let folder = project_folder_in(documents.path()).expect("created");
+        assert_eq!(
+            folder,
+            std::fs::canonicalize(documents.path().join("Argentum")).expect("canonical")
+        );
+        std::fs::write(folder.join("notes.txt"), "kept").expect("file");
+        assert_eq!(project_folder_in(documents.path()), Some(folder.clone()));
+        assert!(folder.join("notes.txt").is_file());
+
+        // A file where the folder should be is not opened as a project.
+        let blocked = tempfile::tempdir().expect("blocked");
+        std::fs::write(blocked.path().join("Argentum"), "file").expect("file");
+        assert_eq!(project_folder_in(blocked.path()), None);
     }
 
     #[test]

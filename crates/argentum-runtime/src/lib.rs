@@ -4899,6 +4899,7 @@ impl RuntimeService {
                     self.store.load_ui_preferences()?.thinking,
                 );
                 let mut request = ModelRequest {
+                    disable_thinking: false,
                     require_tool_call: next_context_ordinal == 1
                         && context.profile.kind == ProviderKind::OpenAiCompatible
                         && !context.tools.is_empty()

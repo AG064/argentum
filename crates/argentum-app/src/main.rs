@@ -52,8 +52,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         WorkspaceSource::Explicit | WorkspaceSource::Persisted => {
             canonical_workspace(&selected_workspace)?
         }
-        WorkspaceSource::Legacy | WorkspaceSource::CurrentDirectory => {
-            app_paths.save_workspace(&selected_workspace)?
+        WorkspaceSource::Legacy => app_paths.save_workspace(&selected_workspace)?,
+        WorkspaceSource::CurrentDirectory => {
+            app_paths.save_workspace(first_start_workspace(selected_workspace))?
         }
     };
     let uses_legacy_workspace = source == WorkspaceSource::Legacy;
@@ -99,6 +100,30 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
     Ok(())
+}
+
+/// The project folder for the first start, when none is saved yet. Argentum
+/// asks for one instead of working in the folder it was started from, which
+/// for the installer is its own install folder. If the owner cancels, it opens
+/// an empty `Argentum` folder in Documents. Either can be changed later in
+/// Settings > Workspace.
+#[cfg(windows)]
+fn first_start_workspace(started_in: PathBuf) -> PathBuf {
+    use argentum_app::workspace_choice::{check_picked_folder, WorkspaceChoice};
+
+    let picked =
+        argentum_app::windows_dialogs::pick_folder("Choose a project folder for Argentum").ok();
+    if let WorkspaceChoice::Ready(folder) = check_picked_folder(picked.as_deref()) {
+        return folder;
+    }
+    argentum_platform::default_project_folder().unwrap_or(started_in)
+}
+
+/// Other desktop systems have no release yet and keep the folder they were
+/// started from.
+#[cfg(not(windows))]
+fn first_start_workspace(started_in: PathBuf) -> PathBuf {
+    started_in
 }
 
 #[cfg(windows)]

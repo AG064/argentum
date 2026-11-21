@@ -206,6 +206,7 @@ mod context_variant_tests {
                 uncertainty_tokens: 128,
             };
             let request = ModelRequest {
+                disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
                 model: profile.model.clone(),
@@ -266,6 +267,7 @@ mod tests {
             uncertainty_tokens: 128,
         };
         let request = ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             model: profile.model.clone(),

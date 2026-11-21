@@ -366,6 +366,7 @@ mod image_authority_tests {
                     context_id: context,
                 });
         let mut request = argentum_providers::ModelRequest {
+            disable_thinking: false,
             continuation_scope: Some(argentum_providers::ContinuationScope {
                 session_id: Uuid::new_v4(),
                 run_id: run,

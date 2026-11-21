@@ -6474,6 +6474,7 @@ fn f10b_deterministic_adapter_sends_requested_generation_cap() {
     )
     .expect("F10B deterministic provider");
     let request = ModelRequest {
+        disable_thinking: false,
         require_tool_call: false,
         continuation_scope: None,
         output_limit: 1_024,

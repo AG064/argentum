@@ -71,9 +71,20 @@ pub struct HostConfig {
     pub android_inference: Option<InferenceConfig>,
     provider_credentials: ProviderCredentials,
     secret_store: Arc<dyn SecretStore>,
+    /// The workspace the owner is switching from. A folder opened for the
+    /// first time takes its provider profiles and modules from there.
+    setup_from: Option<PathBuf>,
 }
 
 impl HostConfig {
+    /// Lets a folder opened for the first time start with the provider
+    /// profiles, model limits and modules of `workspace`. A folder Argentum
+    /// has opened before keeps its own. Approval policy is never copied.
+    pub fn with_setup_from(mut self, workspace: impl Into<PathBuf>) -> Self {
+        self.setup_from = Some(workspace.into());
+        self
+    }
+
     /// The credential store this host was configured with.
     pub fn secret_store(&self) -> Arc<dyn SecretStore> {
         Arc::clone(&self.secret_store)
@@ -94,6 +105,7 @@ impl std::fmt::Debug for HostConfig {
                 &self.android_inference.is_some(),
             )
             .field("provider_credentials", &self.provider_credentials)
+            .field("setup_from", &self.setup_from)
             .finish()
     }
 }
@@ -137,6 +149,7 @@ impl HostConfig {
             android_inference: None,
             provider_credentials,
             secret_store,
+            setup_from: None,
         })
     }
 
@@ -169,6 +182,7 @@ impl HostConfig {
             },
             provider_credentials,
             secret_store,
+            setup_from: None,
         })
     }
 
@@ -228,6 +242,7 @@ impl HostConfig {
             },
             provider_credentials,
             secret_store,
+            setup_from: None,
         })
     }
 
@@ -241,6 +256,7 @@ impl HostConfig {
             android_inference: None,
             provider_credentials: ProviderCredentials::default(),
             secret_store: Arc::new(UnavailableSecretStore),
+            setup_from: None,
         }
     }
 
@@ -1010,6 +1026,14 @@ impl CommandHost {
             model: config.model,
             selected: true,
         };
+        if let Some(from) = config.setup_from.as_deref() {
+            // Best effort. Without it the folder opens with the default setup.
+            if let Err(error) =
+                store.resolve_workspace_with_setup(&config.workspace, &default_provider, Some(from))
+            {
+                tracing::warn!(error = ?error, "could not copy the previous project's setup");
+            }
+        }
         let provider_authority = providers
             .local_runtime_configured()
             .then(|| providers.clone());

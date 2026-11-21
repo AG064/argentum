@@ -92,6 +92,7 @@ async fn pinned_qwen_model_runs_through_the_contained_llama_cpp_sidecar(
         }
 
         let request = ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: 4096,
@@ -219,6 +220,7 @@ async fn verify_real_stream_cancellation(
     model: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request = ModelRequest {
+        disable_thinking: false,
         require_tool_call: false,
         continuation_scope: None,
         output_limit: 4096,

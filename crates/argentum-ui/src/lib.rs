@@ -2090,10 +2090,15 @@ impl UiHandle {
                 self.window
                     .set_recovery_summary(present_error(message).into());
             }
-            AppCommand::SubmitTask { .. } | AppCommand::SubmitGoalTask { .. }
+            AppCommand::SubmitTask { prompt } | AppCommand::SubmitGoalTask { prompt, .. }
                 if self.window.get_submission_pending() =>
             {
                 self.window.set_submission_pending(false);
+                // The composer clears itself on send. Nothing was sent, so
+                // what the owner typed goes back unless they typed again.
+                if self.window.get_draft().is_empty() {
+                    self.window.set_draft(prompt.as_str().into());
+                }
                 self.window.set_error_message(present_error(message).into());
                 self.window.set_run_state("Could not start".into());
                 self.window.set_running(false);
@@ -7532,6 +7537,25 @@ mod tests {
         ui.window().set_user_prompt("Lost".into());
         ui.apply_event(&snapshot(Vec::new()));
         assert_eq!(ui.window().get_draft(), "Typed already");
+
+        // A send the host refused, for example with no provider, comes back.
+        let refused = AppCommand::SubmitTask {
+            prompt: "Refused question".into(),
+        };
+        let run_state = ui.window().get_run_state();
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_submission_pending(true);
+        ui.apply_command_failure(&refused, "No provider is selected.");
+        assert_eq!(ui.window().get_draft(), "Refused question");
+        assert!(!ui.window().get_submission_pending());
+        ui.window().set_draft("Typed again".into());
+        ui.window().set_submission_pending(true);
+        ui.apply_command_failure(&refused, "No provider is selected.");
+        assert_eq!(ui.window().get_draft(), "Typed again");
+        // Later checks share this window.
+        ui.window().set_draft(SharedString::default());
+        ui.window().set_error_message(SharedString::default());
+        ui.window().set_run_state(run_state);
     }
 
     fn model_picker_and_thinking_chip_follow_the_selected_model(ui: &UiHandle) {

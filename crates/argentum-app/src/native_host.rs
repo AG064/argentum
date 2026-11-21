@@ -712,7 +712,11 @@ where
         let result = combine_application_and_cleanup(application, cleanup);
         let next = workspace_switch.as_ref().and_then(WorkspaceSwitch::take);
         match (result, next) {
-            (Ok(()), Some(next)) => {
+            (Ok(()), Some((config, label))) => {
+                // A folder opened for the first time keeps the provider and
+                // modules of the one that was open, so the owner can go on
+                // working. A folder opened before keeps its own setup.
+                let next = (config.with_setup_from(current.0.workspace.clone()), label);
                 // Opening the chosen workspace can fail, for example when
                 // another copy holds it. Then the previous one opens again.
                 if let Err(error) = start_host(&runtime, next.0.clone())

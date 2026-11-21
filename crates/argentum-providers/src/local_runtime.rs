@@ -3621,6 +3621,7 @@ mod tests {
         });
         let provider = client.provider();
         let request = crate::ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: 4096,
@@ -3727,6 +3728,7 @@ mod tests {
             crate::LocalLlamaCppProvider::with_runtime("outer.gguf", Arc::clone(&module))
                 .expect("outer local provider");
         let request = crate::ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: 4096,
@@ -3966,6 +3968,7 @@ mod tests {
             crate::LocalLlamaCppProvider::with_runtime("first.gguf", Arc::clone(&module))
                 .expect("local provider");
         let request = crate::ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: 4096,
@@ -4037,6 +4040,7 @@ mod tests {
             crate::LocalLlamaCppProvider::with_runtime("first.gguf", Arc::clone(&module))
                 .expect("local provider");
         let request = crate::ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: 4096,

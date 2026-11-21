@@ -551,6 +551,7 @@ impl RuntimeService {
                 .to_string(),
             );
             let request = ModelRequest {
+                disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: Some(child_context.continuation_scope),
                 output_limit: child_budget.requested_output_tokens,

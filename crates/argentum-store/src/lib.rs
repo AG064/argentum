@@ -1068,7 +1068,27 @@ impl Store {
         workspace_root: impl AsRef<Path>,
         default_provider: &ProviderProfile,
     ) -> Result<WorkspaceResolution, StoreError> {
+        self.resolve_workspace_with_setup(workspace_root, default_provider, None)
+    }
+
+    /// Resolves a workspace like `resolve_workspace_with_default_provider`.
+    /// When the folder has no project yet and `setup_from` names one that does,
+    /// the new project starts with that project's provider profiles, model
+    /// limits, module preferences and layout. API keys stay in the credential
+    /// store, keyed by profile id. Approval policy, grants and sessions are
+    /// never copied, so each folder keeps its own authority.
+    pub fn resolve_workspace_with_setup(
+        &self,
+        workspace_root: impl AsRef<Path>,
+        default_provider: &ProviderProfile,
+        setup_from: Option<&Path>,
+    ) -> Result<WorkspaceResolution, StoreError> {
         let (workspace_root, workspace_key) = canonical_workspace(workspace_root.as_ref())?;
+        // A source folder that is gone or unreadable only means nothing is copied.
+        let source_key = setup_from
+            .and_then(|path| canonical_workspace(path).ok())
+            .map(|(_, key)| key)
+            .filter(|key| *key != workspace_key);
         let mut connection = self
             .connection
             .lock()
@@ -1101,6 +1121,9 @@ impl Store {
                     serde_json::to_string(&project)?,
                 ],
             )?;
+            if let Some(source_key) = &source_key {
+                copy_project_setup(&transaction, source_key, project.id)?;
+            }
             project
         };
 
@@ -4569,6 +4592,52 @@ fn ensure_project_exists(connection: &Connection, project_id: ProjectId) -> Resu
     }
 }
 
+/// Copies provider profiles with their selection, model limits, module
+/// preferences and layout from the project at `source_key` to a project that
+/// was just created. Nothing that grants authority is copied.
+fn copy_project_setup(
+    connection: &Connection,
+    source_key: &str,
+    target: ProjectId,
+) -> Result<(), StoreError> {
+    let Some(source) = connection
+        .query_row(
+            "SELECT id FROM projects WHERE workspace_key = ?1",
+            [source_key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+    else {
+        return Ok(());
+    };
+    let target = target.to_string();
+    connection.execute(
+        "INSERT OR IGNORE INTO provider_profiles (
+            project_id, profile_id, label, provider_kind, endpoint, model, selected
+         )
+         SELECT ?2, profile_id, label, provider_kind, endpoint, model, selected
+         FROM provider_profiles WHERE project_id = ?1",
+        params![source, target],
+    )?;
+    connection.execute(
+        "INSERT OR IGNORE INTO model_budgets (project_id, profile_id, payload)
+         SELECT ?2, profile_id, payload FROM model_budgets WHERE project_id = ?1",
+        params![source, target],
+    )?;
+    connection.execute(
+        "INSERT OR IGNORE INTO module_preferences (project_id, payload)
+         SELECT ?2, payload FROM module_preferences WHERE project_id = ?1",
+        params![source, target],
+    )?;
+    connection.execute(
+        "INSERT OR IGNORE INTO layout_profiles (profile_key, payload)
+         SELECT 'project:' || ?2, payload FROM layout_profiles
+         WHERE profile_key = 'project:' || ?1",
+        params![source, target],
+    )?;
+    Ok(())
+}
+
 fn ensure_default_provider_profile(
     connection: &Connection,
     project_id: ProjectId,
@@ -6979,6 +7048,109 @@ mod tests {
                 .expect("selected profile"),
             &custom
         );
+    }
+
+    #[test]
+    fn a_new_folder_takes_the_previous_project_setup_but_not_its_policy() {
+        let directory = tempfile::tempdir().expect("directory");
+        let roots = ["previous", "fresh", "known"].map(|name| {
+            let root = directory.path().join(name);
+            std::fs::create_dir(&root).expect("workspace");
+            root
+        });
+        let [previous_root, fresh_root, known_root] = &roots;
+        let store = Store::open(directory.path().join("argentum.db")).expect("store");
+        let default = ProviderProfile::default_llama_cpp();
+        let previous = store
+            .resolve_workspace(previous_root)
+            .expect("previous")
+            .snapshot
+            .project
+            .id;
+        let known = store
+            .resolve_workspace(known_root)
+            .expect("known")
+            .snapshot
+            .project
+            .id;
+        let hosted = ProviderProfile {
+            id: "deepseek".into(),
+            label: "DeepSeek".into(),
+            kind: ProviderKind::OpenAiCompatible,
+            endpoint: "https://api.deepseek.com/".into(),
+            model: "deepseek-chat".into(),
+            selected: true,
+        };
+        store
+            .save_provider_profile(previous, &hosted)
+            .expect("hosted profile");
+        let modules = BTreeMap::from([(
+            "first-party.activity".to_string(),
+            argentum_domain::ModulePreference {
+                installed: true,
+                enabled: true,
+            },
+        )]);
+        store
+            .save_module_preferences(previous, &modules)
+            .expect("modules");
+        let layout = LayoutProfile {
+            harness_profile_id: "full".into(),
+            ..LayoutProfile::default()
+        };
+        store
+            .save_layout(&format!("project:{previous}"), &layout)
+            .expect("layout");
+        store
+            .save_execution_policy(previous, &HarnessExecutionPolicy::default())
+            .expect("policy");
+
+        let fresh = store
+            .resolve_workspace_with_setup(fresh_root, &default, Some(previous_root))
+            .expect("fresh")
+            .snapshot
+            .project
+            .id;
+        assert_eq!(
+            store.provider_profiles(fresh).expect("fresh profiles"),
+            store
+                .provider_profiles(previous)
+                .expect("previous profiles")
+        );
+        assert_eq!(
+            store
+                .selected_provider_profile(fresh)
+                .expect("selected")
+                .map(|profile| profile.id),
+            Some("deepseek".to_string())
+        );
+        assert_eq!(
+            store.load_module_preferences(fresh).expect("fresh modules"),
+            Some(modules)
+        );
+        assert_eq!(
+            store
+                .load_layout(&format!("project:{fresh}"))
+                .expect("fresh layout")
+                .map(|layout| layout.harness_profile_id),
+            Some("full".to_string())
+        );
+        assert!(store
+            .load_execution_policy(fresh)
+            .expect("fresh policy")
+            .is_none());
+
+        // A folder that already has a project keeps its own setup.
+        store
+            .resolve_workspace_with_setup(known_root, &default, Some(previous_root))
+            .expect("known again");
+        let known_profiles = store.provider_profiles(known).expect("known profiles");
+        assert_eq!(known_profiles.len(), 1);
+        assert_eq!(known_profiles[0].id, default.id);
+        assert!(store
+            .load_module_preferences(known)
+            .expect("known")
+            .is_none());
     }
 
     #[test]

@@ -1042,6 +1042,7 @@ mod tests {
 
     fn request() -> ModelRequest {
         ModelRequest {
+            disable_thinking: false,
             continuation_scope: Some(ContinuationScope {
                 session_id: uuid::Uuid::new_v4(),
                 run_id: uuid::Uuid::new_v4(),

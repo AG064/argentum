@@ -129,6 +129,11 @@ Rules the agent cannot get around:
 
 ## First run
 
+On Windows, the first start with no saved project folder opens the folder picker,
+so the agent never works in the folder the app was started from, such as its install
+folder. Cancelling opens an empty `Argentum` folder in Documents. Either can be
+changed in Settings > Workspace.
+
 1. Choose a provider from the catalog. The short list shows the providers that have
    been tested, local llama.cpp, and a custom server. "Show all providers" opens the
    rest. A provider that needs a key asks for it next. The key goes straight to the

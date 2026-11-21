@@ -29,9 +29,11 @@ const MAX_SUMMARIZER_PROMPT_BYTES: usize = 128 * 1024;
 const SUMMARY_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Output tokens a summary may use. A summary must stay under
-/// `MAX_SUMMARY_BYTES`, so asking for the profile's full output allowance only
-/// lets a slow model run long before the result is rejected anyway.
-const SUMMARY_OUTPUT_TOKENS: u32 = 2048;
+/// `MAX_SUMMARY_BYTES`, and a token is at least one byte, so this leaves room
+/// for any summary that can be accepted. Source references are copied in full
+/// and tokenize poorly, so a smaller cap cut valid summaries off. Asking for
+/// more than this only lets a slow model run long before it is rejected.
+const SUMMARY_OUTPUT_TOKENS: u32 = MAX_SUMMARY_BYTES as u32;
 
 /// Tool results longer than this are clipped to their start and end in the
 /// summarizer input. The originals stay retained and referenced.
@@ -617,6 +619,7 @@ impl RuntimeService {
             capabilities.require_coding()?;
             let mut instruction_run = instructions::InstructionRun::new(Path::new(""))?;
             let base = ModelRequest {
+                disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
                 output_limit: budget.requested_output_tokens,
@@ -811,6 +814,7 @@ impl RuntimeService {
                 break;
             }
             let request = ModelRequest {
+                disable_thinking: true,
                 require_tool_call: false,
                 continuation_scope: None,
                 output_limit: summary_budget.requested_output_tokens,
@@ -1890,6 +1894,33 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
+    fn summary_output_has_room_for_any_summary_the_limit_accepts() {
+        let profile = argentum_providers::ProviderPreset::OpenAiCompatible
+            .profile(Some("http://127.0.0.1:1/"), Some("synthetic"))
+            .unwrap();
+        let budget = |requested| argentum_domain::context_budget::ModelBudget {
+            revision: Uuid::new_v4(),
+            profile_id: profile.id.clone(),
+            provider_kind: profile.kind,
+            endpoint: profile.endpoint.clone(),
+            model: profile.model.clone(),
+            usable_context_tokens: 1_000_000,
+            input_limit_tokens: None,
+            maximum_output_tokens: 32768,
+            requested_output_tokens: requested,
+            uncertainty_tokens: 2048,
+        };
+        // A DeepSeek profile asks for 32768. The summary asks for enough
+        // tokens to hold a summary at the byte limit, and no more.
+        assert_eq!(
+            summary_budget(&budget(32768)).requested_output_tokens as usize,
+            MAX_SUMMARY_BYTES
+        );
+        assert_eq!(summary_budget(&budget(1024)).requested_output_tokens, 1024);
+        assert_eq!(summary_budget(&budget(0)).requested_output_tokens, 0);
+    }
+
+    #[test]
     #[ignore = "Explicit read-only retained-context capacity diagnosis; never dispatches"]
     fn retained_compaction_capacity_metadata_only() {
         use argentum_domain::context_summary::SourceCoverage;
@@ -1940,6 +1971,7 @@ mod tests {
             .unwrap();
         assert!(projection.preview.omitted_source_ids.is_empty());
         let base = ModelRequest {
+            disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
             output_limit: budget.requested_output_tokens,
@@ -2181,6 +2213,7 @@ mod tests {
                 uncertainty_tokens: 1024,
             };
             let request = ModelRequest {
+                disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
                 output_limit: 4096,
@@ -2558,6 +2591,7 @@ mod tests {
                 uncertainty_tokens: 1024,
             };
             let request = ModelRequest {
+                disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
                 output_limit: 4096,
