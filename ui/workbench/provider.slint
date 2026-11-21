@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
 // Core: choosing a provider and model. The first-run screen is this and nothing
-// else, then an optional step for adding modules.
+// else, then an optional step for adding modules. A desktop first start with
+// no saved project asks for the project folder before the provider.
 import { Theme } from "theme.slint";
 import { App, Mods } from "state.slint";
 import { Badge, Btn, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
@@ -53,12 +54,133 @@ component PresetCard inherits Rectangle {
     }
 }
 
+// One way to choose the project folder at first run.
+component ChoiceCard inherits Rectangle {
+    in property <string> icon;
+    in property <string> title;
+    in property <string> detail;
+    in property <bool> mono-detail: false;
+    callback chosen();
+    min-height: 72px;
+    border-radius: Theme.r-lg;
+    background: touch.pressed ? Theme.raised : touch.has-hover ? Theme.surface : Theme.surface.with-alpha(0.55);
+    border-width: Theme.hair;
+    border-color: touch.has-hover ? Theme.border-strong : Theme.border;
+    animate background, border-color { duration: Theme.quick; }
+    accessible-role: button;
+    accessible-label: title + ". " + detail;
+    accessible-action-default => { chosen(); }
+    HorizontalLayout {
+        padding: Theme.sp14;
+        spacing: Theme.sp12;
+        Icon { name: icon; size: 20px; tint: touch.has-hover ? Theme.accent-ink : Theme.silver; y: (parent.height - self.height) / 2; }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.sp2;
+            horizontal-stretch: 1;
+            Label { text: title; strong: true; }
+            Text {
+                text: detail;
+                color: Theme.text-3;
+                font-size: Theme.fs-sm;
+                font-family: mono-detail ? Theme.font-mono : Theme.font-ui;
+                wrap: word-wrap;
+            }
+        }
+    }
+    Focus {
+        radius: Theme.r-lg;
+        activated => { root.chosen(); }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(); }
+    }
+}
+
 export component FirstRun inherits Rectangle {
     background: Theme.canvas;
     private property <length> column: min(root.width - 40px, 560px);
     private property <bool> two-up: root.column >= 480px;
     private property <bool> show-all: false;
 
+    // The project folder comes first on a desktop's first start. Nothing runs
+    // until one is chosen, so the agent never works in the folder Argentum was
+    // started from, such as its install folder.
+    if App.first_run_stage == "project": Scroller {
+        content-height: project-col.preferred-height + 80px;
+        project-col := VerticalLayout {
+            height: self.preferred-height;
+            x: (root.width - root.column) / 2;
+            y: max(40px, (root.height - self.preferred-height) / 2);
+            width: root.column;
+            spacing: Theme.sp22;
+            VerticalLayout {
+                spacing: Theme.sp14;
+                HorizontalLayout { alignment: center; BrandMark { size: 56px; } }
+                Text {
+                    text: "Choose your project folder";
+                    color: Theme.text;
+                    font-size: Theme.fs-2xl - 2px;
+                    font-weight: Theme.w-medium;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Argentum works only inside this folder. The agent reads its files and asks before it changes anything or runs a command. You can switch folders later in Settings.";
+                    color: Theme.text-2;
+                    font-size: Theme.fs-md;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+            VerticalLayout {
+                spacing: Theme.sp8;
+                // The picker opens the folder as soon as one is chosen. A typed
+                // path is cleared first, so cancelling the picker opens nothing.
+                if App.workspace_picker_available: ChoiceCard {
+                    icon: "folder";
+                    title: "Open a folder";
+                    detail: "A project you already have on this computer.";
+                    chosen => {
+                        App.workspace_draft = "";
+                        App.workspace_notice = "";
+                        App.choose_workspace_folder();
+                        if App.workspace_draft != "" {
+                            App.open_workspace(App.workspace_draft);
+                        }
+                    }
+                }
+                if App.default_workspace_path != "": ChoiceCard {
+                    icon: "plus";
+                    title: "Start in a new folder";
+                    detail: App.default_workspace_path;
+                    mono-detail: true;
+                    chosen => { App.open_default_workspace(); }
+                }
+            }
+            VerticalLayout {
+                spacing: Theme.sp10;
+                Field {
+                    label: App.workspace_picker_available || App.default_workspace_path != "" ? "Or type a path" : "Project folder";
+                    placeholder: "A full path, such as " + App.workspace_path_example;
+                    mono: true;
+                    value <=> App.workspace_draft;
+                    error: App.workspace_notice;
+                    edited(text) => { App.workspace_notice = ""; }
+                    accepted(text) => { if text != "" { App.open_workspace(text); } }
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    Btn {
+                        label: "Open";
+                        kind: "primary";
+                        enabled: App.workspace_draft != "";
+                        clicked => { App.open_workspace(App.workspace_draft); }
+                    }
+                }
+            }
+        }
+    }
     // Provider choice is short and centers itself. The module list is long, so it
     // scrolls between a fixed heading and a Start button that is always in view.
     if App.first_run_stage == "provider": Scroller {

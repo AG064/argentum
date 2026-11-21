@@ -29,33 +29,64 @@ pub(crate) fn connect(
 
     connect_folder_picker(ui);
 
-    let paths = app_paths.clone();
-    let reopen_ui = ui.weak_window();
-    ui.window().global::<App>().on_open_workspace(move |path| {
-        let Some(window) = reopen_ui.upgrade() else {
-            return;
-        };
-        // A run belongs to the workspace it started in, so it finishes first.
-        if window.global::<App>().get_running() {
-            window.set_workspace_notice(
-                "Wait for the current run to finish, then open the folder.".into(),
-            );
-            return;
-        }
-        // The app stays open: the current workspace closes cleanly and the
-        // chosen one opens in the same window.
-        let opened = paths
-            .save_workspace(Path::new(path.trim()))
-            .ok()
-            .and_then(|root| {
+    // Settings > Workspace and the first-start project step open a folder the
+    // same way.
+    let open = {
+        let paths = app_paths.clone();
+        let reopen_ui = ui.weak_window();
+        std::rc::Rc::new(move |path: &Path| {
+            let Some(window) = reopen_ui.upgrade() else {
+                return;
+            };
+            // A run belongs to the workspace it started in, so it finishes first.
+            if window.global::<App>().get_running() {
+                window.set_workspace_notice(
+                    "Wait for the current run to finish, then open the folder.".into(),
+                );
+                return;
+            }
+            // The app stays open: the current workspace closes cleanly and the
+            // chosen one opens in the same window.
+            let opened = paths.save_workspace(path).ok().and_then(|root| {
                 argentum_cli::HostConfig::discover(&root)
                     .ok()
                     .map(|config| (config, argentum_ui::display_workspace_label(&root)))
             });
-        match opened {
-            Some((config, label)) => workspace_switch.request(config, label),
-            None => {
-                window.set_workspace_notice("That folder cannot be opened.".into());
+            match opened {
+                Some((config, label)) => {
+                    window.set_workspace_notice(SharedString::default());
+                    window
+                        .global::<App>()
+                        .set_workspace_draft(SharedString::default());
+                    workspace_switch.request(config, label);
+                }
+                None => {
+                    window.set_workspace_notice("That folder cannot be opened.".into());
+                }
+            }
+        })
+    };
+    {
+        let open = open.clone();
+        ui.window()
+            .global::<App>()
+            .on_open_workspace(move |path| open(Path::new(path.trim())));
+    }
+    let app = ui.window().global::<App>();
+    app.set_default_workspace_path(
+        argentum_platform::default_project_folder_path()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default()
+            .into(),
+    );
+    let weak = ui.weak_window();
+    app.on_open_default_workspace(move || match argentum_platform::default_project_folder() {
+        Some(folder) => open(&folder),
+        None => {
+            if let Some(window) = weak.upgrade() {
+                window.set_workspace_notice(
+                    "That folder could not be created. Choose another folder.".into(),
+                );
             }
         }
     });

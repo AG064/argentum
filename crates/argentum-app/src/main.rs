@@ -48,14 +48,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         compatibility.workspace.as_deref(),
         env::current_dir()?,
     );
+    // With no saved project, the window opens on the onboarding project step
+    // instead of working in the folder Argentum was started from, which for
+    // the installer is its own install folder.
     let workspace_root = match source {
         WorkspaceSource::Explicit | WorkspaceSource::Persisted => {
-            canonical_workspace(&selected_workspace)?
+            Some(canonical_workspace(&selected_workspace)?)
         }
-        WorkspaceSource::Legacy => app_paths.save_workspace(&selected_workspace)?,
-        WorkspaceSource::CurrentDirectory => {
-            app_paths.save_workspace(first_start_workspace(selected_workspace))?
-        }
+        WorkspaceSource::Legacy => Some(app_paths.save_workspace(&selected_workspace)?),
+        WorkspaceSource::CurrentDirectory => None,
     };
     let uses_legacy_workspace = source == WorkspaceSource::Legacy;
     let environment_has_minimax = has_nonempty_env("MINIMAX_API_KEY");
@@ -65,10 +66,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
     let should_seed_minimax = environment_has_minimax || legacy_minimax_key.is_some();
-    let mut host_config = HostConfig::discover(&workspace_root)?;
-    if let Some(secret) = legacy_minimax_key {
-        host_config = host_config.with_provider_credential("minimax", secret)?;
-    }
+    let host_config = match &workspace_root {
+        Some(root) => {
+            let mut config = HostConfig::discover(root)?;
+            if let Some(secret) = legacy_minimax_key {
+                config = config.with_provider_credential("minimax", secret)?;
+            }
+            Some(config)
+        }
+        None => None,
+    };
     let preview_size = env::var_os("ARGENTUM_UI_SIZE")
         .and_then(|value| value.into_string().ok())
         .and_then(|value| parse_window_size(&value));
@@ -86,7 +93,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     run_native_host(
         host_config,
         NativeHostOptions {
-            workspace_label: display_workspace_label(&workspace_root),
+            workspace_label: workspace_root
+                .as_deref()
+                .map(display_workspace_label)
+                .unwrap_or_default(),
             seed_profiles,
             inference_foreground: None,
             session_export: workbench_host::session_export_sink(),
@@ -100,30 +110,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
     Ok(())
-}
-
-/// The project folder for the first start, when none is saved yet. Argentum
-/// asks for one instead of working in the folder it was started from, which
-/// for the installer is its own install folder. If the owner cancels, it opens
-/// an empty `Argentum` folder in Documents. Either can be changed later in
-/// Settings > Workspace.
-#[cfg(windows)]
-fn first_start_workspace(started_in: PathBuf) -> PathBuf {
-    use argentum_app::workspace_choice::{check_picked_folder, WorkspaceChoice};
-
-    let picked =
-        argentum_app::windows_dialogs::pick_folder("Choose a project folder for Argentum").ok();
-    if let WorkspaceChoice::Ready(folder) = check_picked_folder(picked.as_deref()) {
-        return folder;
-    }
-    argentum_platform::default_project_folder().unwrap_or(started_in)
-}
-
-/// Other desktop systems have no release yet and keep the folder they were
-/// started from.
-#[cfg(not(windows))]
-fn first_start_workspace(started_in: PathBuf) -> PathBuf {
-    started_in
 }
 
 #[cfg(windows)]

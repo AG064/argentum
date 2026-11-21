@@ -129,20 +129,21 @@ Rules the agent cannot get around:
 
 ## First run
 
-On Windows, the first start with no saved project folder opens the folder picker,
-so the agent never works in the folder the app was started from, such as its install
-folder. Cancelling opens an empty `Argentum` folder in Documents. Either can be
-changed in Settings > Workspace.
-
-1. Choose a provider from the catalog. The short list shows the providers that have
+1. On a desktop with no saved project, choose the project folder first: open a
+   folder you have, start in a new, empty `Argentum` folder in Documents, or type
+   a path. No command host runs and nothing is saved until a folder is chosen, so
+   the agent never works in the folder the app was started from, such as its
+   install folder. Settings > Workspace changes it later. Android starts in the
+   app's own folder and skips this step.
+2. Choose a provider from the catalog. The short list shows the providers that have
    been tested, local llama.cpp, and a custom server. "Show all providers" opens the
    rest. A provider that needs a key asks for it next. The key goes straight to the
    system credential store and the field is cleared. "Continue without a provider"
    skips this; you can add one later in Settings > Providers.
-2. Optionally pick a module set or turn on modules one by one, or go straight to the
+3. Optionally pick a module set or turn on modules one by one, or go straight to the
    conversation.
 
-A workspace already using a provider skips this.
+A workspace already using a provider skips steps 2 and 3.
 
 ## Updates
 

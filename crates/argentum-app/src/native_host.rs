@@ -647,8 +647,13 @@ impl fmt::Display for NativeHostError {
 
 impl std::error::Error for NativeHostError {}
 
+/// Runs the app window and the command host for one workspace at a time.
+/// Without `config` there is no project yet: the window opens on the
+/// first-run project step, and no host starts until the owner chooses a
+/// folder there through `options.workspace_switch`. Closing the window first
+/// ends the app with nothing written.
 pub fn run_native_host<F>(
-    config: HostConfig,
+    config: Option<HostConfig>,
     options: NativeHostOptions,
     configure_ui: F,
 ) -> Result<(), NativeHostError>
@@ -670,15 +675,26 @@ where
     let ui = UiHandle::new().map_err(|_| NativeHostError::Ui)?;
     ui.window()
         .set_workspace_label(workspace_label.clone().into());
-    // Export reads the app's own database, which every workspace shares.
-    if let Some(sink) = session_export {
-        crate::session_export::connect(&ui, config.database.clone(), config.secret_store(), sink);
-    }
     configure_ui(&ui);
 
-    let mut current = (config, workspace_label);
-    let mut seed_profiles = Some(seed_profiles);
     let mut shown = false;
+    let mut current = match config {
+        Some(config) => (config, workspace_label),
+        None => match choose_first_workspace(&ui, workspace_switch.as_ref(), &mut shown)? {
+            Some(chosen) => chosen,
+            None => return Ok(()),
+        },
+    };
+    // Export reads the app's own database, which every workspace shares.
+    if let Some(sink) = session_export {
+        crate::session_export::connect(
+            &ui,
+            current.0.database.clone(),
+            current.0.secret_store(),
+            sink,
+        );
+    }
+    let mut seed_profiles = Some(seed_profiles);
     let application = loop {
         let mut host = match start_host(&runtime, current.0.clone()) {
             Ok(host) => host,
@@ -749,6 +765,32 @@ where
     drop(ui);
     drop(runtime);
     application.and(hide)
+}
+
+/// The first start with no project: shows the onboarding project step and
+/// waits for the owner's choice. No host runs and nothing is saved until a
+/// folder is chosen. Returns None when the window is closed first.
+fn choose_first_workspace(
+    ui: &UiHandle,
+    workspace_switch: Option<&WorkspaceSwitch>,
+    shown: &mut bool,
+) -> Result<Option<(HostConfig, String)>, NativeHostError> {
+    let Some(workspace_switch) = workspace_switch else {
+        return Err(host_failure("choose-workspace", &"no workspace switch"));
+    };
+    ui.window().set_first_run_open(true);
+    ui.window().set_first_run_stage("project".into());
+    ui.show().map_err(|_| NativeHostError::Ui)?;
+    *shown = true;
+    slint::run_event_loop().map_err(|_| NativeHostError::EventLoop)?;
+    let Some((config, label)) = workspace_switch.take() else {
+        let _ = ui.hide();
+        return Ok(None);
+    };
+    // Onboarding goes on with the provider for the chosen project.
+    ui.window().set_first_run_stage("provider".into());
+    ui.window().set_workspace_label(label.clone().into());
+    Ok(Some((config, label)))
 }
 
 /// Starts the command host for one workspace, after recovering from an

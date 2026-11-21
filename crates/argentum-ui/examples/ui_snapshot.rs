@@ -447,6 +447,15 @@ fn provider_catalog(ui: &UiHandle) {
     window.set_provider_presets_unsupported(ModelRc::new(VecModel::from(unsupported)));
 }
 
+/// The desktop first start before any project exists.
+fn first_run_project(ui: &UiHandle) {
+    ui.window().set_first_run_open(true);
+    ui.window().set_first_run_stage("project".into());
+    let app = ui.window().global::<App>();
+    app.set_workspace_picker_available(true);
+    app.set_default_workspace_path("C:\\Users\\you\\Documents\\Argentum".into());
+}
+
 fn record_lines(lines: &[(&str, &str)]) -> ModelRc<argentum_ui::RecordLineView> {
     ModelRc::new(VecModel::from(
         lines
@@ -471,6 +480,21 @@ fn scenes() -> Vec<Scene> {
     }
     const D: (u32, u32) = (1280, 820);
     vec![
+        s("00-first-run-project", D, |ui| {
+            first_run_project(ui);
+        }),
+        s("00-first-run-project-refused", D, |ui| {
+            first_run_project(ui);
+            let app = ui.window().global::<App>();
+            app.set_workspace_draft("D:\\no such folder".into());
+            app.set_workspace_notice("That folder cannot be opened.".into());
+        }),
+        s("00-first-run-project-narrow", (420, 820), |ui| {
+            first_run_project(ui);
+            ui.window()
+                .global::<App>()
+                .set_workspace_draft("C:\\Users\\you\\projects\\shop".into());
+        }),
         s("01-first-run-provider", D, |ui| {
             provider_catalog(ui);
             modules(ui, "focused");

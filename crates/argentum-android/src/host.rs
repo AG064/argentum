@@ -170,7 +170,7 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
     let insets_timer = slint::Timer::default();
     let insets_timer_ref = &insets_timer;
     let result = run_native_host(
-        config,
+        Some(config),
         NativeHostOptions {
             workspace_label,
             seed_profiles: android_provider_profiles().into(),

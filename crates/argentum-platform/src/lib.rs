@@ -285,15 +285,27 @@ pub fn check_workspace_folder(path: impl AsRef<Path>) -> Result<PathBuf, Platfor
     validate_workspace(path.as_ref())
 }
 
-/// An `Argentum` folder in the owner's Documents folder, created when it is
-/// missing. The desktop app opens it on the first start when the owner does
-/// not choose a project folder, instead of the folder it was started from.
+/// Where [`default_project_folder`] would be, without creating it: an
+/// `Argentum` folder in the owner's Documents folder.
+pub fn default_project_folder_path() -> Option<PathBuf> {
+    Some(
+        directories::UserDirs::new()?
+            .document_dir()?
+            .join(DEFAULT_PROJECT_FOLDER),
+    )
+}
+
+/// The `Argentum` folder in the owner's Documents folder, created when it is
+/// missing. The desktop app offers it at the first start for an owner who has
+/// no project folder yet. Returns the resolved path.
 pub fn default_project_folder() -> Option<PathBuf> {
     project_folder_in(directories::UserDirs::new()?.document_dir()?)
 }
 
+const DEFAULT_PROJECT_FOLDER: &str = "Argentum";
+
 fn project_folder_in(documents: &Path) -> Option<PathBuf> {
-    let folder = documents.join("Argentum");
+    let folder = documents.join(DEFAULT_PROJECT_FOLDER);
     fs::create_dir_all(&folder).ok()?;
     validate_workspace(&folder).ok()
 }
@@ -1037,6 +1049,11 @@ mod tests {
         let blocked = tempfile::tempdir().expect("blocked");
         std::fs::write(blocked.path().join("Argentum"), "file").expect("file");
         assert_eq!(project_folder_in(blocked.path()), None);
+
+        // The offer names the folder without creating it.
+        if let Some(offered) = default_project_folder_path() {
+            assert!(offered.ends_with(DEFAULT_PROJECT_FOLDER));
+        }
     }
 
     #[test]

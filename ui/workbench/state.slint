@@ -262,9 +262,16 @@ export global App {
     in-out property <[RichBlockView]> live_blocks: [];
     in-out property <[DiffLineView]> selected_diff_lines: [];
 
-    // First-run. Provider choice only, then an optional module step.
+    // First-run. Provider choice only, then an optional module step. A desktop
+    // first start with no saved project begins with the "project" step, and no
+    // host runs until a folder is chosen there.
     in-out property <bool> first_run_open: false;
     in-out property <string> first_run_stage: "provider";
+    // The empty folder offered at the project step, shown before it exists.
+    // Empty where there is no such offer.
+    in-out property <string> default_workspace_path: "";
+    // Creates the default folder if it is missing and opens it.
+    callback open_default_workspace();
     in-out property <[ProviderPresetView]> provider_presets: [];
     in-out property <string> first_run_error: "";
     callback first_run_choose(ProviderPresetView);
