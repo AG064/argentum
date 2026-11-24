@@ -1,4 +1,6 @@
 # Windows does not ship the Visual C++ runtime, so without this neither the app nor the CLI
 # starts on a clean PC. scripts/package-windows-release.py fails if the dependency returns.
+# /Brepro makes the MSVC linker derive the PE timestamp and debug ID from the content, so the
+# same source builds to the same bytes.
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/Brepro"]
