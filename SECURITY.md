@@ -87,7 +87,39 @@ There is no telemetry.
 - The Android APK is signed with the project's key in the release workflow. You can view the signer with `apksigner verify --print-certs FILE`.
 - The in-app updater checks only when you ask. It verifies the download against `SHA256SUMS.txt` from the same release and rolls back if the install fails. That proves the file matches the release, not who published it.
 
+## Dependencies and scanning
+
+- **Choosing and tracking dependencies.** Rust dependencies come from crates.io
+  through Cargo and Android dependencies from Maven Central through Gradle. Each is
+  declared in the workspace manifests and locked in `Cargo.lock`. A new dependency
+  must be maintained, permissively or AGPL-compatibly licensed (the allowed list is
+  in `deny.toml`), and come from a known registry. Dependabot proposes updates.
+- **Known vulnerabilities and licenses (SCA).** `cargo deny` checks every push and
+  pull request against the RustSec advisory database, the license allow-list and
+  the allowed sources, and fails on a violation. An advisory that affects shipped
+  code is fixed before the next release, and at the latest within 60 days of
+  publication. An advisory that does not affect Argentum may only be ignored with a
+  written reason and a review date, in `deny.toml` or `osv-scanner.toml`. No release
+  is made while `cargo deny` fails.
+- **Code scanning (SAST).** CodeQL and Clippy run on every push and pull request.
+  A CodeQL security finding of high or critical severity is fixed before the next
+  release; the branch ruleset blocks merging a pull request that introduces one.
+  Lower findings are fixed or dismissed with a written reason.
+- **Fixed vulnerabilities are published** in the release notes with their CVE, GHSA
+  or RustSec ID, and in GitHub security advisories for Argentum's own code.
+
+## Secrets used by the project
+
+- Never commit API keys, tokens, signing keys, keystores, or private data. GitHub
+  secret scanning with push protection is on.
+- Release signing keys and CI credentials live only in GitHub Actions secrets and
+  in an offline backup. Only the maintainer, and the successor named in
+  [GOVERNANCE.md](GOVERNANCE.md), can reach them.
+- Workflows get read-only tokens by default, and each job asks only for the
+  permissions it needs. Pull requests from forks get no secrets.
+- A secret is rotated when someone with access leaves, or when it may have been
+  exposed.
+
 ## For contributors
 
-- Never commit API keys, tokens, signing keys, keystores, or private data. Signing keys belong only in protected CI secrets and offline backups.
 - Pull requests run formatting, Clippy, tests, and `cargo deny` against `deny.toml` in CI.
