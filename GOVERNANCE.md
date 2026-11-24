@@ -14,8 +14,12 @@ Argentum is a single-maintainer open-source project run by AG064.
 
 - The maintainer decides. Larger changes start as an issue, so the approach can be
   discussed in public before work begins.
-- Pull requests are merged when they build, pass CI and follow CONTRIBUTING.md.
-  The maintainer gives reasons when a change is declined.
+- Every change, including the maintainer's own, reaches the `development` branch
+  through a pull request; the branch ruleset blocks direct pushes. Pull requests
+  are merged when they build, pass CI and follow CONTRIBUTING.md. While the
+  project has one maintainer, the maintainer may merge their own pull request
+  without a second approval. The maintainer gives reasons when a change is
+  declined.
 - Security fixes may be prepared in private and published with the release that
   contains them.
 - The roadmap in [ROADMAP.md](ROADMAP.md) records what is planned. Supporters may

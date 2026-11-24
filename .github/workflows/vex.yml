@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+#
+# vex/argentum.openvex.json publishes the advisories reviewed as not affecting
+# Argentum. It is generated from the osv-scanner.toml files, and this check fails
+# when the two disagree.
+name: VEX
+
+on:
+  push:
+    branches: [development]
+  pull_request:
+    branches: [development]
+    paths:
+      - '**/osv-scanner.toml'
+      - 'vex/**'
+      - 'scripts/vex.py'
+      - '.github/workflows/vex.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: VEX document
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check that the VEX document matches the reviewed advisories
+        run: python3 scripts/vex.py --check

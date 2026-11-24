@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 # Advisories reviewed for Argentum. OSV-Scanner reads this file for the lockfile
 # in the same folder. Each entry says why it does not affect the shipped apps.
 # Review again before the date in ignoreUntil, or when the dependency changes.
@@ -41,33 +43,3 @@ reason = "pin-utils: RustSec unmaintained-crate notice for a transitive dependen
 id = "RUSTSEC-2026-0543"
 ignoreUntil = 2027-03-01
 reason = "chrono: RustSec unmaintained-crate notice with no known vulnerability. It formats local reply times only and is replaced with jiff in 0.1.1. deny.toml carries the same exception."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0523"
-ignoreUntil = 2027-03-01
-reason = "quinn-proto: listed in Cargo.lock only as an optional dependency of reqwest's HTTP/3 support, which Argentum does not enable, so it is not compiled into any build. cargo tree finds no path to it on any target."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0524"
-ignoreUntil = 2027-03-01
-reason = "quinn-proto: listed in Cargo.lock only as an optional dependency of reqwest's HTTP/3 support, which Argentum does not enable, so it is not compiled into any build. cargo tree finds no path to it on any target."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0538"
-ignoreUntil = 2027-03-01
-reason = "quinn-udp: listed in Cargo.lock only as an optional dependency of reqwest's HTTP/3 support, which Argentum does not enable, so it is not compiled into any build. cargo tree finds no path to it on any target."
-
-[[IgnoredVulns]]
-id = "GHSA-53rm-773f-4q8c"
-ignoreUntil = 2027-03-01
-reason = "quinn-proto: the GitHub advisory for RUSTSEC-2026-0523. Not compiled into any build; see the RUSTSEC-2026-0523 entry above."
-
-[[IgnoredVulns]]
-id = "GHSA-wppq-2f6r-wfvm"
-ignoreUntil = 2027-03-01
-reason = "quinn-proto: the GitHub advisory for RUSTSEC-2026-0524. Not compiled into any build; see the RUSTSEC-2026-0524 entry above."
-
-[[IgnoredVulns]]
-id = "GHSA-6pp4-4cxf-xf88"
-ignoreUntil = 2027-03-01
-reason = "quinn-udp: the GitHub advisory for RUSTSEC-2026-0538. Not compiled into any build; see the RUSTSEC-2026-0538 entry above."

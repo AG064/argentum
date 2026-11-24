@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 name: Android and Linux
 # Lints the Android app for its target and tests the store on Linux, where the
 # database owner lock uses flock instead of a Windows named mutex. It builds no
