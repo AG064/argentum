@@ -56,7 +56,9 @@ the zips or the APK.
    creates a draft release with all files attached. A draft is not public.
 3. Download the draft files and run `sha256sum -c SHA256SUMS.txt` and
    `gh attestation verify` on at least the installer, the zip and the APK.
-4. Replace the draft notes with the release notes.
+4. Replace the draft notes with the release notes. The notes must list every
+   publicly known vulnerability fixed in the release, including dependency
+   advisories, with its CVE, GHSA or RustSec ID.
 5. Publishing the draft is a manual maintainer step on the GitHub release page.
    No workflow publishes it.
 
