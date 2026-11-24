@@ -7558,6 +7558,124 @@ mod tests {
         ui.window().set_run_state(run_state);
     }
 
+    fn failed_commands_report_their_error_in_the_right_place(ui: &UiHandle) {
+        let w = ui.window();
+        let fail = |command: AppCommand| ui.apply_command_failure(&command, "it failed");
+        fail(AppCommand::SaveProviderBudget {
+            profile_id: "p".into(),
+            limits: [1; 5],
+        });
+        assert!(!w.get_provider_budget_error().is_empty());
+        w.set_provider_budget_error(SharedString::default());
+        fail(AppCommand::ResetProviderBudget {
+            profile_id: "p".into(),
+        });
+        assert!(!w.get_provider_budget_error().is_empty());
+        fail(AppCommand::SaveProviderContext {
+            profile_id: "p".into(),
+            context_tokens: 8192,
+        });
+        assert!(!w.get_provider_context_error().is_empty());
+        // Provider profile failures count only for the request that is pending.
+        w.set_provider_error(SharedString::default());
+        w.set_provider_pending("save".into());
+        fail(AppCommand::ListProviderProfiles);
+        assert!(w.get_provider_error().is_empty());
+        for (pending, command) in [
+            ("list", AppCommand::ListProviderProfiles),
+            (
+                "select",
+                AppCommand::SelectProviderProfile {
+                    provider_id: "p".into(),
+                },
+            ),
+            (
+                "probe",
+                AppCommand::ProbeProvider {
+                    provider_id: "p".into(),
+                },
+            ),
+        ] {
+            w.set_provider_error(SharedString::default());
+            w.set_provider_pending(pending.into());
+            fail(command);
+            assert!(!w.get_provider_error().is_empty(), "{pending}");
+            assert_eq!(w.get_provider_pending(), "");
+        }
+        assert_eq!(w.get_provider_probe_state(), "failed");
+        w.set_provider_models_provider_id("p".into());
+        w.set_provider_models_pending("list".into());
+        fail(AppCommand::ListProviderModels {
+            provider_id: "p".into(),
+        });
+        assert!(!w.get_provider_models_error().is_empty());
+        w.set_provider_models_error(SharedString::default());
+        w.set_provider_id("p".into());
+        w.set_provider_models_pending("select".into());
+        fail(AppCommand::SelectProviderModel {
+            provider_id: "p".into(),
+            model: "m".into(),
+        });
+        assert!(!w.get_provider_models_error().is_empty());
+        fail(AppCommand::ListHarnessState);
+        assert!(!w.get_harness_error().is_empty());
+        fail(AppCommand::UpdateUiPreferences {
+            patch: Box::default(),
+        });
+        assert!(!w.get_ui_error().is_empty());
+        fail(AppCommand::LoadProviderUsage);
+        assert_eq!(w.get_usage_state(), "error");
+        fail(AppCommand::LoadGitFileDiff { path: "a".into() });
+        assert_eq!(w.get_git_state(), "error");
+        fail(AppCommand::BrowserNavigate {
+            url: "https://example.test/".into(),
+        });
+        assert_eq!(w.get_browser_state(), "error");
+        w.set_trajectory_error(SharedString::default());
+        fail(AppCommand::SetSurfaceVisibility {
+            surface: SurfaceId::Trajectory,
+            visible: true,
+        });
+        assert!(!w.get_trajectory_error().is_empty());
+        w.set_trajectory_error(SharedString::default());
+        fail(AppCommand::SetInspectorSurface {
+            surface: Some(SurfaceId::Trajectory),
+        });
+        assert!(!w.get_trajectory_error().is_empty());
+        w.set_trajectory_error(SharedString::default());
+        fail(AppCommand::LoadTrajectory { session_id: None });
+        assert!(!w.get_trajectory_error().is_empty());
+        fail(AppCommand::LoadChangeSet {
+            run_id: RunId::new_v4(),
+        });
+        assert!(!w.get_change_summary().is_empty());
+        let change = FileChangeId::new_v4();
+        w.set_selected_file_change_id(change.to_string().into());
+        w.set_selected_diff_available(true);
+        fail(AppCommand::LoadUnifiedDiff {
+            file_change_id: change,
+        });
+        assert!(!w.get_selected_diff_available());
+        fail(AppCommand::RequestRestore {
+            file_change_id: change,
+        });
+        // Leave the shared window as the other checks expect it.
+        w.set_provider_budget_error(SharedString::default());
+        w.set_provider_context_error(SharedString::default());
+        w.set_provider_error(SharedString::default());
+        w.set_provider_models_error(SharedString::default());
+        w.set_provider_models_pending(SharedString::default());
+        w.set_provider_probe_state(SharedString::default());
+        w.set_harness_error(SharedString::default());
+        w.set_ui_error(SharedString::default());
+        w.set_trajectory_error(SharedString::default());
+        w.set_change_summary(SharedString::default());
+        w.set_selected_diff_reason(SharedString::default());
+        w.set_selected_file_change_id(SharedString::default());
+        w.set_provider_id(SharedString::default());
+        w.set_provider_models_provider_id(SharedString::default());
+    }
+
     fn workbench_callbacks_send_the_expected_commands(ui: &UiHandle) {
         use argentum_domain::{UiDensity, UiPanelSide, UiPatch};
         let commands = Rc::new(RefCell::new(Vec::new()));
@@ -8252,6 +8370,7 @@ Second grows
         a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
         model_picker_and_thinking_chip_follow_the_selected_model(&ui);
         workbench_callbacks_send_the_expected_commands(&ui);
+        failed_commands_report_their_error_in_the_right_place(&ui);
         steering_and_the_queue_follow_the_run(&ui);
         ui.window().set_error_message(SharedString::default());
         ui.window().set_draft(SharedString::default());
