@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+#
+# License and copyright for files that cannot carry a comment header, or that must
+# stay byte for byte as they are: binaries, images, test fixtures and benchmark
+# task files. Every other source file states its license in its first lines.
+# Format: https://reuse.software/spec-3.3/
+
+version = 1
+
+[[annotations]]
+path = [
+    "benchmarks/**",
+    "crates/argentum-cli/tests/fixtures/**",
+    "crates/argentum-providers/tests/fixtures/**",
+    "crates/argentum-update/pins/**",
+    "assets/brand/**",
+    "docs/screenshots/**",
+    "platforms/android/gradle/verification-metadata.xml",
+    ".editorconfig",
+    ".gitattributes",
+    "**/.gitignore",
+    "**/*.json",
+    "**/*.md",
+    "Cargo.lock",
+    "fuzz/Cargo.lock",
+]
+precedence = "closest"
+SPDX-FileCopyrightText = "2026 AG064"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# Argentum's own interface icons.
+[[annotations]]
+path = ["ui/assets/icons/*.svg", "ui/assets/icons/catalog.json"]
+precedence = "closest"
+SPDX-FileCopyrightText = "2026 AG064"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# Icons copied unchanged from Lucide at the commit in ui/assets/icons/catalog.json.
+[[annotations]]
+path = "ui/assets/icons/lucide/**"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Lucide Icons and Contributors"
+SPDX-License-Identifier = "ISC AND MIT"
+
+# The Gradle wrapper, copied from Gradle and checked against its published checksum.
+[[annotations]]
+path = ["platforms/android/gradle/wrapper/**", "platforms/android/gradlew", "platforms/android/gradlew.bat"]
+precedence = "override"
+SPDX-FileCopyrightText = "Gradle, Inc. and contributors"
+SPDX-License-Identifier = "Apache-2.0"

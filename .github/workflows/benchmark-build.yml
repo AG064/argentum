@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 name: Benchmark build
 # Builds and tests the Linux CLI used only inside disposable benchmark containers.
 # It makes no model requests, needs no secrets, and publishes nothing.

@@ -1,0 +1,1109 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/AG064/argentum/blob/development/vex/argentum.openvex.json",
+  "author": "AG064 <contact@ag064.eu>",
+  "role": "Maintainer",
+  "timestamp": "2026-11-25T00:00:00Z",
+  "version": 1,
+  "tooling": "scripts/vex.py",
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "GHSA-2363-cqg2-863c"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.jdom/jdom"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-3677-xxcr-wjqv"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bitbucket.b_c/jose4j"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-389x-839f-4rhx"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-common"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-38f8-5428-x5cv"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-3p8m-j85q-pgmj"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-3qp7-7mw8-wx86"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-45q3-82m4-75jr"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler-proxy"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-4g8c-wm8x-jfhw"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-4mp9-239f-g9hg"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-558v-64gr-wgg4"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-563q-j3cm-6jxm"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-574f-3g2m-x479"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bouncycastle/bcprov-debug-jdk14"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-57rv-r2g8-2cj3"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-5jpm-x58v-624v"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-5x3r-wrvg-rp6q"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-6cqp-g7gg-8hr5"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-6jqx-86gh-f27w"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-6mjq-h674-j845"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-735f-pc8j-v9w8"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/com.google.protobuf/protobuf-java"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-7r82-7xv7-xcpj"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.apache.httpcomponents/httpclient"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-84h7-rjj3-6jx4"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-8c42-7qj2-3j46"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-93wv-jw9v-4972"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-9pwp-9qqc-pr26"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bouncycastle/bc-fips"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-c2gf-v879-257j"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-c3fc-8qff-9hwx"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bouncycastle/bcprov-jdk14"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-c4c3-7fpv-j4q5"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-c653-97m9-rcg9"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-c69g-56f8-xwqj"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-f6hv-jmp6-3vwv"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-fccg-mwvh-qqg4"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-fghv-69vj-qj49"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-gcjf-9mgh-3p7g"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-hvcg-qmg6-jm4c"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-j288-q9x7-2f5v"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/commons-lang/commons-lang"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-jppx-w49h-x2qq"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-m4cv-j2px-7723"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-mj4r-2hfc-f8p6"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-mvh2-crg5-v77c"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-p93r-85wp-75v3"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bouncycastle/bcprov-jdk14"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-prj3-ccx8-p6x4"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.grpc/grpc-netty-shaded"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-pwqr-wmgm-9rr8"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-q4f6-jm68-57ww"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-qp49-qgx5-5m26"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bouncycastle/bc-fips"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-r937-wjx7-w2jp"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.jetbrains.kotlin/kotlin-gradle-plugin"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-v8h7-rr48-vmmv"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-w9fj-cfpg-grvv"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-wg6q-6289-32hp"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/org.bouncycastle/bcpkix-debug-jdk14"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-x4gw-5cx5-pgmh"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-handler"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-xpw8-rcwv-8f8p"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http2"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-xq3w-v528-46rv"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-common"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-xxph-c9ww-hj94"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/com.google.guava/guava"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-xxqh-mfjm-7mv9"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:maven/io.netty/netty-codec-http"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "Android Gradle Plugin build-time dependency, listed only in this folder's verification-metadata.xml. It runs on the build machine and is not packaged in the APK."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2024-0449"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/unsafe-libyaml"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2025-0141"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/bincode"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0192"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/ttf-parser"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0370"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/zvariant"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0371"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/zbus_names"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0372"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/zvariant_derive"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0441"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/pin-utils"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice for a transitive dependency, with no known vulnerability. cargo deny checks advisories on every pull request."
+    },
+    {
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0543"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/AG064/argentum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/chrono"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "RustSec unmaintained-crate notice with no known vulnerability. It formats local reply times only and is replaced with jiff in 0.1.1. deny.toml carries the same exception."
+    }
+  ]
+}
