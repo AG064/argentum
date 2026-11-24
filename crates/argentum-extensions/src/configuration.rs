@@ -310,6 +310,15 @@ mod tests {
     use serde_json::json;
     use std::collections::BTreeMap;
 
+    type Change = Box<dyn Fn(&mut ExtensionDefinition)>;
+    type StdioEdit<'a> = &'a dyn Fn(
+        &mut String,
+        &mut Sha256Digest,
+        &mut Vec<String>,
+        &mut String,
+        &mut BTreeMap<String, Sha256Digest>,
+    );
+
     /// A portable package with a stdio server that runs this test binary, an
     /// HTTP server on loopback, and optionally a skill.
     fn package(root: &Path, name: &str, skill: bool) -> (PathBuf, String) {
@@ -420,7 +429,7 @@ mod tests {
         std::fs::create_dir(&workspace).unwrap();
         let (package, digest) = package(root.path(), "sample", false);
         let base = stdio_definition(&package, &digest, &workspace);
-        let cases: Vec<(Box<dyn Fn(&mut ExtensionDefinition)>, &str)> = vec![
+        let cases: Vec<(Change, &str)> = vec![
             (
                 Box::new(|d| d.namespace = "sample".into()),
                 "invalid_extension_identity_or_scope",
@@ -506,14 +515,7 @@ mod tests {
         std::fs::create_dir(&workspace).unwrap();
         let (package, digest) = package(root.path(), "sample", false);
         let base = stdio_definition(&package, &digest, &workspace);
-        let set = |definition: &mut ExtensionDefinition,
-                   f: &dyn Fn(
-            &mut String,
-            &mut Sha256Digest,
-            &mut Vec<String>,
-            &mut String,
-            &mut BTreeMap<String, Sha256Digest>,
-        )| {
+        let set = |definition: &mut ExtensionDefinition, f: StdioEdit| {
             if let ExtensionTransport::Stdio {
                 program,
                 program_sha256,
