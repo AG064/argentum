@@ -302,3 +302,476 @@ pub fn admit(
         file_leases: leases,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argentum_domain::extensions::ExtensionImageScope;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    /// A portable package with a stdio server that runs this test binary, an
+    /// HTTP server on loopback, and optionally a skill.
+    fn package(root: &Path, name: &str, skill: bool) -> (PathBuf, String) {
+        let package = root.join(name);
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(
+            package.join("plugin.json"),
+            serde_json::to_vec(&json!({"$schema": package::PLUGIN_SCHEMA, "name": name,
+                "version": "1", "description": "test package", "license": "MIT"}))
+            .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(package.join("LICENSE"), "test license").unwrap();
+        let program = std::env::current_exe().unwrap();
+        std::fs::write(
+            package.join("mcp.json"),
+            serde_json::to_vec(&json!({"$schema": package::MCP_SCHEMA, "mcpServers": {
+                "stdio": {"type": "stdio", "command": program, "args": ["--flag"]},
+                "web": {"type": "streamable-http", "url": "http://127.0.0.1:18081/mcp"}}}))
+            .unwrap(),
+        )
+        .unwrap();
+        if skill {
+            std::fs::create_dir_all(package.join("skills/sample")).unwrap();
+            std::fs::write(package.join("skills/sample/SKILL.md"), "# Sample skill").unwrap();
+        }
+        let digest = package::inspect(&package).unwrap().digest;
+        (package, digest)
+    }
+
+    fn program_digest() -> Sha256Digest {
+        let lease =
+            VerifiedFileLease::open(std::env::current_exe().unwrap(), 256 * 1024 * 1024).unwrap();
+        Sha256Digest(lease.sha256().into())
+    }
+
+    fn stdio_definition(package: &Path, digest: &str, workspace: &Path) -> ExtensionDefinition {
+        ExtensionDefinition {
+            namespace: format!("{}.stdio", package.file_name().unwrap().to_string_lossy()),
+            package_root: package.to_string_lossy().into_owned(),
+            package_sha256: Sha256Digest(digest.into()),
+            source_id: "test".into(),
+            source_revision: "v1".into(),
+            transport: ExtensionTransport::Stdio {
+                program: std::env::current_exe()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                program_sha256: program_digest(),
+                args: vec!["--flag".into()],
+                cwd: workspace.to_string_lossy().into_owned(),
+                environment: BTreeMap::new(),
+                inputs: BTreeMap::new(),
+            },
+            allowed_tools: vec!["read".into()],
+            resource_prefixes: vec![],
+            trust: ExtensionTrust::ReviewedCurrentUserCode,
+            image_scope: None,
+        }
+    }
+
+    fn reason(result: Result<AdmittedDefinition, ConnectionError>) -> &'static str {
+        match result {
+            Err(ConnectionError::Rejected(reason)) => reason,
+            Err(other) => panic!("unexpected error {other}"),
+            Ok(_) => panic!("definition was admitted"),
+        }
+    }
+
+    #[test]
+    fn digests_must_be_64_lowercase_hex_characters() {
+        assert!(digest_valid(&Sha256Digest("a".repeat(64))));
+        assert!(!digest_valid(&Sha256Digest("A".repeat(64))));
+        assert!(!digest_valid(&Sha256Digest("a".repeat(63))));
+        assert!(!digest_valid(&Sha256Digest("g".repeat(64))));
+    }
+
+    #[test]
+    fn a_reviewed_stdio_server_is_admitted_and_bound_to_its_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let (package, digest) = package(root.path(), "sample", false);
+        let definition = stdio_definition(&package, &digest, &workspace);
+        let admitted = admit(&definition, &workspace).unwrap();
+        assert!(admitted.still_current());
+        assert!(admitted.program_spec.is_some());
+        assert_eq!(
+            admitted.binding,
+            approval_binding(&definition, &workspace).unwrap()
+        );
+        let other = root.path().join("other");
+        std::fs::create_dir(&other).unwrap();
+        assert_ne!(
+            admitted.binding,
+            approval_binding(&definition, &other).unwrap()
+        );
+        assert_eq!(
+            reason(admit(&definition, &root.path().join("missing")).map(|_| unreachable!())),
+            "workspace_unavailable"
+        );
+    }
+
+    #[test]
+    fn identity_and_scope_must_be_bounded_and_exact() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let (package, digest) = package(root.path(), "sample", false);
+        let base = stdio_definition(&package, &digest, &workspace);
+        let cases: Vec<(Box<dyn Fn(&mut ExtensionDefinition)>, &str)> = vec![
+            (
+                Box::new(|d| d.namespace = "sample".into()),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.namespace = "sample.Bad Name".into()),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.package_sha256 = Sha256Digest("x".into())),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.source_id.clear()),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.source_id = "s".repeat(2049)),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.source_revision.clear()),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.source_revision = "r".repeat(257)),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.allowed_tools = vec!["t".into(); 129]),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.allowed_tools = vec![String::new()]),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.allowed_tools = vec!["a\u{7}".into()]),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.resource_prefixes = vec!["r".into(); 17]),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.resource_prefixes = vec!["\n".into()]),
+                "invalid_extension_identity_or_scope",
+            ),
+            (
+                Box::new(|d| d.allowed_tools = vec!["read".into(), "read".into()]),
+                "duplicate_tool_scope",
+            ),
+            (
+                Box::new(|d| d.package_root = "relative/package".into()),
+                "absolute_owned_package_root_required",
+            ),
+            (
+                Box::new(|d| d.package_sha256 = Sha256Digest("0".repeat(64))),
+                "package_identity_changed",
+            ),
+            (
+                Box::new(|d| d.namespace = "renamed.stdio".into()),
+                "package_identity_changed",
+            ),
+        ];
+        for (change, expected) in cases {
+            let mut definition = base.clone();
+            change(&mut definition);
+            assert_eq!(reason(admit(&definition, &workspace)), expected);
+        }
+        let mut missing = base.clone();
+        missing.package_root = root.path().join("absent").to_string_lossy().into_owned();
+        assert_eq!(
+            reason(admit(&missing, &workspace)),
+            "package_inspection_failed"
+        );
+    }
+
+    #[test]
+    fn stdio_needs_the_exact_reviewed_program_arguments_and_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let (package, digest) = package(root.path(), "sample", false);
+        let base = stdio_definition(&package, &digest, &workspace);
+        let set = |definition: &mut ExtensionDefinition,
+                   f: &dyn Fn(
+            &mut String,
+            &mut Sha256Digest,
+            &mut Vec<String>,
+            &mut String,
+            &mut BTreeMap<String, Sha256Digest>,
+        )| {
+            if let ExtensionTransport::Stdio {
+                program,
+                program_sha256,
+                args,
+                cwd,
+                inputs,
+                ..
+            } = &mut definition.transport
+            {
+                f(program, program_sha256, args, cwd, inputs);
+            }
+        };
+        let mut wrong_trust = base.clone();
+        wrong_trust.trust = ExtensionTrust::ReviewedRemoteService;
+        assert_eq!(
+            reason(admit(&wrong_trust, &workspace)),
+            "stdio_requires_exact_reviewed_current_user_code_identity"
+        );
+        let mut relative = base.clone();
+        set(&mut relative, &|p, _, _, _, _| *p = "argentum.exe".into());
+        assert_eq!(
+            reason(admit(&relative, &workspace)),
+            "stdio_requires_exact_reviewed_current_user_code_identity"
+        );
+        let mut bad_digest = base.clone();
+        set(&mut bad_digest, &|_, d, _, _, _| {
+            *d = Sha256Digest("Z".into())
+        });
+        assert_eq!(
+            reason(admit(&bad_digest, &workspace)),
+            "stdio_requires_exact_reviewed_current_user_code_identity"
+        );
+        let mut changed = base.clone();
+        set(&mut changed, &|_, d, _, _, _| {
+            *d = Sha256Digest("0".repeat(64))
+        });
+        assert_eq!(
+            reason(admit(&changed, &workspace)),
+            "executable_identity_changed"
+        );
+        let mut args = base.clone();
+        set(&mut args, &|_, _, a, _, _| *a = vec!["--other".into()]);
+        assert_eq!(
+            reason(admit(&args, &workspace)),
+            "reviewed_command_or_arguments_do_not_match_pinned_manifest"
+        );
+        let mut server = base.clone();
+        server.namespace = "sample.absent".into();
+        assert_eq!(
+            reason(admit(&server, &workspace)),
+            "server_not_in_portable_manifest"
+        );
+        let mut http_server = base.clone();
+        http_server.namespace = "sample.web".into();
+        assert_eq!(
+            reason(admit(&http_server, &workspace)),
+            "transport_declaration_mismatch"
+        );
+        let mut outside = base.clone();
+        set(&mut outside, &|_, _, _, c, _| {
+            *c = root.path().to_string_lossy().into_owned()
+        });
+        assert_eq!(
+            reason(admit(&outside, &workspace)),
+            "working_directory_not_in_reviewed_package_or_workspace"
+        );
+        let mut gone = base.clone();
+        set(&mut gone, &|_, _, _, c, _| {
+            *c = root.path().join("gone").to_string_lossy().into_owned()
+        });
+        assert_eq!(
+            reason(admit(&gone, &workspace)),
+            "working_directory_unavailable"
+        );
+        let mut input = base.clone();
+        set(&mut input, &|_, _, _, _, i| {
+            i.insert("relative.txt".into(), Sha256Digest("0".repeat(64)));
+        });
+        assert_eq!(
+            reason(admit(&input, &workspace)),
+            "invalid_dependency_identity"
+        );
+        let file = workspace.join("input.txt");
+        std::fs::write(&file, "input").unwrap();
+        let mut stale = base.clone();
+        set(&mut stale, &|_, _, _, _, i| {
+            i.insert(
+                file.to_string_lossy().into_owned(),
+                Sha256Digest("0".repeat(64)),
+            );
+        });
+        assert_eq!(
+            reason(admit(&stale, &workspace)),
+            "dependency_identity_or_capacity_changed"
+        );
+        let mut absent = base.clone();
+        set(&mut absent, &|_, _, _, _, i| {
+            i.insert(
+                workspace.join("absent.txt").to_string_lossy().into_owned(),
+                Sha256Digest("0".repeat(64)),
+            );
+        });
+        assert_eq!(
+            reason(admit(&absent, &workspace)),
+            "dependency_file_unavailable"
+        );
+        let mut in_package = base.clone();
+        set(&mut in_package, &|_, _, _, c, _| {
+            *c = package.to_string_lossy().into_owned()
+        });
+        assert!(admit(&in_package, &workspace).is_ok());
+    }
+
+    #[test]
+    fn http_servers_need_a_reviewed_remote_boundary_and_matching_endpoint() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let (package, digest) = package(root.path(), "sample", false);
+        let mut definition = stdio_definition(&package, &digest, &workspace);
+        definition.namespace = "sample.web".into();
+        definition.trust = ExtensionTrust::ReviewedRemoteService;
+        let transport = |endpoint: &str, address: &str, account: Option<&str>| {
+            ExtensionTransport::StreamableHttp {
+                endpoint: endpoint.into(),
+                addresses: vec![address.into()],
+                local_demo: true,
+                credential_account: account.map(Into::into),
+            }
+        };
+        definition.transport = transport("http://127.0.0.1:18081/mcp", "127.0.0.1:18081", None);
+        let admitted = admit(&definition, &workspace).unwrap();
+        assert!(admitted.program_spec.is_none());
+        let mut trust = definition.clone();
+        trust.trust = ExtensionTrust::ReviewedCurrentUserCode;
+        assert_eq!(
+            reason(admit(&trust, &workspace)),
+            "HTTP_requires_reviewed_remote_service_boundary"
+        );
+        let mut endpoint = definition.clone();
+        endpoint.transport = transport("http://127.0.0.1:18082/mcp", "127.0.0.1:18082", None);
+        assert_eq!(
+            reason(admit(&endpoint, &workspace)),
+            "endpoint_does_not_match_portable_declaration"
+        );
+        let mut address = definition.clone();
+        address.transport = transport("http://127.0.0.1:18081/mcp", "not an address", None);
+        assert_eq!(
+            reason(admit(&address, &workspace)),
+            "invalid_reviewed_addresses"
+        );
+        let mut account = definition.clone();
+        account.transport = transport("http://127.0.0.1:18081/mcp", "127.0.0.1:18081", Some(""));
+        assert_eq!(
+            reason(admit(&account, &workspace)),
+            "invalid_secure_account_binding"
+        );
+        let mut port = definition.clone();
+        port.transport = transport("http://127.0.0.1:18081/mcp", "127.0.0.1:9", None);
+        assert_eq!(
+            reason(admit(&port, &workspace)),
+            "HTTP_destination_review_failed"
+        );
+        let mut stdio_server = definition.clone();
+        stdio_server.namespace = "sample.stdio".into();
+        assert_eq!(
+            reason(admit(&stdio_server, &workspace)),
+            "endpoint_does_not_match_portable_declaration"
+        );
+    }
+
+    #[test]
+    fn skills_are_read_only_instructions_without_tools_or_network() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let (package, digest) = package(root.path(), "notes", true);
+        let mut definition = stdio_definition(&package, &digest, &workspace);
+        definition.namespace = "notes.skills".into();
+        definition.transport = ExtensionTransport::Skills;
+        definition.trust = ExtensionTrust::ReadOnlyInstructions;
+        definition.allowed_tools.clear();
+        assert!(admit(&definition, &workspace)
+            .unwrap()
+            .program_spec
+            .is_none());
+        let mut tools = definition.clone();
+        tools.allowed_tools = vec!["read".into()];
+        assert_eq!(
+            reason(admit(&tools, &workspace)),
+            "skills_only_configuration_must_not_request_execution_or_network"
+        );
+        let mut trust = definition.clone();
+        trust.trust = ExtensionTrust::ReviewedCurrentUserCode;
+        assert_eq!(
+            reason(admit(&trust, &workspace)),
+            "skills_only_configuration_must_not_request_execution_or_network"
+        );
+        let (bare, bare_digest) = super::tests::package(root.path(), "bare", false);
+        let mut no_skills = definition.clone();
+        no_skills.namespace = "bare.skills".into();
+        no_skills.package_root = bare.to_string_lossy().into_owned();
+        no_skills.package_sha256 = Sha256Digest(bare_digest);
+        assert_eq!(
+            reason(admit(&no_skills, &workspace)),
+            "skills_only_configuration_must_not_request_execution_or_network"
+        );
+    }
+
+    #[test]
+    fn image_scope_needs_an_absolute_private_folder_exact_origins_and_trusted_code() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        let (package, digest) = package(root.path(), "sample", false);
+        let base = stdio_definition(&package, &digest, &workspace);
+        let scope = |directory: &str, origins: &[&str]| {
+            Some(ExtensionImageScope {
+                directory: directory.into(),
+                origins: origins.iter().map(|o| (*o).to_owned()).collect(),
+            })
+        };
+        let media = root.path().join("media");
+        std::fs::create_dir(&media).unwrap();
+        let media_path = media.to_string_lossy().into_owned();
+        let mut relative = base.clone();
+        relative.image_scope = scope("media", &["http://127.0.0.1:18080"]);
+        assert_eq!(
+            reason(admit(&relative, &workspace)),
+            "image_scope_requires_explicit_owned_directory_and_trusted_producer"
+        );
+        let mut empty = base.clone();
+        empty.image_scope = scope(&media_path, &[]);
+        assert_eq!(
+            reason(admit(&empty, &workspace)),
+            "image_scope_requires_explicit_owned_directory_and_trusted_producer"
+        );
+        let mut too_many = base.clone();
+        too_many.image_scope = scope(&media_path, &["http://127.0.0.1:1"; 17]);
+        assert_eq!(
+            reason(admit(&too_many, &workspace)),
+            "image_scope_requires_explicit_owned_directory_and_trusted_producer"
+        );
+        let mut untrusted = base.clone();
+        untrusted.trust = ExtensionTrust::ReviewedRemoteService;
+        untrusted.image_scope = scope(&media_path, &["http://127.0.0.1:18080"]);
+        assert_eq!(
+            reason(admit(&untrusted, &workspace)),
+            "image_scope_requires_explicit_owned_directory_and_trusted_producer"
+        );
+        let mut not_exact = base.clone();
+        not_exact.image_scope = scope(&media_path, &["http://127.0.0.1:18080/path"]);
+        assert_eq!(
+            reason(admit(&not_exact, &workspace)),
+            "image_scope_must_use_exact_origins"
+        );
+        let mut invalid = base.clone();
+        invalid.image_scope = scope(&media_path, &["not a url"]);
+        assert_eq!(reason(admit(&invalid, &workspace)), "invalid_image_origin");
+    }
+}

@@ -7558,6 +7558,256 @@ mod tests {
         ui.window().set_run_state(run_state);
     }
 
+    fn workbench_callbacks_send_the_expected_commands(ui: &UiHandle) {
+        use argentum_domain::{UiDensity, UiPanelSide, UiPatch};
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let dispatched = commands.clone();
+        connect_commands(ui.window(), move |command| {
+            dispatched.borrow_mut().push(command)
+        });
+        let app = ui.window().global::<App>();
+        let take = || std::mem::take(&mut *commands.borrow_mut());
+        let patch = |command: &AppCommand| match command {
+            AppCommand::UpdateUiPreferences { patch } => (**patch).clone(),
+            other => panic!("expected a preference patch, got {other:?}"),
+        };
+
+        // First run: a preset with a known endpoint saves and selects it.
+        app.invoke_first_run_choose(ProviderPresetView {
+            id: "deepseek".into(),
+            label: "DeepSeek".into(),
+            kind: "openai-compatible".into(),
+            endpoint: "https://api.deepseek.com/".into(),
+            model: "deepseek-chat".into(),
+            needs_key: true,
+            ..Default::default()
+        });
+        assert_eq!(ui.window().get_first_run_stage(), "key");
+        let sent = take();
+        assert!(
+            matches!(&sent[0], AppCommand::SaveProviderProfile { profile } if profile.id == "deepseek" && profile.selected)
+        );
+        assert!(matches!(sent[1], AppCommand::ListHarnessState));
+        // A preset without an address asks for the server, and an unknown kind is refused.
+        app.invoke_first_run_choose(ProviderPresetView {
+            kind: "openai-compatible".into(),
+            label: "Custom".into(),
+            ..Default::default()
+        });
+        assert_eq!(ui.window().get_first_run_stage(), "server");
+        app.invoke_first_run_choose(ProviderPresetView {
+            kind: "unknown".into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            ui.window().get_first_run_error(),
+            "This provider type is not available."
+        );
+        assert!(take().is_empty());
+        // The server step validates its fields and the context size.
+        app.invoke_first_run_save_server("not a url".into(), "model".into(), "32768".into());
+        assert!(!ui.window().get_first_run_error().is_empty());
+        app.invoke_first_run_save_server(
+            "http://127.0.0.1:8080/v1".into(),
+            "local".into(),
+            "12".into(),
+        );
+        assert!(ui.window().get_first_run_error().contains("between 4096"));
+        app.invoke_first_run_save_server(
+            "http://127.0.0.1:8080/v1".into(),
+            "local".into(),
+            "abc".into(),
+        );
+        assert!(ui.window().get_first_run_error().contains("whole number"));
+        app.invoke_first_run_save_server(
+            "http://127.0.0.1:8080/v1".into(),
+            "local".into(),
+            "32_768".into(),
+        );
+        assert_eq!(ui.window().get_first_run_stage(), "modules");
+        let sent = take();
+        assert!(
+            matches!(&sent[0], AppCommand::SaveProviderProfile { profile } if profile.id == "custom" && profile.model == "local")
+        );
+        ui.window().set_first_run_open(true);
+        app.invoke_first_run_finish();
+        assert!(!ui.window().get_first_run_open());
+        assert_eq!(patch(&take()[0]).first_run_complete, Some(true));
+
+        // Panel, layout, Git and usage.
+        app.invoke_set_panel_visible(false);
+        assert!(matches!(
+            take()[0],
+            AppCommand::SetInspectorSurface { surface: None }
+        ));
+        ui.window()
+            .set_inspector_modes(ModelRc::new(VecModel::from(vec![InspectorModeView {
+                id: SurfaceId::Changes.id().into(),
+                ..Default::default()
+            }])));
+        ui.window().set_active_inspector("nothing".into());
+        app.invoke_set_panel_visible(true);
+        assert!(matches!(
+            take()[0],
+            AppCommand::SetInspectorSurface {
+                surface: Some(SurfaceId::Changes)
+            }
+        ));
+        app.invoke_persist_layout(250.4, 480.6);
+        let layout = patch(&take()[0]);
+        assert_eq!(
+            (layout.sidebar_width, layout.panel_width),
+            (Some(250), Some(481))
+        );
+        app.invoke_git_refresh();
+        assert_eq!(ui.window().get_git_state(), "loading");
+        assert!(matches!(take()[0], AppCommand::RefreshGitStatus));
+        app.invoke_git_select("src/main.rs".into());
+        assert_eq!(ui.window().get_git_selected(), "src/main.rs");
+        assert!(
+            matches!(&take()[0], AppCommand::LoadGitFileDiff { path } if path == "src/main.rs")
+        );
+        app.invoke_usage_refresh();
+        assert_eq!(ui.window().get_usage_state(), "loading");
+        assert!(matches!(take()[0], AppCommand::LoadProviderUsage));
+
+        // Browser history: go twice, back, forward and reload revisit pages.
+        app.invoke_browser_go("  ".into());
+        assert!(take().is_empty());
+        app.invoke_browser_back();
+        app.invoke_browser_forward();
+        app.invoke_browser_reload();
+        assert!(take().is_empty());
+        app.invoke_browser_go("https://one.example/".into());
+        app.invoke_browser_go("https://two.example/".into());
+        app.invoke_browser_back();
+        assert!(ui.window().get_browser_can_forward());
+        app.invoke_browser_forward();
+        app.invoke_browser_reload();
+        let urls: Vec<String> = take()
+            .into_iter()
+            .map(|command| match command {
+                AppCommand::BrowserNavigate { url } => url,
+                other => panic!("unexpected {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            urls,
+            [
+                "https://one.example/",
+                "https://two.example/",
+                "https://one.example/",
+                "https://two.example/",
+                "https://two.example/"
+            ]
+        );
+
+        // Links: refused while the browser is unavailable or off, opened when on.
+        ui.window()
+            .set_harness_surfaces(ModelRc::new(VecModel::from(vec![HarnessSurfaceView {
+                id: SurfaceId::Browser.id().into(),
+                state: "unavailable".into(),
+                ..Default::default()
+            }])));
+        app.invoke_open_link("https://three.example/".into());
+        assert!(ui.window().get_toast_text().contains("coming soon"));
+        ui.window().set_harness_surfaces(ModelRc::default());
+        app.invoke_open_link("https://three.example/".into());
+        assert!(ui
+            .window()
+            .get_toast_text()
+            .contains("Turn on the Browser module"));
+        assert!(take().is_empty());
+        ui.window()
+            .set_inspector_modes(ModelRc::new(VecModel::from(vec![InspectorModeView {
+                id: SurfaceId::Browser.id().into(),
+                ..Default::default()
+            }])));
+        app.invoke_open_link("https://three.example/".into());
+        let sent = take();
+        assert!(matches!(
+            sent[0],
+            AppCommand::SetInspectorSurface {
+                surface: Some(SurfaceId::Browser)
+            }
+        ));
+        assert!(
+            matches!(&sent[1], AppCommand::BrowserNavigate { url } if url == "https://three.example/")
+        );
+
+        // Appearance.
+        app.invoke_ui_set_preset("silver".into());
+        assert_eq!(patch(&take()[0]).preset.as_deref(), Some("silver"));
+        for (density, expected) in [
+            ("compact", UiDensity::Compact),
+            ("spacious", UiDensity::Spacious),
+            ("other", UiDensity::Comfortable),
+        ] {
+            app.invoke_ui_set_density(density.into());
+            assert_eq!(patch(&take()[0]).density, Some(expected));
+        }
+        ui.window().set_ui_font_percent(100);
+        app.invoke_ui_step_font(10);
+        assert!(patch(&take()[0])
+            .font_percent
+            .is_some_and(|percent| percent > 100));
+        ui.window().set_ui_radius_percent(100);
+        app.invoke_ui_step_radius(-10);
+        assert!(patch(&take()[0])
+            .radius_percent
+            .is_some_and(|percent| percent < 100));
+        app.invoke_ui_set_panel_side(true);
+        assert_eq!(patch(&take()[0]).panel_side, Some(UiPanelSide::Left));
+        app.invoke_ui_set_panel_side(false);
+        assert_eq!(patch(&take()[0]).panel_side, Some(UiPanelSide::Right));
+        app.invoke_ui_set_user_bubbles(false);
+        assert_eq!(patch(&take()[0]).user_bubbles, Some(false));
+        app.invoke_ui_reset();
+        assert!(patch(&take()[0]).reset);
+        // Undo replays the saved patch once and clears the toast.
+        let undo = UiPatch {
+            preset: Some("argentum".into()),
+            ..UiPatch::default()
+        };
+        ui.window().set_toast_text("Changed".into());
+        ui.window()
+            .set_toast_undo_token(serde_json::to_string(&undo).unwrap().into());
+        app.invoke_toast_undo();
+        assert_eq!(patch(&take()[0]).preset.as_deref(), Some("argentum"));
+        assert_eq!(ui.window().get_toast_text(), "");
+        app.invoke_toast_undo();
+        assert!(take().is_empty());
+
+        // Command palette.
+        app.invoke_palette_query("new".into());
+        assert!(ui.window().get_palette_items().row_count() > 0);
+        app.invoke_palette_run("cmd:new".into());
+        assert!(matches!(take()[0], AppCommand::NewSession));
+        app.invoke_palette_run(format!("module:{}:true", SurfaceId::Changes.id()).into());
+        assert!(matches!(
+            take()[0],
+            AppCommand::SetSurfaceVisibility {
+                surface: SurfaceId::Changes,
+                visible: true
+            }
+        ));
+        app.invoke_palette_run("theme:silver".into());
+        assert_eq!(patch(&take()[0]).preset.as_deref(), Some("silver"));
+        for section in ["modules", "updates", "appearance"] {
+            app.invoke_palette_run(format!("cmd:{section}").into());
+            assert_eq!(ui.window().get_settings_section(), section);
+        }
+        // Opening Settings loads its own data; only the unknown entries must send nothing.
+        take();
+        app.invoke_palette_run("module:not-a-surface:true".into());
+        app.invoke_palette_run("unknown".into());
+        assert!(take().is_empty());
+        ui.window().set_toast_text(SharedString::default());
+        ui.window().set_first_run_error(SharedString::default());
+        ui.window().set_first_run_stage("provider".into());
+        ui.window().set_inspector_modes(ModelRc::default());
+    }
+
     fn model_picker_and_thinking_chip_follow_the_selected_model(ui: &UiHandle) {
         use argentum_domain::ProviderCatalogSource;
         use argentum_domain::ThinkingMode::{High, Low, Max};
@@ -8001,6 +8251,7 @@ Second grows
         let ui = UiHandle::new().expect("create UI projection");
         a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
         model_picker_and_thinking_chip_follow_the_selected_model(&ui);
+        workbench_callbacks_send_the_expected_commands(&ui);
         steering_and_the_queue_follow_the_run(&ui);
         ui.window().set_error_message(SharedString::default());
         ui.window().set_draft(SharedString::default());

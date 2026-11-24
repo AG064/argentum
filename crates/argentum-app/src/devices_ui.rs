@@ -321,3 +321,134 @@ fn set_state(weak: &slint::Weak<MainWindow>, state: &str, code: &str, detail: &s
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argentum_platform::PlatformError;
+    use argentum_security::SecretValue;
+    use slint::Model;
+    use std::collections::HashMap;
+
+    #[derive(Default)]
+    struct MemorySecrets(Mutex<HashMap<String, String>>);
+
+    impl SecretStore for MemorySecrets {
+        fn get(&self, key: &str) -> Result<Option<SecretValue>, PlatformError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .get(key)
+                .map(|value| SecretValue::new(value.clone())))
+        }
+        fn set(&self, key: &str, value: SecretValue) -> Result<(), PlatformError> {
+            self.0
+                .lock()
+                .unwrap()
+                .insert(key.to_owned(), value.expose().to_owned());
+            Ok(())
+        }
+        fn delete(&self, key: &str) -> Result<(), PlatformError> {
+            self.0.lock().unwrap().remove(key);
+            Ok(())
+        }
+    }
+
+    fn context(database: Option<PathBuf>) -> DevicesContext {
+        DevicesContext {
+            database,
+            secrets: Arc::new(MemorySecrets::default()),
+            remote: None,
+        }
+    }
+
+    /// Two installs pair over loopback; both see the same six-digit code.
+    fn pair(left: &DevicesContext, right: &DevicesContext) -> (PairingOutcome, PairingOutcome) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let accepting = {
+            let right = right.clone();
+            std::thread::spawn(move || run(listener.accept().unwrap().0, &right, false))
+        };
+        let initiator = run(connect_to(&address).unwrap(), left, true).unwrap();
+        (initiator, accepting.join().unwrap().unwrap())
+    }
+
+    #[test]
+    fn pairing_and_the_devices_page_work_without_the_network() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("argentum.db");
+        let left = context(Some(database.clone()));
+        let right = context(Some(directory.path().join("other.db")));
+
+        let (mine, theirs) = pair(&left, &right);
+        assert_eq!(mine.comparison_code, theirs.comparison_code);
+        assert_eq!(mine.comparison_code.len(), 6);
+        assert_ne!(mine.peer.fingerprint, theirs.peer.fingerprint);
+
+        let ui = UiHandle::new().unwrap();
+        connect(&ui, left.clone());
+        let app = ui.window().global::<App>();
+        app.invoke_device_refresh();
+        assert_eq!(app.get_devices().row_count(), 0);
+        let own = DeviceIdentity::load(left.secrets.as_ref())
+            .unwrap()
+            .unwrap();
+        assert_eq!(app.get_device_fingerprint(), own.fingerprint());
+
+        // Confirming with nothing pending, or a code that did not match, saves nothing.
+        app.set_device_pair_state("code".into());
+        app.invoke_device_confirm(true, "Phone".into());
+        assert_eq!(app.get_device_pair_state(), "idle");
+        app.invoke_device_confirm(false, "Phone".into());
+        assert_eq!(app.get_devices().row_count(), 0);
+
+        // A saved device is listed, then forgotten.
+        Store::open(&database)
+            .unwrap()
+            .save_paired_device(&PairedDeviceRecord {
+                public_key: hex(&mine.peer.public_key),
+                fingerprint: mine.peer.fingerprint.clone(),
+                name: "Phone".into(),
+                paired_at: 0,
+            })
+            .unwrap();
+        app.invoke_device_refresh();
+        assert_eq!(app.get_devices().row_count(), 1);
+        app.invoke_device_forget(mine.peer.fingerprint.clone().into());
+        assert_eq!(app.get_devices().row_count(), 0);
+
+        // A finished exchange is held for confirmation; a failed one is not.
+        let pending: Arc<Mutex<Option<PairingOutcome>>> = Arc::default();
+        finish(&ui.weak_window(), &pending, Err("closed".into()));
+        assert!(pending.lock().unwrap().is_none());
+        finish(&ui.weak_window(), &pending, Ok(mine));
+        assert!(pending.lock().unwrap().is_some());
+
+        // An install without a database lists nothing and says why.
+        let memory = context(None);
+        assert_eq!(
+            open_store(&memory).unwrap_err(),
+            "This session keeps no database."
+        );
+        connect(&ui, memory);
+        app.invoke_device_refresh();
+        assert_eq!(app.get_device_fingerprint(), "Created when you first pair");
+        assert_eq!(app.get_devices().row_count(), 0);
+    }
+
+    #[test]
+    fn addresses_and_keys_are_handled_strictly() {
+        assert_eq!(hex(&[0, 15, 255]), "000fff");
+        assert!(connect_to("not an address at all")
+            .unwrap_err()
+            .contains("is not an address"));
+        // A bare host gets the pairing port; nothing listens there on loopback.
+        let refused = TcpListener::bind("127.0.0.1:0").unwrap();
+        let free = refused.local_addr().unwrap();
+        drop(refused);
+        assert!(connect_to(&free.to_string()).is_err());
+        let _ = local_address();
+    }
+}
