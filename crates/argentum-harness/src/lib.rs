@@ -589,7 +589,9 @@ impl HarnessRegistry {
         let Some(capability) = self.capabilities.get(capability_id) else {
             return Err(HarnessError::UnknownCapability(capability_id.to_owned()));
         };
-        if !capability.available {
+        // Turning off a capability this build cannot offer narrows nothing, so
+        // only enabling one is refused.
+        if !capability.available && enabled {
             return Err(HarnessError::UnavailableCapability(
                 capability_id.to_owned(),
             ));
@@ -1074,6 +1076,11 @@ fn optional_rust_check_capability() -> CapabilityRegistration {
         );
     registration.enabled = false;
     registration.available = cfg!(windows);
+    if !cfg!(windows) {
+        registration.unavailable_reason =
+            "Supplemental Rust checks need a Windows AppContainer; this build targets another OS."
+                .into();
+    }
     registration
 }
 

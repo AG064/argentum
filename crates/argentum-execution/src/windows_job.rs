@@ -379,22 +379,16 @@ impl Drop for ProcessContainment {
 }
 
 /// A process group: everything a command starts dies with it, unless it deliberately
-/// leaves the group. On Linux the disposable container around the benchmark covers
-/// that case. On Android the app sandbox is the outer boundary: a process that leaves
+/// leaves the group. On Linux and macOS the command runs as the owner's own user,
+/// after the owner approved it, with no memory, CPU or process-count limit. On Android the app sandbox is the outer boundary: a process that leaves
 /// the group still runs as the app's own user, inside its private storage and SELinux
 /// domain, and dies when Android stops the app.
-#[cfg(any(
-    target_os = "android",
-    all(target_os = "linux", feature = "benchmark-process-group")
-))]
+#[cfg(unix)]
 pub(crate) struct ProcessContainment {
     group: rustix::process::Pid,
 }
 
-#[cfg(any(
-    target_os = "android",
-    all(target_os = "linux", feature = "benchmark-process-group")
-))]
+#[cfg(unix)]
 impl ProcessContainment {
     /// The child was started as the leader of its own group, so its ID names the group.
     pub(crate) fn attach(process_id: u32) -> Result<Self, std::io::Error> {
@@ -405,13 +399,18 @@ impl ProcessContainment {
         Ok(Self { group })
     }
 
+    /// Managed processes are not offered on Android. On Linux and macOS the
+    /// group is the whole containment: the job limits have no equivalent here.
     pub(crate) fn attach_managed(
-        _process_id: u32,
+        process_id: u32,
         _limits: ManagedProcessLimits,
     ) -> Result<(Self, ()), std::io::Error> {
-        Err(std::io::Error::other(
-            "suspended managed processes are currently supported only on Windows",
-        ))
+        if cfg!(target_os = "android") {
+            return Err(std::io::Error::other(
+                "managed processes are not offered on Android",
+            ));
+        }
+        Ok((Self::attach(process_id)?, ()))
     }
 
     pub(crate) fn terminate(&mut self) -> Result<(), std::io::Error> {
@@ -427,18 +426,10 @@ impl ProcessContainment {
     }
 }
 
-#[cfg(not(any(
-    windows,
-    target_os = "android",
-    all(target_os = "linux", feature = "benchmark-process-group")
-)))]
+#[cfg(not(any(windows, unix)))]
 pub(crate) struct ProcessContainment;
 
-#[cfg(not(any(
-    windows,
-    target_os = "android",
-    all(target_os = "linux", feature = "benchmark-process-group")
-)))]
+#[cfg(not(any(windows, unix)))]
 impl ProcessContainment {
     pub(crate) fn attach(_process_id: u32) -> Result<Self, std::io::Error> {
         Err(std::io::Error::other(

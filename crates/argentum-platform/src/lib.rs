@@ -32,6 +32,8 @@ pub use android_workspace::android_app_private_workspace;
 #[cfg(target_os = "android")]
 pub use android_workspace::android_app_private_workspace_for_app;
 pub use android_workspace::ValidatedAndroidAppPaths;
+#[cfg(all(unix, not(target_os = "android")))]
+pub use authority::UnixCurrentUserBridge;
 #[cfg(windows)]
 pub use authority::WindowsCurrentUserBridge;
 pub use authority::{

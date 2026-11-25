@@ -1192,7 +1192,7 @@ mod tests {
         if !create_directory_link(outside.path(), &probe) {
             return;
         }
-        fs::remove_dir(&probe).expect("remove link support probe");
+        remove_directory_link(&probe);
 
         let candidate = data.path().join("workspace");
         let outside_path = outside.path().to_path_buf();
@@ -1497,7 +1497,7 @@ mod tests {
             create_directory_link(target, &probe),
             "directory links must be available for this platform test"
         );
-        fs::remove_dir(&probe).expect("remove link support probe");
+        remove_directory_link(&probe);
     }
 
     fn write_workspace_fixture(paths: &AppPaths, path: &std::path::Path) {
@@ -1528,6 +1528,14 @@ mod tests {
     #[cfg(unix)]
     fn create_file_link(target: &std::path::Path, link: &std::path::Path) -> bool {
         std::os::unix::fs::symlink(target, link).is_ok()
+    }
+
+    /// A Windows directory link is removed as a directory, a Unix symlink as a file.
+    fn remove_directory_link(link: &std::path::Path) {
+        #[cfg(windows)]
+        fs::remove_dir(link).expect("remove link support probe");
+        #[cfg(not(windows))]
+        fs::remove_file(link).expect("remove link support probe");
     }
 
     #[cfg(not(any(windows, unix)))]

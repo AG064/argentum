@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
 
-//! Process-group tests. On Android they run on a device or emulator: see
-//! docs/ANDROID_HOST.md.
+//! Process-group tests for Linux, macOS and Android. On Android they run on a
+//! device or emulator: see docs/ANDROID_HOST.md.
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -16,6 +16,22 @@ fn shell(command: &str, workspace: &Path) -> ProcessSpec {
     ProcessSpec::shell(command.to_owned(), workspace).expect("spec")
 }
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn pid_is_gone(pid: &str) -> bool {
+    // No /proc on macOS. A zombie still answers signal 0, but an orphan is
+    // reaped by launchd, so a process that is gone stops answering.
+    let Some(pid) = pid
+        .trim()
+        .parse::<i32>()
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+    else {
+        return true;
+    };
+    rustix::process::test_kill_process(pid).is_err()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn pid_is_gone(pid: &str) -> bool {
     let stat = format!("/proc/{}/stat", pid.trim());
     fs::read_to_string(stat).map_or(true, |text| {

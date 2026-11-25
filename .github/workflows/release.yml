@@ -2,8 +2,9 @@
 # Copyright (C) 2026 AG064
 name: Release
 # Builds the release files: the Windows installer and portable zips, the
+# Linux x64 tarballs and .deb, the macOS (Apple silicon and Intel) tarballs, the
 # release-signed Android arm64 APK, SHA-256 checksums, signed build provenance
-# and an SBOM. A version tag push also creates a draft GitHub release.
+# and an SBOM. Only the APK is signed. A version tag push also creates a draft GitHub release.
 # Nothing is published here. Publishing the draft is a manual owner step.
 on:
   push:
@@ -179,8 +180,81 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  unix:
+    needs: version
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Built on the oldest supported Ubuntu so the binaries run on glibc 2.35 and later.
+          - name: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: macos-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          - name: macos-x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: '0'
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.98.0
+          targets: ${{ matrix.target }}
+      - name: Install the Linux desktop libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - name: Build the desktop app and the CLI
+        run: |
+          set -euo pipefail
+          release="target/$TARGET/release"
+          # Both packages name their binary argentum, so each is copied aside.
+          cargo build --locked --release -p argentum-app --target "$TARGET"
+          cp "$release/argentum" "$release/argentum-app-desktop"
+          cargo build --locked --release -p argentum-cli --bin argentum --target "$TARGET"
+          cp "$release/argentum" "$release/argentum-cli-bin"
+          "$release/argentum-cli-bin" --version
+      - name: Assemble the release files
+        run: python3 scripts/package-unix-release.py --platform '${{ matrix.name }}' --target-dir target --output release-assets
+      - name: Check the release files
+        run: |
+          set -euo pipefail
+          for archive in release-assets/*.tar.gz; do
+            if tar -tzf "$archive" | grep -iE 'llama|ggml|\.gguf$'; then echo "$archive must not contain llama.cpp or models" >&2; exit 1; fi
+          done
+          if [ "$RUNNER_OS" = Linux ]; then
+            deb=$(ls release-assets/*.deb)
+            dpkg-deb --info "$deb"
+            dpkg-deb --contents "$deb"
+            sudo apt-get install -yq "./$deb"
+            argentum --version
+            test -x /usr/bin/argentum-desktop
+            sudo apt-get remove -yq argentum
+          fi
+          mkdir "$RUNNER_TEMP/unpack"
+          tar -xzf release-assets/argentum-genesis-*.tar.gz -C "$RUNNER_TEMP/unpack"
+          "$RUNNER_TEMP"/unpack/argentum-genesis-*/argentum --version
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ${{ matrix.name }}
+          path: release-assets
+          if-no-files-found: error
+          retention-days: 7
+
   release-files:
-    needs: [version, windows, android]
+    needs: [version, windows, unix, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -195,7 +269,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          pattern: '{windows,android}'
+          pattern: '{windows,linux-x64,macos-arm64,macos-x64,android}'
           path: dist
           merge-multiple: true
       # Lists the Cargo, Gradle and npm dependencies declared in the source tree

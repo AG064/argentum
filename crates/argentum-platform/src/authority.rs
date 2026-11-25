@@ -27,16 +27,18 @@ use crate::android_authority::AndroidStandardAuthorityBridge;
 use crate::PlatformError;
 
 const AUTHORITY_MODULE_ID: &str = "platform.authority.standard";
-#[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+#[cfg(any(windows, unix, test, feature = "test-support"))]
 const AUTHORITY_EFFECT_LABEL: &str = "platform-authority-lease";
 const DEPENDENT_EFFECT_LABEL: &str = "authority-dependent-service";
-#[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+#[cfg(any(windows, unix, test, feature = "test-support"))]
 const ACTIVE_DETAIL: &str = "Windows current-user authority is active";
-#[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+#[cfg(any(windows, unix, test, feature = "test-support"))]
 const ANDROID_ACTIVE_DETAIL: &str = "Android app-UID Standard authority is active";
+#[cfg(any(windows, unix, test, feature = "test-support"))]
+const UNIX_ACTIVE_DETAIL: &str = "Unix current-user authority is active";
 const REVOKED_DETAIL: &str = "Platform authority has been revoked";
 const RECOVERY_DETAIL: &str = "Platform authority cleanup is pending";
-#[cfg(not(any(windows, target_os = "android")))]
+#[cfg(not(any(windows, unix)))]
 const UNSUPPORTED_DETAIL: &str = "Platform authority is not implemented for this target";
 
 pub type PlatformAuthorityFuture<'a> =
@@ -113,6 +115,77 @@ impl PlatformAuthorityBridge for WindowsCurrentUserBridge {
     }
 }
 
+/// The current user on Linux and macOS. Like the Windows bridge, it holds no
+/// privilege of its own: it records the real UID the process runs as, and
+/// file, network and process access stay those of that user.
+#[cfg(all(unix, not(target_os = "android")))]
+#[derive(Debug)]
+pub struct UnixCurrentUserBridge {
+    observed_uid: u32,
+    released: bool,
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+impl UnixCurrentUserBridge {
+    pub(crate) fn current_process() -> Self {
+        extern "C" {
+            fn getuid() -> u32;
+        }
+        // SAFETY: getuid takes no arguments, cannot fail, and returns the real
+        // UID of the calling process.
+        let observed_uid = unsafe { getuid() };
+        Self {
+            observed_uid,
+            released: false,
+        }
+    }
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+impl sealed::Sealed for UnixCurrentUserBridge {}
+
+#[cfg(all(unix, not(target_os = "android")))]
+impl PlatformAuthorityBridge for UnixCurrentUserBridge {
+    fn platform(&self) -> &'static str {
+        if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        }
+    }
+
+    fn bridge_id(&self) -> &'static str {
+        "unix.current-user"
+    }
+
+    fn tier(&self) -> PlatformAuthorityTier {
+        PlatformAuthorityTier::Standard
+    }
+
+    fn probe(&self) -> Result<PlatformCapabilityProbe, PlatformError> {
+        PlatformCapabilityProbe::new(
+            Some(self.observed_uid),
+            Some(format!("uid:{}", self.observed_uid)),
+            None,
+            ["filesystem.user", "network.user", "process.user"],
+        )
+        .map_err(|_| PlatformError::InvalidAuthorityProbe)
+    }
+
+    fn release<'a>(
+        &'a mut self,
+        cancellation: &'a CancellationToken,
+    ) -> PlatformAuthorityFuture<'a> {
+        Box::pin(async move {
+            if cancellation.is_cancelled() {
+                return Err(PlatformError::AuthorityReleaseCancelled);
+            }
+            self.released = true;
+            Ok(())
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformCapabilityProbe {
     snapshot: PlatformCapabilityProbeSnapshot,
@@ -161,7 +234,7 @@ impl PlatformCapabilityProbe {
 
 #[derive(Debug, Clone, Copy)]
 enum ExpiryPolicy {
-    #[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+    #[cfg(any(windows, unix, test, feature = "test-support"))]
     ProcessLifetime,
     #[allow(dead_code)]
     Deadline(Instant),
@@ -179,7 +252,7 @@ pub struct PlatformAuthorityLease {
 }
 
 impl PlatformAuthorityLease {
-    #[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+    #[cfg(any(windows, unix, test, feature = "test-support"))]
     fn new(
         bridge_id: &str,
         tier: PlatformAuthorityTier,
@@ -226,7 +299,7 @@ impl PlatformAuthorityLease {
             return false;
         }
         match self.expiry {
-            #[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+            #[cfg(any(windows, unix, test, feature = "test-support"))]
             ExpiryPolicy::ProcessLifetime => true,
             ExpiryPolicy::Deadline(deadline) => Instant::now() < deadline,
         }
@@ -256,12 +329,12 @@ pub trait AuthorityDependentService: Send + 'static {
     async fn retire(&mut self, cancellation: &CancellationToken) -> Result<(), PlatformError>;
 }
 
-#[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+#[cfg(any(windows, unix, test, feature = "test-support"))]
 struct BridgeDisposer {
     bridge: Box<dyn PlatformAuthorityBridge>,
 }
 
-#[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+#[cfg(any(windows, unix, test, feature = "test-support"))]
 #[async_trait]
 impl EffectDisposer for BridgeDisposer {
     async fn dispose(&mut self, cancellation: &CancellationToken) -> Result<(), EffectFailure> {
@@ -352,13 +425,22 @@ impl PlatformAuthorityBroker {
             .await
         }
 
-        #[cfg(not(any(windows, target_os = "android")))]
+        #[cfg(all(unix, not(target_os = "android")))]
+        {
+            Self::bootstrap_bridge(
+                initial_generation,
+                Box::new(UnixCurrentUserBridge::current_process()),
+            )
+            .await
+        }
+
+        #[cfg(not(any(windows, unix)))]
         {
             Self::bootstrap_unavailable(initial_generation)
         }
     }
 
-    #[cfg(not(any(windows, target_os = "android")))]
+    #[cfg(not(any(windows, unix)))]
     fn bootstrap_unavailable(
         initial_generation: AuthorityGeneration,
     ) -> Result<Self, PlatformError> {
@@ -417,7 +499,7 @@ impl PlatformAuthorityBroker {
         .await
     }
 
-    #[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+    #[cfg(any(windows, unix, test, feature = "test-support"))]
     async fn bootstrap_bridge(
         initial_generation: AuthorityGeneration,
         bridge: Box<dyn PlatformAuthorityBridge>,
@@ -735,17 +817,17 @@ impl PlatformError {
     }
 }
 
-#[cfg(any(windows, target_os = "android", test, feature = "test-support"))]
+#[cfg(any(windows, unix, test, feature = "test-support"))]
 fn active_snapshot(
     platform: &str,
     tier: PlatformAuthorityTier,
     generation: u64,
     probe: PlatformCapabilityProbeSnapshot,
 ) -> Result<PlatformAuthoritySnapshot, PlatformError> {
-    let detail = if platform == "android" {
-        ANDROID_ACTIVE_DETAIL
-    } else {
-        ACTIVE_DETAIL
+    let detail = match platform {
+        "android" => ANDROID_ACTIVE_DETAIL,
+        "linux" | "macos" => UNIX_ACTIVE_DETAIL,
+        _ => ACTIVE_DETAIL,
     };
     PlatformAuthoritySnapshot::new(
         platform,
@@ -1696,7 +1778,37 @@ mod tests {
         assert_eq!(lease.generation_ordinal(), 1);
     }
 
-    #[cfg(not(any(windows, target_os = "android")))]
+    #[cfg(all(unix, not(target_os = "android")))]
+    #[tokio::test]
+    async fn unix_bootstrap_projects_the_real_current_user() {
+        let (_, _, generation) = host_authority_channel().expect("authority channel");
+        let broker = PlatformAuthorityBroker::bootstrap(generation)
+            .await
+            .expect("Unix authority broker");
+        let snapshot = broker.snapshot();
+        let probe = snapshot.probe().expect("Unix capability probe");
+        extern "C" {
+            fn getuid() -> u32;
+        }
+        // SAFETY: getuid takes no arguments and cannot fail.
+        let uid = unsafe { getuid() };
+
+        assert_eq!(snapshot.state(), PlatformAuthorityState::Active);
+        assert_eq!(snapshot.platform(), std::env::consts::OS);
+        assert_eq!(probe.observed_uid(), Some(uid));
+        assert_eq!(
+            probe.observed_identity(),
+            Some(format!("uid:{uid}").as_str())
+        );
+        assert_eq!(
+            probe.capabilities(),
+            ["filesystem.user", "network.user", "process.user"]
+        );
+        let lease = broker.current_lease().expect("current Standard lease");
+        assert_eq!(lease.tier(), PlatformAuthorityTier::Standard);
+    }
+
+    #[cfg(not(any(windows, unix)))]
     #[tokio::test]
     async fn unsupported_target_keeps_host_generation_without_a_platform_lease() {
         let (_, _, generation) = host_authority_channel().expect("authority channel");

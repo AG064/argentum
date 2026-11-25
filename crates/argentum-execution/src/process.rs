@@ -1108,25 +1108,33 @@ impl ManagedProcess {
         if spec.launch_kind != ProcessLaunchKind::Argv {
             return Err(ProcessError::ManagedShellNotAllowed);
         }
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, all(unix, not(target_os = "android")))))]
         {
             let _ = (spec, limits, output);
             return Err(ProcessError::Containment(std::io::Error::other(
-                "suspended managed processes are currently supported only on Windows",
+                "managed processes are not offered on this platform",
             )));
         }
-        #[cfg(windows)]
+        #[cfg(any(windows, all(unix, not(target_os = "android"))))]
         {
             let started = std::time::Instant::now();
             let output_limit = spec.output_limit;
-            let mut child = if let Some(boundary) = &spec.probe_boundary {
-                ManagedChild::Probe(boundary.spawn(&spec).map_err(ProcessError::Containment)?)
-            } else {
-                ManagedChild::Ordinary(
+            #[cfg(windows)]
+            let probe_child = match &spec.probe_boundary {
+                Some(boundary) => Some(ManagedChild::Probe(
+                    boundary.spawn(&spec).map_err(ProcessError::Containment)?,
+                )),
+                None => None,
+            };
+            #[cfg(not(windows))]
+            let probe_child: Option<ManagedChild> = None;
+            let mut child = match probe_child {
+                Some(child) => child,
+                None => ManagedChild::Ordinary(
                     configured_command(&spec, true)
                         .spawn()
                         .map_err(ProcessError::Spawn)?,
-                )
+                ),
             };
             let process_id = child.id().ok_or_else(|| {
                 ProcessError::Containment(std::io::Error::other("child process has no process ID"))
@@ -1536,10 +1544,7 @@ fn configured_command(spec: &ProcessSpec, managed: bool) -> Command {
     }
     #[cfg(not(windows))]
     let _ = managed;
-    #[cfg(any(
-        target_os = "android",
-        all(target_os = "linux", feature = "benchmark-process-group")
-    ))]
+    #[cfg(unix)]
     command.process_group(0);
     command
 }
@@ -1642,19 +1647,12 @@ fn resume_process_threads(process_id: u32) -> Result<(), std::io::Error> {
 }
 
 /// Nothing to resume: only Windows starts a command suspended.
-#[cfg(any(
-    target_os = "android",
-    all(target_os = "linux", feature = "benchmark-process-group")
-))]
+#[cfg(unix)]
 fn resume_process_threads(_process_id: u32) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[cfg(not(any(
-    windows,
-    target_os = "android",
-    all(target_os = "linux", feature = "benchmark-process-group")
-)))]
+#[cfg(not(any(windows, unix)))]
 fn resume_process_threads(_process_id: u32) -> Result<(), std::io::Error> {
     Err(std::io::Error::other(
         "suspended managed processes are currently supported only on Windows",
@@ -1691,10 +1689,35 @@ fn process_start_identity(process_id: u32) -> Result<u64, std::io::Error> {
     Ok((u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime))
 }
 
-#[cfg(not(windows))]
+/// The start time of the process in clock ticks since boot, field 22 of
+/// `/proc/<pid>/stat`. A reused process ID gets a different value.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn process_start_identity(process_id: u32) -> Result<u64, std::io::Error> {
+    let stat = std::fs::read_to_string(format!("/proc/{process_id}/stat"))?;
+    // The command name in field 2 can hold spaces and parentheses, so count
+    // fields from the last closing parenthesis.
+    let after_name = stat
+        .rfind(')')
+        .map(|index| &stat[index + 1..])
+        .ok_or_else(|| std::io::Error::other("process stat has no command name"))?;
+    after_name
+        .split_whitespace()
+        .nth(19)
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| std::io::Error::other("process stat has no start time"))
+}
+
+/// macOS has no `/proc`. The child is owned and not reaped yet, so its process
+/// ID cannot be reused while this identity is in use; the ID stands for it.
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+fn process_start_identity(process_id: u32) -> Result<u64, std::io::Error> {
+    Ok(u64::from(process_id))
+}
+
+#[cfg(not(any(windows, unix)))]
 fn process_start_identity(_process_id: u32) -> Result<u64, std::io::Error> {
     Err(std::io::Error::other(
-        "process start identity is currently supported only on Windows",
+        "process start identity is not available on this platform",
     ))
 }
 
@@ -1710,7 +1733,18 @@ fn request_process_group_stop(process_id: u32) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+/// Asks the whole group to stop with SIGTERM, as Ctrl+Break does on Windows.
+#[cfg(unix)]
+fn request_process_group_stop(process_id: u32) -> Result<(), std::io::Error> {
+    let group = i32::try_from(process_id)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .ok_or_else(|| std::io::Error::other("invalid process group"))?;
+    rustix::process::kill_process_group(group, rustix::process::Signal::TERM)
+        .map_err(std::io::Error::from)
+}
+
+#[cfg(not(any(windows, unix)))]
 fn request_process_group_stop(_process_id: u32) -> Result<(), std::io::Error> {
     Ok(())
 }
@@ -2120,7 +2154,23 @@ fn inherited_environment_names() -> &'static [&'static str] {
     ]
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(unix, not(target_os = "android")))]
+fn inherited_environment_names() -> &'static [&'static str] {
+    &[
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "TMPDIR",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "ARGENTUM_F13_GATE",
+        "LANG",
+        "LC_ALL",
+    ]
+}
+
+#[cfg(not(unix))]
 fn inherited_environment_names() -> &'static [&'static str] {
     &[
         "PATH",
@@ -2144,14 +2194,8 @@ fn inherited_environment_names() -> &'static [&'static str] {
     ]
 }
 
-/// The process-group path used on Android, and on Linux in benchmark containers.
-#[cfg(all(
-    test,
-    any(
-        target_os = "android",
-        all(target_os = "linux", feature = "benchmark-process-group")
-    )
-))]
+/// The process-group path used on Linux, macOS and Android.
+#[cfg(all(test, unix))]
 #[path = "process_group_tests.rs"]
 mod process_group_tests;
 
@@ -2167,11 +2211,7 @@ mod tests {
 
     use tokio_util::sync::CancellationToken;
 
-    #[cfg(all(
-        not(windows),
-        not(target_os = "android"),
-        not(feature = "benchmark-process-group")
-    ))]
+    #[cfg(not(any(windows, unix)))]
     #[tokio::test]
     async fn an_ordinary_build_refuses_without_verified_containment() {
         let workspace = tempfile::tempdir().expect("workspace");

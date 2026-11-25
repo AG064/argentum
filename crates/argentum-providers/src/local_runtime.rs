@@ -2684,8 +2684,10 @@ mod tests {
     #[test]
     fn local_runtime_model_limits_default_validate_and_bind_the_plan_digest() {
         let config = LocalRuntimeConfig::new(
-            PathBuf::from(r"C:\argentum-test\bundle.zip"),
-            PathBuf::from(r"C:\argentum-test\models"),
+            std::env::temp_dir()
+                .join("argentum-test")
+                .join("bundle.zip"),
+            std::env::temp_dir().join("argentum-test").join("models"),
         )
         .expect("default local runtime config");
         assert_eq!(
@@ -3865,8 +3867,10 @@ two
         broker: Arc<PlatformAuthorityBroker>,
     ) -> LocalRuntimeModule {
         let config = LocalRuntimeConfig::new(
-            PathBuf::from(r"C:\argentum-test\bundle.zip"),
-            PathBuf::from(r"C:\argentum-test\models"),
+            std::env::temp_dir()
+                .join("argentum-test")
+                .join("bundle.zip"),
+            std::env::temp_dir().join("argentum-test").join("models"),
         )
         .expect("fake config");
         LocalRuntimeModule::with_launcher(config, broker, launcher)
