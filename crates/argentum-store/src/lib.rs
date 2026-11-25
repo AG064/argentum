@@ -6383,6 +6383,8 @@ mod tests {
         // imported MCP server drafts and memory notes a table each, with an
         // index for the notes.
         assert_eq!((tables, indexes), (41, 31));
+        // imported MCP server drafts a table, and agent module settings a table.
+        assert_eq!((tables, indexes), (41, 30));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection
