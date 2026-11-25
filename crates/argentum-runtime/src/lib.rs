@@ -15876,7 +15876,8 @@ mod tests {
         );
         assert_eq!(
             runtime.tool_count(),
-            25 + usize::from(cfg!(feature = "extensions"))
+            // 25 built-in tools and the two Web module tools.
+            27 + usize::from(cfg!(feature = "extensions"))
         );
         assert!(runtime
             .tools
@@ -16793,6 +16794,9 @@ mod tests {
             requests[0].tools.len(),
             runtime.tools.descriptors().len() + 3
                 - 1
+                // The two Web module tools are registered, but their modules
+                // are off by default, so they are not offered.
+                - 2
                 - usize::from(cfg!(feature = "extensions"))
                 - 6 * usize::from(cfg!(feature = "desktop-control"))
                 - hidden_by_workspace(
