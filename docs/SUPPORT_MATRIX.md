@@ -110,6 +110,7 @@ differ:
 | Windows desktop control, extensions and MCP builds, local PDF artifacts | Windows-only builds |
 | Owner-only file permission checks | Windows-only. They are used only by the optional extension and artifact features above |
 | Desktop UI tests | Two window tests are skipped on macOS, because Slint must open windows on the main thread there |
+| Known open issue | One terminal test that picks a provider, model and context in `argentum chat` fails on the macOS CI runners: the model list request is closed before the reply arrives. It is skipped on macOS until it is diagnosed, so treat model selection in `argentum chat` on macOS as untested |
 
 The Windows-only parts are tracked in the [roadmap](../ROADMAP.md).
 
