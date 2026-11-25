@@ -3,7 +3,7 @@
 name: Android emulator
 # Builds the debug APK for x86_64, installs it on an Android emulator, and runs
 # the UI instrumentation: the app opens, first run accepts a local server,
-# Ctrl+, opens Settings, Back closes Settings and the drawer without leaving
+# Settings opens, the Back key closes Settings and the drawer without leaving
 # the app, and a message reaches a fake provider on this runner and its reply
 # is shown. No secrets, no provider account, nothing published.
 on:

@@ -61,12 +61,13 @@ bash platforms/android/test/run-emulator-tests.sh platforms/android/app/build/ou
 ```
 
 The instrumentation checks that the app opens, that first run accepts a server
-on `127.0.0.1`, that Ctrl+, opens Settings through the hardware keyboard path,
-that Back closes Settings and then the drawer without leaving the app, and that a
-message reaches the fake provider and its reply is shown. Keys go through
-Android's real input path. The first-run server and the message go through the
-same UI callbacks as the Continue, Start and send buttons, not through taps, so
-the tests do not cover touch input or the on-screen keyboard.
+on `127.0.0.1`, that Settings opens, that the Back key closes Settings and then
+the drawer without leaving the app, and that a message reaches the fake provider
+and its reply is shown. Back is a real Android key event. The first-run server,
+opening Settings and the drawer, and the message go through the same UI actions
+as their buttons, not through taps, so the tests do not cover touch input or the
+on-screen keyboard. Hardware keyboard shortcuts such as Ctrl+, did not reach the
+app in the emulator when injected, so they are not tested.
 
 Debug builds contain a small test bridge for this. It does nothing unless the
 test creates `files/ui-test/enabled` in the app's private storage. Release builds
