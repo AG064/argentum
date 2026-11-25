@@ -297,13 +297,14 @@ CLI build leaves them out.
 
 - A run stops after 120 rounds, and earlier if the model repeats the same tool calls four rounds in a row.
 - The steps and diff list on each response last for the running session only.
-- Releases are built for Windows x64 and Android arm64. The CLI builds from source on Linux and macOS, without release files yet. See [Argentum on Android](docs/ANDROID_HOST.md).
+- Released files are for Windows x64 and Android arm64. Linux x64 and macOS builds of the desktop app and the CLI are on the development branch, built and tested in CI, and come with the next release. Some Windows features have no equivalent there yet; see [the support matrix](docs/SUPPORT_MATRIX.md#linux-and-macos). For Android, see [Argentum on Android](docs/ANDROID_HOST.md).
 - On Android, part of a reply cannot be selected yet. Copy under a reply takes the whole reply, and holding a message you sent copies it.
 
 ## Build from source
 
-You need Rust 1.98.0, Git, and on Windows the MSVC C++ build tools. No Node.js is
-needed.
+You need Rust 1.98.0, Git, and on Windows the MSVC C++ build tools. On Linux, also
+install the development packages for fontconfig and libxkbcommon (on Ubuntu,
+`libfontconfig1-dev libxkbcommon-dev`). No Node.js is needed.
 
 ```powershell
 git clone https://github.com/AG064/argentum.git
@@ -316,8 +317,8 @@ For the terminal product, and for setup details, see
 
 ## Project status
 
-0.1.0 is the first stable release, for Windows x64 and Android arm64. The CLI builds from
-source on Linux and macOS, without release files yet, and iOS is a later target.
+0.1.0 is the first stable release, for Windows x64 and Android arm64. Linux x64 and macOS
+builds come with the next release, and iOS is a later target.
 
 | Read this | For |
 | --- | --- |

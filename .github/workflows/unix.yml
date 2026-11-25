@@ -49,7 +49,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq --no-install-recommends libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev xvfb
+          sudo apt-get install -yq --no-install-recommends libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev xvfb x11-apps imagemagick
       - name: Populate pinned dependencies
         run: cargo fetch --locked
       - name: Build every crate and test
@@ -64,3 +64,46 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = Linux ]; then wrap='xvfb-run -a'; else wrap=''; fi
           $wrap cargo test --workspace --locked --offline --no-fail-fast
+      # A start check, not visual QA: the desktop app opens its window with a
+      # fresh data folder and is still running 20 seconds later.
+      - name: Start the desktop app
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          # The app and the CLI both build a binary named argentum, so build the
+          # app last and copy it aside.
+          cargo build --locked --offline -p argentum-app
+          cp target/debug/argentum "$RUNNER_TEMP/argentum-desktop"
+          export ARGENTUM_DATA_DIR="$RUNNER_TEMP/argentum-data"
+          mkdir -p "$ARGENTUM_DATA_DIR" "$RUNNER_TEMP/desktop-start"
+          log="$RUNNER_TEMP/desktop-start/app.log"
+          shot="$RUNNER_TEMP/desktop-start/${{ matrix.name }}.png"
+          if [ "$RUNNER_OS" = Linux ]; then
+            Xvfb :99 -screen 0 1280x800x24 > /dev/null 2>&1 &
+            export DISPLAY=:99
+            sleep 2
+          fi
+          "$RUNNER_TEMP/argentum-desktop" > "$log" 2>&1 &
+          app=$!
+          sleep 20
+          if ! kill -0 "$app" 2> /dev/null; then
+            echo 'The desktop app exited within 20 seconds' >&2
+            cat "$log" >&2
+            exit 1
+          fi
+          echo 'The desktop app is running after 20 seconds'
+          if [ "$RUNNER_OS" = Linux ]; then
+            xwd -root -silent -display :99 | convert xwd:- "$shot" || echo 'No screenshot'
+          else
+            screencapture -x "$shot" || echo 'No screenshot'
+          fi
+          kill "$app"
+          wait "$app" || true
+      - name: Keep the desktop start evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-start-${{ matrix.name }}
+          path: ${{ runner.temp }}/desktop-start
+          if-no-files-found: ignore
+          retention-days: 14
