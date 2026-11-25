@@ -110,6 +110,14 @@ The first stable release, for Windows x64 and Android arm64:
   with the project's data, not in the repository, and `/memory export` prints
   them for you to keep. The newest 4 KB go into each request as data that
   grants nothing, and a note that looks like it holds a secret is refused.
+- **Agent modules:** optional capabilities for the agent, each off by default,
+  each with its own switch in Settings > Capabilities that shows its permissions
+  first, all built on one mechanism (`docs/AGENT_MODULES.md`). The first two:
+  - **Web fetch:** the agent reads a web page as text. Each host asks first,
+    redirects to another host ask again, and local network addresses are
+    refused unless you allow them.
+  - **Web search:** the agent searches through a SearXNG-compatible search
+    address that you set. The search host asks first.
 
 ## Planned for 0.1.1
 
@@ -254,12 +262,23 @@ are used, including ideas from Claude Code and Codex.
   commands, supplemental Rust checks, the local model add-on, installing
   updates from the app), a signed and notarized macOS app, then an iOS app.
 - **Signing:** code-signed Windows releases.
-- **Extensions:** MCP servers and portable skills in the standard build, with the
-  same approvals as built-in tools.
-- **Images:** attach screenshots and pictures to a message, for models that can
-  read them.
-- **Web fetch:** a tool that lets the agent read a web page as text, with
-  approval, using the same reader as the Browser module.
+- **More agent modules,** in this order, each off by default and behind its own
+  switch:
+  - images in messages, for models that can read them;
+  - MCP servers and portable skills in the standard build, with the same
+    approvals as built-in tools;
+  - a skills marketplace: browse a catalog the project publishes, see each
+    skill's source, checksum and what it can do, and install it with its
+    checksum verified. No account, and installing grants nothing;
+  - helpers: the agent hands part of a task to a helper with its own context
+    and budget, and gets back only the result;
+  - hooks: your own commands before or after a tool, at run start and at run
+    stop, under the same approvals and process limits;
+  - a Git worktree per session, so parallel sessions in one repository do not
+    collide;
+  - language server diagnostics: errors, types and symbols for the agent;
+  - scheduled tasks, an approval reviewer that only suggests and never
+    approves, a timeline of a run, and fork or replay of a session.
 - **Terminal sessions:** long-running commands the agent can start, read and
   type into, such as a dev server or a test watcher.
 - **Stronger verification:** checks that a verified file is not a link and is

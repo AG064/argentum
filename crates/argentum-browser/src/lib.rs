@@ -8,6 +8,8 @@
 //! http or https with no cookies, reduced to text blocks, and handed to the shell
 //! as data. Page content is untrusted and never reaches a model from here.
 
+pub mod agent;
+
 use std::time::Duration;
 
 use argentum_domain::{BrowserBlock, BrowserBlockKind, BrowserPage, BrowserPageState};

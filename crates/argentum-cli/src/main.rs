@@ -3380,6 +3380,22 @@ async fn run_harness_command(
                         host.client().dispatch(command).await?;
                     }
                 }
+                HarnessAction::SetModuleSetting {
+                    module_id,
+                    key,
+                    value,
+                } => {
+                    let command = AppCommand::SetModuleSetting {
+                        module_id,
+                        key,
+                        value,
+                    };
+                    if local_authority_observed {
+                        host.local_handle().dispatch(command).await?;
+                    } else {
+                        host.client().dispatch(command).await?;
+                    }
+                }
                 HarnessAction::Trajectory { session_id } => {
                     let client = host.client();
                     let mut events = client.subscribe();
@@ -6481,6 +6497,11 @@ enum HarnessAction {
         capability_id: String,
         enabled: bool,
     },
+    SetModuleSetting {
+        module_id: String,
+        key: String,
+        value: String,
+    },
     Trajectory {
         session_id: Option<argentum_domain::SessionId>,
     },
@@ -7427,6 +7448,7 @@ where
                                 | "surface"
                                 | "execution"
                                 | "capability"
+                                | "module-setting"
                                 | "trajectory"
                                 | "module"
                                 | "backend"
@@ -7440,7 +7462,7 @@ where
                 if command == "harness"
                     && matches!(
                         harness_action.as_deref(),
-                        Some("surface" | "capability" | "module")
+                        Some("surface" | "capability" | "module" | "module-setting")
                     )
                     && harness_target.is_some()
                     && harness_visibility.is_none() =>
@@ -8264,6 +8286,25 @@ where
                     action: HarnessAction::SetCapability {
                         capability_id,
                         enabled,
+                    },
+                    json,
+                })
+            }
+            Some("module-setting") => {
+                let module_id = harness_target
+                    .ok_or_else(|| "harness module-setting requires MODULE_ID".to_owned())?;
+                let (key, value) = harness_visibility
+                    .as_deref()
+                    .and_then(|pair| pair.split_once('='))
+                    .ok_or_else(|| {
+                        "harness module-setting requires KEY=VALUE after MODULE_ID".to_owned()
+                    })?;
+                Ok(Arguments::Harness {
+                    options,
+                    action: HarnessAction::SetModuleSetting {
+                        module_id,
+                        key: key.trim().to_owned(),
+                        value: value.to_owned(),
                     },
                     json,
                 })
@@ -10794,6 +10835,22 @@ mod tests {
                 ..
             } if capability_id == "tool.write-text"
         ));
+        assert!(matches!(
+            parse_args([
+                "harness",
+                "module-setting",
+                "web-search",
+                "search-address=https://search.example/s?a=b",
+            ])
+            .expect("module setting"),
+            Arguments::Harness {
+                action: HarnessAction::SetModuleSetting { module_id, key, value },
+                ..
+            } if module_id == "web-search"
+                && key == "search-address"
+                && value == "https://search.example/s?a=b"
+        ));
+        assert!(parse_args(["harness", "module-setting", "web-search", "no-equals"]).is_err());
         assert!(matches!(
             parse_args(["harness", "trajectory", "--json"]).expect("active session trajectory"),
             Arguments::Harness {

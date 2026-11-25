@@ -25,6 +25,7 @@ pub use reply_steps::{REASONING_STEP_BREAK, REASONING_STEP_MARK};
 pub mod goal_supervision;
 pub mod imports;
 pub mod memory;
+pub mod modules;
 pub mod process_job_contract;
 pub mod recovery;
 pub mod supplemental;
@@ -468,6 +469,12 @@ pub enum ToolInput {
     InspectUi,
     UpdateUi {
         patch: Box<UiPatch>,
+    },
+    /// A tool offered by an optional agent module. The arguments are the
+    /// normal form returned by the module's parser. See `modules.rs`.
+    Module {
+        tool: String,
+        arguments: serde_json::Value,
     },
 }
 
@@ -1849,6 +1856,24 @@ impl ToolInput {
             Self::CancelProcessJob { .. } => "Cancelled a running job".to_owned(),
             Self::InspectUi => "Read the interface settings".to_owned(),
             Self::UpdateUi { .. } => "Changed the interface".to_owned(),
+            Self::Module { tool, arguments } if tool == modules::WEB_FETCH_TOOL => format!(
+                "Read {}",
+                path(
+                    arguments
+                        .get("url")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                )
+            ),
+            Self::Module { tool, arguments } if tool == modules::WEB_SEARCH_TOOL => format!(
+                "Searched the web for \"{}\"",
+                path(
+                    arguments
+                        .get("query")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                )
+            ),
             _ => "Used a tool".to_owned(),
         }
     }
@@ -2796,6 +2821,13 @@ pub enum AppCommand {
     SetHarnessCapabilityEnabled {
         capability_id: String,
         enabled: bool,
+    },
+    /// Change one owner setting of an agent module. Needs local owner
+    /// authority. An empty value removes the setting.
+    SetModuleSetting {
+        module_id: String,
+        key: String,
+        value: String,
     },
     ListApprovalGrants,
     RevokeApprovalGrant {

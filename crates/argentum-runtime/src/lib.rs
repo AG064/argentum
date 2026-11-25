@@ -882,6 +882,10 @@ impl RuntimeService {
             )?;
         }
         let (events, _) = broadcast::channel(256);
+        // Module tools are always registered. Each one is offered to the model
+        // and admitted only while its module's capability is on in the policy.
+        let mut tools = tools;
+        argentum_modules::register_module_tools(&mut tools);
         let runtime = Self {
             diagnostics: diagnostics::DiagnosticCapture::default(),
             harness_publication: Arc::new(Mutex::new(())),
@@ -2408,6 +2412,7 @@ impl RuntimeService {
             &command,
             AppCommand::SelectExecutionProfile { .. }
                 | AppCommand::SetHarnessCapabilityEnabled { .. }
+                | AppCommand::SetModuleSetting { .. }
                 | AppCommand::SetOnboardingPermission { .. }
                 | AppCommand::ApproveTool { .. }
         ) || ticket.is_some();
@@ -2947,6 +2952,21 @@ impl RuntimeService {
                     self.revoke_extensions().await?;
                 }
                 self.set_harness_capability_enabled(capability_id, enabled, authority)
+            }
+            AppCommand::SetModuleSetting {
+                module_id,
+                key,
+                value,
+            } => {
+                let action = LocalAuthorityAction::ChangeModuleSetting {
+                    module_id: module_id.clone(),
+                    key: key.clone(),
+                    value: value.clone(),
+                };
+                self.authorize_exact_local_action(Some(&action), authority)?;
+                self.store
+                    .save_module_setting(self.project_id, &module_id, &key, &value)?;
+                Ok(())
             }
             AppCommand::ListApprovalGrants => {
                 let (grants, coverage) = self
@@ -7445,6 +7465,33 @@ impl RuntimeService {
         Ok(self.tools.descriptor_for_input(&request.input)?)
     }
 
+    /// What an approval covers. For a module tool the module names it from
+    /// parsed arguments and the owner's settings, such as `web host x.org`.
+    fn tool_target_for(&self, input: &ToolInput) -> Result<String, RuntimeError> {
+        if let ToolInput::Module { tool, arguments } = input {
+            let settings = self.store.load_module_settings(self.project_id)?;
+            if let Some((target, _)) = argentum_modules::approval_text(tool, arguments, &settings) {
+                return Ok(target);
+            }
+        }
+        Ok(tool_target(input))
+    }
+
+    /// A module tool's binding is its target, not the exact arguments, so an
+    /// action grant covers one host and not one address.
+    fn tool_binding_for(&self, input: &ToolInput) -> Result<Sha256Digest, RuntimeError> {
+        if let ToolInput::Module { tool, .. } = input {
+            let target = self.tool_target_for(input)?;
+            let mut hasher = Sha256::new();
+            for part in ["module", tool.as_str(), target.as_str()] {
+                hasher.update(u64::try_from(part.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(part.as_bytes());
+            }
+            return Ok(Sha256Digest(format!("{:x}", hasher.finalize())));
+        }
+        tool_binding(input)
+    }
+
     fn authorize_tool_request(
         &self,
         request: &ToolRequest,
@@ -7465,12 +7512,12 @@ impl RuntimeService {
         let session_id = self
             .session_for_run(request.run_id)
             .unwrap_or_else(|| self.session_id());
-        let target = tool_target(&request.input);
+        let target = self.tool_target_for(&request.input)?;
         let binding = match &request.input {
             ToolInput::Verify { runners } => {
                 self.tools.verification_binding(&self.workspace, runners)?
             }
-            _ => tool_binding(&request.input)?,
+            _ => self.tool_binding_for(&request.input)?,
         };
         let subjects = [
             GrantSubject::Action {
@@ -7728,18 +7775,27 @@ impl RuntimeService {
         descriptor: argentum_domain::ToolDescriptor,
     ) -> Result<ApprovalRequest, RuntimeError> {
         let action = tool_action(&request.input).to_owned();
-        let target = tool_target(&request.input);
-        let reason = format!(
+        let target = self.tool_target_for(&request.input)?;
+        let mut reason = format!(
             "Argentum requested permission to {}.",
             action.to_lowercase()
         );
+        if let ToolInput::Module { tool, arguments } = &request.input {
+            let settings = self.store.load_module_settings(self.project_id)?;
+            if let Some((_, detail)) = argentum_modules::approval_text(tool, arguments, &settings) {
+                reason = format!(
+                    "{reason} {}. A longer approval allows {target} only, for this tool.",
+                    truncate_utf8_bytes(detail, 2048)
+                );
+            }
+        }
         Ok(ApprovalRequest {
             id: Uuid::new_v4(),
             run_id: request.run_id,
             tool_id: descriptor.id,
             action,
             target,
-            binding: tool_binding(&request.input)?,
+            binding: self.tool_binding_for(&request.input)?,
             reason,
             capabilities: descriptor.capabilities,
             scope: ApprovalScope::Once,
@@ -7757,7 +7813,16 @@ impl RuntimeService {
             .session_for_run(request.run_id)
             .unwrap_or_else(|| self.session_id());
         let policy = self.load_execution_policy()?;
-        let grant_scope = scope.grant_scope();
+        let mut grant_scope = scope.grant_scope();
+        // Network approvals are per host. A longer approval for a network tool
+        // covers the approved host only, never every host for a run or session.
+        if approval
+            .capabilities
+            .contains(&argentum_domain::Capability::Network)
+            && !matches!(grant_scope, GrantScope::ToolCall | GrantScope::Action)
+        {
+            grant_scope = GrantScope::Action;
+        }
         let subject = match grant_scope {
             GrantScope::Action => GrantSubject::Action {
                 tool_id: approval.tool_id.clone(),
@@ -9036,7 +9101,7 @@ impl RuntimeService {
             self.ensure_path_not_in_recovery(&binding.relative_path)?;
         }
         let tool_id = descriptor.id.clone();
-        let target = tool_target(&request.input);
+        let target = self.tool_target_for(&request.input)?;
         let session_id = self
             .session_for_run(request.run_id)
             .unwrap_or_else(|| self.session_id());
@@ -9123,7 +9188,8 @@ impl RuntimeService {
                 self.project_id,
                 session_id,
                 self.workspace_key.clone(),
-            );
+            )
+            .with_module_settings(Arc::new(self.store.load_module_settings(self.project_id)?));
             #[cfg(feature = "extensions")]
             {
                 context.extension_executor = Some(self.extension_owner());
@@ -10363,6 +10429,13 @@ fn extension_parameters() -> serde_json::Value {
 }
 
 fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinition> {
+    if let Some(tool) = argentum_modules::module_tool(&descriptor.id) {
+        return Some(ModelToolDefinition {
+            name: descriptor.id.clone(),
+            description: descriptor.summary.clone(),
+            parameters: tool.parameters(),
+        });
+    }
     let path = serde_json::json!({ "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES });
     let desktop_rect = serde_json::json!({
         "type": "object",
@@ -10682,6 +10755,8 @@ fn tool_action(input: &ToolInput) -> &'static str {
         ToolInput::DesktopScreenshot { .. } => "Capture desktop window",
         ToolInput::InspectUi => "Read the interface settings",
         ToolInput::UpdateUi { .. } => "Change the interface",
+        ToolInput::Module { tool, .. } => argentum_domain::modules::module_for_tool(tool)
+            .map_or("Use a module tool", |(_, spec)| spec.title),
     }
 }
 
@@ -10746,6 +10821,9 @@ fn mutation_summary(bindings: &[WriteApprovalBinding], completed: bool) -> Optio
 
 fn tool_target(input: &ToolInput) -> String {
     match input {
+        // Module targets depend on owner settings; the runtime computes them
+        // with `module_tool_target`. This fallback is never an approval key.
+        ToolInput::Module { tool, .. } => format!("module tool {tool}"),
         ToolInput::InspectUi => "interface".to_owned(),
         ToolInput::UpdateUi { patch } => patch.describe(),
         ToolInput::Extension { operation } => format!(
@@ -10975,6 +11053,9 @@ fn model_input_failure(code: PreflightCode, issue: Option<FeedbackIssue>) -> Mod
 }
 
 fn parse_model_tool_input(call: &ModelToolCall) -> Result<ToolInput, ModelInputFailure> {
+    if let Some(parsed) = argentum_modules::parse_model_call(&call.name, &call.arguments) {
+        return parsed.map_err(|_| model_input_failure(PreflightCode::InvalidArguments, None));
+    }
     if call.name == "ui_inspect" {
         return Ok(ToolInput::InspectUi);
     }
@@ -11772,7 +11853,7 @@ fn validate_model_tool_input(
         | ToolInput::DesktopScreenshot { .. }
         | ToolInput::InspectUi
         | ToolInput::UpdateUi { .. } => Vec::new(),
-        ToolInput::Extension { .. } => Vec::new(),
+        ToolInput::Extension { .. } | ToolInput::Module { .. } => Vec::new(),
     };
     for path in paths {
         validate_model_tool_path(path, scope)?;
@@ -12709,6 +12790,7 @@ mod tests {
     mod grant_lookup_tests;
     mod local_contained_tests;
     mod minimax_continuation_tests;
+    mod module_tests;
     mod review_tests;
     mod steering_tests;
     mod text_tests;

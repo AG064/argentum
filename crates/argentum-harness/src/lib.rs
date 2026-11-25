@@ -980,7 +980,7 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
             "tool.network",
             "Network tool",
             HarnessCapabilityKind::Tool,
-            "No model-facing network tool is registered.",
+            "No general network tool. Web fetch and Web search are separate agent modules with their own switches.",
         ),
         configurable_capability(
             "git.read",
@@ -1036,6 +1036,31 @@ fn built_in_capabilities() -> Vec<CapabilityRegistration> {
         optional_rust_check_capability(),
         desktop_control_capability(),
     ]
+    .into_iter()
+    .chain(agent_module_capabilities())
+    .collect()
+}
+
+/// One switch per agent module, off by default. The detail names the
+/// permissions its tools need, so the owner reads them before turning it on.
+fn agent_module_capabilities() -> impl Iterator<Item = CapabilityRegistration> {
+    argentum_domain::modules::FIRST_PARTY_MODULES
+        .iter()
+        .map(|module| {
+            let permissions = module
+                .permissions
+                .iter()
+                .map(|permission| permission.label())
+                .collect::<Vec<_>>()
+                .join(", ");
+            disabled_configurable_capability(
+                module.capability_id,
+                module.label,
+                HarnessCapabilityKind::Integration,
+                &format!("{} Needs: {permissions}.", module.summary),
+                vec!["approval.write"],
+            )
+        })
 }
 
 fn desktop_control_capability() -> CapabilityRegistration {
@@ -2023,8 +2048,9 @@ mod tests {
 
         assert_eq!(policy.profile_id, CUSTOM_EXECUTION_PROFILE_ID);
         // Release builds list the Page reader as coming soon, so it is not
-        // configurable there.
-        let configurable = if PREVIEW_MODULES { 23 } else { 22 };
+        // configurable there. The last two are the Web fetch and Web search
+        // agent modules.
+        let configurable = if PREVIEW_MODULES { 25 } else { 24 };
         assert_eq!(policy.capability_enabled.len(), configurable);
         assert_eq!(
             policy
@@ -2032,6 +2058,9 @@ mod tests {
                 .get("verification.supplemental-rust"),
             Some(&false)
         );
+        for module in ["module.web-fetch", "module.web-search"] {
+            assert_eq!(policy.capability_enabled.get(module), Some(&false));
+        }
         assert_eq!(
             policy.capability_enabled.get("tool.read-text"),
             Some(&false)

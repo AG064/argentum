@@ -363,6 +363,7 @@ version = "0.1.0"
 dependencies = [
  "argentum-domain",
  "reqwest",
+ "serde_json",
  "tokio",
  "url",
 ]
@@ -534,6 +535,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "argentum-modules"
+version = "0.1.0"
+dependencies = [
+ "argentum-browser",
+ "argentum-domain",
+ "argentum-security",
+ "argentum-tools",
+ "argentum-workspaces",
+ "async-trait",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "argentum-platform"
 version = "0.1.0"
 dependencies = [
@@ -609,6 +626,7 @@ dependencies = [
  "argentum-gitview",
  "argentum-harness",
  "argentum-import",
+ "argentum-modules",
  "argentum-platform",
  "argentum-providers",
  "argentum-security",

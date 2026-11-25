@@ -103,6 +103,11 @@ pub enum LocalAuthorityAction {
     ActivateExtension {
         binding: Sha256Digest,
     },
+    ChangeModuleSetting {
+        module_id: String,
+        key: String,
+        value: String,
+    },
 }
 
 impl LocalAuthorityAction {
@@ -116,6 +121,7 @@ impl LocalAuthorityAction {
             Self::ActivatePlatformTier { .. } => "activate_platform_tier",
             Self::ResolveGoalAccounting { .. } => "resolve_goal_accounting",
             Self::ActivateExtension { .. } => "activate_extension",
+            Self::ChangeModuleSetting { .. } => "change_module_setting",
         }
     }
 
@@ -149,6 +155,21 @@ impl LocalAuthorityAction {
             Self::ActivatePlatformTier { probe, .. } => validate_digest(probe),
             Self::ResolveGoalAccounting { binding } => validate_digest(binding),
             Self::ActivateExtension { binding } => validate_digest(binding),
+            Self::ChangeModuleSetting {
+                module_id,
+                key,
+                value,
+            } => {
+                if is_valid_capability_id(module_id)
+                    && is_valid_capability_id(key)
+                    && value.len() <= 2048
+                    && !value.chars().any(char::is_control)
+                {
+                    Ok(())
+                } else {
+                    Err(SecurityError::LocalAuthorityInvalidCapability)
+                }
+            }
         }
     }
 }

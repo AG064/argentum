@@ -219,7 +219,8 @@ fn file_paths(input: &ToolInput) -> (Vec<(&str, bool)>, bool) {
         | DesktopPressKeys { .. }
         | DesktopScreenshot { .. }
         | InspectUi
-        | UpdateUi { .. } => (vec![], false),
+        | UpdateUi { .. }
+        | Module { .. } => (vec![], false),
     }
 }
 

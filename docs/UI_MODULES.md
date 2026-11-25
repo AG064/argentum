@@ -66,6 +66,10 @@ Activity and Trajectory are filled by services of the same names under Settings 
 Capabilities > Harness services. Turning either module on, by itself or with a set,
 starts its service too. Both only read the session's own records.
 
+Agent modules, which add tools for the agent such as Web fetch, are separate.
+They are switched in Settings > Capabilities and described in
+`docs/AGENT_MODULES.md`.
+
 ## A module never grants authority
 
 Turning a module on changes what is shown. The capability behind it is decided
