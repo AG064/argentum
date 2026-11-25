@@ -46,6 +46,7 @@ the zips or the APK.
 | Isolated first-run and restart | Fresh profile first run, then restart, from the installed app and from the extracted zip | Manual, on a Windows PC; record the result in the release notes |
 | Outside-checkout launch with spaces and non-ASCII paths | Extract the zip to a folder such as `D:\Release Test Ä\Argentum` and start `Argentum.exe` and `argentum.exe --version` | Manual, on a Windows PC |
 | Android release build and signing | `./gradlew :app:assembleRelease` builds the native libraries with cargo-ndk, then CI signs the APK. `apksigner verify --print-certs`, only `arm64-v8a` libraries | `Release` workflow, job `android`, step "Check the signed APK" |
+| Android emulator UI tests | The debug APK opens, first run accepts a local server, Ctrl+, opens Settings, Back closes Settings and the drawer without leaving the app, and a message reaches a fake provider and its reply is shown | `Android emulator` workflow, job `emulator`, artifact `android-emulator-evidence` (screenshots, logcat, instrumentation output) |
 | Android device qualification | Install the signed APK on an arm64 device, first run, restart | Manual, on a device; record the device and Android version |
 | Slint visual acceptance | Owner review of the desktop and Android UI on real screens | Manual, owner |
 | Code signing | Windows, Linux and macOS files are not code signed, and the macOS app is not notarized | Release notes state it |
