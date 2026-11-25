@@ -168,6 +168,16 @@ export struct ToolCatalogView {
     requires_approval: bool,
 }
 
+// One thing found in Claude Code, Codex or OpenCode settings.
+export struct ImportRowView {
+    id: string,
+    summary: string,
+    detail: string,
+    note: string,
+    importable: bool,
+    ticked: bool,
+}
+
 export struct SkillCatalogView {
     name: string,
     description: string,

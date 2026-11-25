@@ -932,6 +932,7 @@ where
     }
     {
         let send_patch = send_patch.clone();
+        let dispatch = dispatch.clone();
         let weak = window.as_weak();
         app.on_first_run_finish(move || {
             if let Some(window) = weak.upgrade() {
@@ -948,6 +949,12 @@ where
                 first_run_complete: Some(true),
                 ..UiPatch::default()
             });
+            // First run offers to import from other agents, if anything is
+            // there. The scan only reads; nothing is imported until ticked.
+            if let Some(window) = weak.upgrade() {
+                window.global::<App>().set_import_offer_pending(true);
+            }
+            dispatch(AppCommand::ScanImports);
         });
     }
 

@@ -312,6 +312,17 @@ fn read_document(
     Ok(SkillInspection { summary, body })
 }
 
+/// Checks a whole `SKILL.md` text the way discovery reads it, and returns its
+/// name. Used before a skill file is written, so a written skill always loads.
+pub fn check_skill_document(text: &str) -> Result<String, SkillError> {
+    if text.len() > MAX_SKILL_FILE_BYTES {
+        return Err(SkillError::FileTooLarge {
+            limit_bytes: MAX_SKILL_FILE_BYTES,
+        });
+    }
+    parse_document(text).map(|(frontmatter, _)| frontmatter.name)
+}
+
 fn parse_document(text: &str) -> Result<(SkillFrontmatter, String), SkillError> {
     let mut lines = text.split_inclusive('\n');
     let opening = lines

@@ -647,6 +647,11 @@ impl UiHandle {
                     .into(),
                 );
             }
+            AppEvent::ImportScanSnapshot {
+                items,
+                problems,
+                results,
+            } => self.apply_import_scan(items, problems, results),
             AppEvent::SkillInspectionSnapshot { inspection } => {
                 self.window
                     .set_skill_selected(inspection.name.clone().into());
@@ -2634,6 +2639,31 @@ impl UiHandle {
 
     /// First run shows the provider chooser and nothing else. A workspace already
     /// using another provider has made that choice, so it skips straight in.
+    fn apply_import_scan(
+        &self,
+        items: &[argentum_domain::imports::ImportItemView],
+        problems: &[String],
+        results: &[argentum_domain::imports::ImportResultView],
+    ) {
+        let app = self.window.global::<App>();
+        app.set_import_items(import_rows(items));
+        app.set_import_loading(false);
+        app.set_import_status(import_status_text(problems, results).into());
+        let importable = items.iter().filter(|item| item.importable).count();
+        if app.get_import_offer_pending() {
+            app.set_import_offer_pending(false);
+            if importable > 0 {
+                self.window.set_toast_text(
+                    format!(
+                        "Found {importable} item{} from Claude Code, Codex or OpenCode. Choose what to import in Settings > Tools and skills.",
+                        if importable == 1 { "" } else { "s" }
+                    )
+                    .into(),
+                );
+            }
+        }
+    }
+
     fn reconcile_first_run(&self, complete: bool) {
         let chose_provider = !self.window.get_provider_id().is_empty()
             && self.window.get_provider_id().as_str() != argentum_domain::DEFAULT_PROVIDER_ID;
@@ -4696,6 +4726,61 @@ fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
     ModelRc::new(VecModel::from(rows))
 }
 
+fn import_rows(items: &[argentum_domain::imports::ImportItemView]) -> ModelRc<ImportRowView> {
+    let rows = items
+        .iter()
+        .map(|item| {
+            let mut detail = format!("From {} ({})", item.source_path, item.origin.label());
+            if let Some(destination) = &item.destination {
+                detail.push_str(&format!(". Would write {destination}"));
+            }
+            let mut notes = Vec::new();
+            if let Some(conflict) = &item.conflict {
+                notes.push(format!("Cannot import: {conflict}"));
+            }
+            if !item.dropped.is_empty() {
+                notes.push(format!("Left out: {}", item.dropped.join("; ")));
+            }
+            ImportRowView {
+                id: item.id.clone().into(),
+                summary: item.summary.clone().into(),
+                detail: detail.into(),
+                note: notes.join(". ").into(),
+                importable: item.importable,
+                ticked: false,
+            }
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn import_status_text(
+    problems: &[String],
+    results: &[argentum_domain::imports::ImportResultView],
+) -> String {
+    let mut lines: Vec<String> = results
+        .iter()
+        .map(|result| {
+            format!(
+                "{} {}: {}",
+                if result.imported {
+                    "Imported"
+                } else {
+                    "Skipped"
+                },
+                result.id,
+                result.detail
+            )
+        })
+        .collect();
+    lines.extend(
+        problems
+            .iter()
+            .map(|problem| format!("Could not read {problem}")),
+    );
+    lines.join("\n")
+}
+
 fn skill_catalog_model(skills: &[SkillSummaryView]) -> ModelRc<SkillCatalogView> {
     let rows = skills
         .iter()
@@ -6415,6 +6500,52 @@ where
             window.set_skill_catalog_error(SharedString::default());
         }
         skill_catalog_dispatch(AppCommand::ListSkillCatalog);
+    });
+
+    let import_dispatch = dispatch.clone();
+    let import_window = window.as_weak();
+    window.global::<App>().on_scan_imports(move || {
+        if let Some(window) = import_window.upgrade() {
+            window.global::<App>().set_import_loading(true);
+        }
+        import_dispatch(AppCommand::ScanImports);
+    });
+    let import_window = window.as_weak();
+    window.global::<App>().on_toggle_import(move |id, on| {
+        let Some(window) = import_window.upgrade() else {
+            return;
+        };
+        let items = window.global::<App>().get_import_items();
+        for index in 0..items.row_count() {
+            if let Some(mut row) = items.row_data(index) {
+                if row.id == id && row.importable {
+                    row.ticked = on;
+                    items.set_row_data(index, row);
+                }
+            }
+        }
+    });
+    let import_dispatch = dispatch.clone();
+    let import_window = window.as_weak();
+    window.global::<App>().on_import_ticked(move || {
+        let Some(window) = import_window.upgrade() else {
+            return;
+        };
+        let ids: Vec<String> = window
+            .global::<App>()
+            .get_import_items()
+            .iter()
+            .filter(|row| row.ticked && row.importable)
+            .map(|row| row.id.to_string())
+            .collect();
+        if ids.is_empty() {
+            window
+                .global::<App>()
+                .set_import_status("Tick at least one item to import.".into());
+            return;
+        }
+        window.global::<App>().set_import_loading(true);
+        import_dispatch(AppCommand::ImportItems { ids });
     });
 
     let inspect_skill_dispatch = dispatch.clone();

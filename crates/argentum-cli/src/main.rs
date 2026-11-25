@@ -17,6 +17,7 @@ mod doctor_cli;
 mod extension_browser_cli;
 #[cfg(feature = "extensions")]
 mod extension_cli;
+mod import_cli;
 mod json_contract;
 mod local_readiness;
 mod model_picker;
@@ -1430,6 +1431,21 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
         } => {
             run_desktop_command(options, action, json).await?;
         }
+        Arguments::Import {
+            options,
+            select,
+            all,
+            json,
+        } => {
+            import_cli::run(import_cli::ImportOptions {
+                workspace: options.workspace,
+                database: options.database,
+                select,
+                all,
+                json,
+                non_interactive: options.non_interactive,
+            })?;
+        }
         Arguments::Instructions { options, directory } => {
             Box::pin(run_instruction_preview_command(
                 options.host_config()?,
@@ -1812,7 +1828,12 @@ async fn run_setup_command(
         if local_chat {
             return run_local_chat_host(host, !local_authority_observed).await;
         }
-        let output_result = write_setup_text(&mut writer, "Setup complete.\n")
+        let mut text = "Setup complete.\n".to_owned();
+        if let Some(offer) = import_cli::first_run_offer(host.workspace_root()) {
+            text.push_str(&offer);
+            text.push('\n');
+        }
+        let output_result = write_setup_text(&mut writer, &text)
             .await
             .map_err(|error| Box::new(error) as Box<dyn std::error::Error>);
         finish_host_operation(output_result, host.shutdown().await)
@@ -6101,6 +6122,12 @@ enum Arguments {
         action: SkillAction,
         json: bool,
     },
+    Import {
+        options: CommonOptions,
+        select: Vec<String>,
+        all: bool,
+        json: bool,
+    },
     Status {
         options: CommonOptions,
         json: bool,
@@ -6852,6 +6879,8 @@ where
     let mut changes_cursor = None;
     let mut tool_action = None;
     let mut instruction_directory = String::new();
+    let mut import_select: Vec<String> = Vec::new();
+    let mut import_all = false;
     let mut permission_action = None;
     let mut permission_target = None;
     let mut verification_action = None;
@@ -6981,6 +7010,11 @@ where
                     required_value(&values, index, "--limits")?,
                 )?);
             }
+            "--select" if command == "import" => {
+                index += 1;
+                import_select.push(required_value(&values, index, "--select")?.to_owned());
+            }
+            "--all" if command == "import" => import_all = true,
             "--directory" if command == "instructions" => {
                 index += 1;
                 instruction_directory = required_value(&values, index, "--directory")?.to_owned();
@@ -7501,6 +7535,13 @@ where
         return Err("--isolated requires absolute --workspace and --database paths; global workspace changes are unavailable".into());
     }
     match command {
+        "import" if prompt.is_some() => Err("import does not accept a prompt".into()),
+        "import" => Ok(Arguments::Import {
+            options,
+            select: import_select,
+            all: import_all,
+            json,
+        }),
         "instructions" if prompt.is_some() => Err("instructions does not accept a prompt".into()),
         "instructions" => Ok(Arguments::Instructions { options, directory: instruction_directory }),
         "context" if prompt.is_some() => Err("context does not accept a prompt".into()),

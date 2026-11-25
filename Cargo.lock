@@ -388,6 +388,7 @@ dependencies = [
  "argentum-domain",
  "argentum-execution",
  "argentum-extensions",
+ "argentum-import",
  "argentum-platform",
  "argentum-providers",
  "argentum-runtime",
@@ -506,6 +507,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "argentum-import"
+version = "0.1.0"
+dependencies = [
+ "argentum-domain",
+ "argentum-security",
+ "argentum-workspaces",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
 name = "argentum-lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -592,6 +608,7 @@ dependencies = [
  "argentum-extensions",
  "argentum-gitview",
  "argentum-harness",
+ "argentum-import",
  "argentum-platform",
  "argentum-providers",
  "argentum-security",

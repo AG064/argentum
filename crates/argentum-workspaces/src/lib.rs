@@ -24,8 +24,8 @@ pub use verification_inputs::{
 };
 
 pub use skills::{
-    discover_skills, inspect_skill, select_skill, SelectedSkill, SkillCatalog, SkillError,
-    SkillInspection, SkillSummary,
+    check_skill_document, discover_skills, inspect_skill, select_skill, SelectedSkill,
+    SkillCatalog, SkillError, SkillInspection, SkillSummary, SKILL_ROOT_RELATIVE_PATH,
 };
 
 pub use search::{

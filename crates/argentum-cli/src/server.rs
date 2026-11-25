@@ -869,7 +869,11 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         // Spend limits are the owner's setting, in the app or the local CLI.
         | AppCommand::SetProviderSpendLimit { .. }
         // A balance is read with the owner's key, only when the owner asks in the app.
-        | AppCommand::LoadProviderBalance { .. } => false,
+        | AppCommand::LoadProviderBalance { .. }
+        // Imports read the owner's other agents' settings and write project
+        // skills, only when the owner asks in the app or the local CLI.
+        | AppCommand::ScanImports
+        | AppCommand::ImportItems { .. } => false,
     }
 }
 

@@ -97,6 +97,13 @@ The first stable release, for Windows x64 and Android arm64:
 - **No telemetry check:** CI fails if an analytics, telemetry or
   crash-reporting dependency or host appears, and `SECURITY.md` states the
   rule.
+- **Coming from Claude Code, Codex or OpenCode:** `CLAUDE.md` and
+  `CLAUDE.local.md` load next to `AGENTS.md` in each folder. `argentum import`,
+  Settings > Tools and skills, and a notice after first-run setup list the MCP
+  servers, skills and custom commands found in those agents' usual places, and
+  import only what you tick. Servers are saved turned off without their secret
+  values, skills keep no allowed tools, and nothing is overwritten. Importing
+  grants no permission.
 
 ## Planned for 0.1.1
 

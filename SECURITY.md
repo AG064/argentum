@@ -68,6 +68,7 @@ Argentum is a single-user app. It limits what the agent can do on your behalf an
 | Android "All files access" | Off. When you turn it on, the app can reach shared storage, and file tools still stay inside the folder you chose. |
 | Windows desktop control and extensions | Only in the separate `argentum-genesis-desktop-control` CLI download. Desktop control can inspect windows and send keys to a Windows application you name. Every desktop action asks first, in every permission profile, and password fields are never read or captured. Extensions, MCP servers, and the Playwright browser adapter run as local programs with your account's access, only after you review and activate them. Node.js and the browser are installed separately. |
 | Local PDF artifacts | Not in any release file. Optional at build time. |
+| Import from other agents | Reads Claude Code, Codex and OpenCode settings only when you open the import list. Imports only what you tick: MCP servers as drafts that are off, without environment or header values; skills and commands as new files in `.agents/skills`, without `allowed-tools`, never replacing a file. It grants no permission and cannot be started by the agent, over JSONL or from a paired device. |
 
 ## Network use
 
