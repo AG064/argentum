@@ -3,6 +3,7 @@
 
 pub mod devices_ui;
 mod local_addon;
+mod market;
 pub mod native_host;
 pub mod remote_control;
 pub mod session_export;

@@ -312,6 +312,19 @@ export struct AddonModelView {
     detail: string,
 }
 
+// One Hugging Face search result in the model marketplace.
+export struct MarketRepoView {
+    id: string,
+    detail: string,
+}
+
+// One downloadable GGUF file, or split set, of a marketplace repository.
+export struct MarketFileView {
+    index: int,
+    label: string,
+    detail: string,
+}
+
 export struct DiagnosticRecordView {
     code: string,
     detail: string,

@@ -23,6 +23,7 @@ use url::Url;
 
 pub mod addon;
 mod der;
+pub mod hub;
 pub mod sigstore;
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
