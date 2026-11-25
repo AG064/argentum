@@ -9,6 +9,7 @@
 
 ## Getting started
 
+- [Guided tutorials](site/src/README.md): short task-based guides, also built as the documentation site
 - [Systems, requirements and support](SUPPORT_MATRIX.md)
 - [Providers](PROVIDERS.md): every provider preset, its address, and its key variable
 - [Argentum on Android](ANDROID_HOST.md)

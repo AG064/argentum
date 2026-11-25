@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+#
+# Builds the documentation site from docs/site, checks that it loads nothing
+# from other hosts and that its links resolve, and keeps the built site as a
+# preview artifact. Publishing to GitHub Pages runs only from development, and
+# only after the repository variable DOCS_SITE_PUBLISH is set to 'true' and
+# Pages is enabled with GitHub Actions as its source.
+name: Documentation site
+on:
+  push:
+    branches: [development, 'docs/**']
+    paths:
+      - 'docs/**'
+      - 'SECURITY.md'
+      - 'CONTRIBUTING.md'
+      - 'ROADMAP.md'
+      - 'scripts/check-docs-site.py'
+      - '.github/workflows/docs-site.yml'
+  pull_request:
+    branches: [development]
+    paths:
+      - 'docs/**'
+      - 'SECURITY.md'
+      - 'CONTRIBUTING.md'
+      - 'ROADMAP.md'
+      - 'scripts/check-docs-site.py'
+      - '.github/workflows/docs-site.yml'
+  workflow_dispatch:
+  schedule:
+    # Weekly external link check, so a moved page elsewhere shows up.
+    - cron: '23 4 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: docs-site-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned mdBook
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39
+        with:
+          tool: mdbook@0.5.4
+      - name: Build the site
+        run: mdbook build docs/site
+      - name: Check privacy and links
+        run: python3 scripts/check-docs-site.py docs/site/book
+      - name: Check external links
+        # Other sites rate-limit or refuse automated requests, so this reports
+        # without failing the build. Internal and repository links are checked
+        # above and do fail it.
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8
+        with:
+          args: >-
+            --no-progress
+            --max-retries 2
+            --accept 200,206,403,429
+            --exclude '^https://github\.com/AG064/argentum/(blob|tree|edit)/'
+            --exclude '^file://'
+            docs/site/book
+          fail: true
+          jobSummary: true
+      - name: Keep the built site as a preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: docs-site-preview-${{ github.run_id }}
+          path: docs/site/book
+          if-no-files-found: error
+          retention-days: 14
+      - name: Prepare the Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/development' && vars.DOCS_SITE_PUBLISH == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: docs/site/book
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development' && vars.DOCS_SITE_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346

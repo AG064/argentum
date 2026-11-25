@@ -16,6 +16,8 @@ path = [
     "crates/argentum-update/pins/**",
     "assets/brand/**",
     "docs/screenshots/**",
+    "docs/site/src/images/**",
+    "docs/site/theme/favicon.png",
     "platforms/android/gradle/verification-metadata.xml",
     ".editorconfig",
     ".gitattributes",

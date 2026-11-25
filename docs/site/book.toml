@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+#
+# The Argentum documentation site. Build with `mdbook build docs/site`.
+# The site loads nothing from other hosts: no analytics, no web fonts from a
+# CDN, no remote scripts. scripts/check-docs-site.py enforces this in CI.
+
+[book]
+title = "Argentum documentation"
+description = "Short guides for Argentum, the modular agent harness for desktop and mobile."
+authors = ["AG064"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/AG064/argentum"
+edit-url-template = "https://github.com/AG064/argentum/edit/development/docs/site/{path}"
+site-url = "/argentum/"
+no-section-label = true
+mathjax-support = false
+
+[output.html.playground]
+runnable = false
+copyable = true
+
+[output.html.search]
+enable = true
+
+[output.html.print]
+enable = false
