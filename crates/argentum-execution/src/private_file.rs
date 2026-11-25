@@ -384,12 +384,31 @@ fn reject_reparse_points(path: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
+/// A link only root can change, in a folder only root can change, such as
+/// `/var`, `/tmp` and `/etc` on macOS. No other user can swap it.
+#[cfg(unix)]
+fn system_owned_link(link: &Path, metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    const GROUP_OR_OTHER_WRITE: u32 = 0o022;
+    metadata.uid() == 0
+        && link
+            .parent()
+            .and_then(|parent| std::fs::symlink_metadata(parent).ok())
+            .is_some_and(|parent| {
+                parent.is_dir() && parent.uid() == 0 && parent.mode() & GROUP_OR_OTHER_WRITE == 0
+            })
+}
+
 #[cfg(not(windows))]
 fn reject_reparse_points(path: &Path) -> Result<(), std::io::Error> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
         match std::fs::symlink_metadata(&current) {
+            #[cfg(unix)]
+            Ok(metadata)
+                if metadata.file_type().is_symlink() && system_owned_link(&current, &metadata) => {}
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,

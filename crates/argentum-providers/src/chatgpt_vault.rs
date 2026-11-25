@@ -306,10 +306,49 @@ impl Drop for Lock {
         }
     }
 }
+/// An exclusive `flock` on a private file in the data folder. Like the Windows
+/// mutex, it serializes token rotation between Argentum processes of this user.
+#[cfg(all(unix, not(target_os = "android")))]
+pub(crate) struct Lock {
+    _file: std::fs::File,
+}
+#[cfg(all(unix, not(target_os = "android")))]
+impl Lock {
+    pub fn acquire() -> Result<Self, AuthError> {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        use rustix::fs::{flock, FlockOperation, OFlags};
+
+        const WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+        let paths = argentum_platform::AppPaths::discover().map_err(|_| AuthError::Storage)?;
+        std::fs::create_dir_all(&paths.data_dir).map_err(|_| AuthError::Storage)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .mode(0o600)
+            .custom_flags(OFlags::NOFOLLOW.bits() as i32)
+            .open(paths.data_dir.join("chatgpt-credentials.lock"))
+            .map_err(|_| AuthError::Storage)?;
+        let deadline = std::time::Instant::now() + WAIT;
+        loop {
+            match flock(&file, FlockOperation::NonBlockingLockExclusive) {
+                Ok(()) => return Ok(Self { _file: file }),
+                Err(rustix::io::Errno::WOULDBLOCK | rustix::io::Errno::INTR)
+                    if std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(_) => return Err(AuthError::Storage),
+            }
+        }
+    }
+}
 // Do not pretend a process-local mutex serializes rotating tokens on other hosts.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, all(unix, not(target_os = "android")))))]
 pub(crate) struct Lock;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, all(unix, not(target_os = "android")))))]
 impl Lock {
     pub fn acquire() -> Result<Self, AuthError> {
         Err(AuthError::Storage)

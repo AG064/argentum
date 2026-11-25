@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
+// Some fixtures serve only the Windows supplemental-check controls.
+#![cfg_attr(not(windows), allow(dead_code))]
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
@@ -1154,6 +1156,7 @@ fn public_check_frames(index: usize, request: &Value, case: PublicCheckCase) -> 
 }
 
 impl CliFixture {
+    #[cfg(windows)]
     fn allow_public_checks_via_owner(&self) {
         self.allow_usability_tools_via_owner();
         tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -1367,22 +1370,31 @@ fn first_attempt_streamed_contract_correction_edit_and_fixed_verification_preser
     );
 }
 
+// Supplemental Rust checks need a Windows AppContainer.
+#[cfg(windows)]
 #[test]
 fn model_authored_public_check_failure_guarded_repair_and_current_verification_cli() {
     public_check_cli_case(PublicCheckCase::GuardedRepair);
 }
+// Supplemental Rust checks need a Windows AppContainer.
+#[cfg(windows)]
 #[test]
 fn public_check_incorrect_expectation_is_corrected_without_relabeling() {
     public_check_cli_case(PublicCheckCase::CorrectExpectation);
 }
+// Supplemental Rust checks need a Windows AppContainer.
+#[cfg(windows)]
 #[test]
 fn public_check_known_failure_cannot_be_hidden_by_final_prose() {
     public_check_cli_case(PublicCheckCase::FalseSuccess);
 }
+// Supplemental Rust checks need a Windows AppContainer.
+#[cfg(windows)]
 #[test]
 fn public_check_admission_failure_cannot_be_hidden_by_final_prose() {
     public_check_cli_case(PublicCheckCase::AdmissionFailure);
 }
+#[cfg(windows)]
 fn public_check_cli_case(case: PublicCheckCase) {
     let server = HttpFixture::start_public_checks(case);
     let fixture = CliFixture::new(&server.endpoint);

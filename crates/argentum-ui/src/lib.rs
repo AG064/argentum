@@ -8992,6 +8992,10 @@ Second grows
     }
 
     #[test]
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "Slint opens its event loop on the main thread on macOS; cargo test runs tests on worker threads"
+    )]
     fn event_callback_and_credential_projections_share_one_ui_instance() {
         let ui = UiHandle::new().expect("create UI projection");
         a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);

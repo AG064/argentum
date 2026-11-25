@@ -258,9 +258,9 @@ fn validate_branch_name(name: &str) -> Result<(), GitError> {
     }
 }
 
-// The Git tests run real Git, which Android does not have.
+// The Git tests run real Git through Windows commands; Android has no Git.
 #[cfg(test)]
-#[cfg_attr(target_os = "android", allow(unused_imports, dead_code))]
+#[cfg_attr(not(windows), allow(unused_imports, dead_code))]
 mod tests {
     use std::fs;
     use std::process::Command;

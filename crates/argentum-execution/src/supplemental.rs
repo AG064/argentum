@@ -2,10 +2,10 @@
 // Copyright (C) 2026 AG064
 
 //! Optional bounded Rust-library checks, always isolated on Windows.
-// Managed processes and checks are not offered on Android, so much of this
-// module is unused there.
+// The checks need a Windows AppContainer, so much of this module is unused on
+// other targets.
 #![cfg_attr(
-    target_os = "android",
+    not(windows),
     allow(dead_code, unused_imports, clippy::needless_return)
 )]
 use crate::ProcessJobOwner;

@@ -376,6 +376,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "Slint opens its event loop on the main thread on macOS; cargo test runs tests on worker threads"
+    )]
     fn pairing_and_the_devices_page_work_without_the_network() {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("argentum.db");

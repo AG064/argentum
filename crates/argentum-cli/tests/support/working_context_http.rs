@@ -518,15 +518,19 @@ fn f06a_authorized_edit_and_process_receipts_survive_without_reexecution() {
         "F06_PROCESS_BODY_PRIVATE\r\n",
     )
     .unwrap();
-    let process_command = format!(
-        "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; Get-Content -LiteralPath '{}'",
-        fixture
-            .workspace
-            .join("process-output.txt")
-            .display()
-            .to_string()
-            .replace('\'', "''")
-    );
+    let output_path = fixture
+        .workspace
+        .join("process-output.txt")
+        .display()
+        .to_string();
+    let process_command = if cfg!(windows) {
+        format!(
+            "Import-Module ($PSHOME+'\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1') -ErrorAction Stop; Get-Content -LiteralPath '{}'",
+            output_path.replace('\'', "''")
+        )
+    } else {
+        format!("cat '{}'", output_path.replace('\'', r"'\''"))
+    };
     let mut observed_read = Value::Null;
     let mut observed_edit = Value::Null;
     let mut process_output = String::new();

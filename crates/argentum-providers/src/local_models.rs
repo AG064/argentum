@@ -1421,7 +1421,7 @@ mod tests {
     #[test]
     fn local_download_target_uses_only_the_pinned_offer_filename() {
         let offer = local_model_offers().first().expect("starter offer");
-        let directory = Path::new(r"C:\Argentum\models");
+        let directory = &std::env::temp_dir().join("Argentum").join("models");
         assert_eq!(
             validate_download_destination(offer, directory).expect("download target"),
             directory.join(offer.filename)

@@ -2426,6 +2426,7 @@ fn process_tool_result(summary: &str, result: argentum_execution::ProcessResult)
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
+    #[cfg(windows)]
     use std::process::Command;
 
     use argentum_domain::{

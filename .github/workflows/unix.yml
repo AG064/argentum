@@ -28,7 +28,7 @@ jobs:
           - name: macos-x64
             os: macos-15-intel
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       CARGO_INCREMENTAL: '0'
       CARGO_PROFILE_DEV_DEBUG: '0'

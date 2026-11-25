@@ -35,7 +35,7 @@ fn permissions_output_projects_public_platform_authority() {
     let value: serde_json::Value =
         serde_json::from_slice(&json_output.stdout).expect("permissions JSON");
     let authority = &value["platform_authority"];
-    assert_eq!(authority["platform"], "windows");
+    assert_eq!(authority["platform"], std::env::consts::OS);
     assert_eq!(authority["requested_tier"], "standard");
     assert_eq!(authority["active_tier"], "standard");
     assert_eq!(authority["state"], "active");
@@ -50,8 +50,8 @@ fn permissions_output_projects_public_platform_authority() {
         String::from_utf8_lossy(&human_output.stderr)
     );
     let human = String::from_utf8(human_output.stdout).expect("human permissions output");
+    assert!(human.contains(&format!("Authority platform: {}", std::env::consts::OS)));
     for label in [
-        "Authority platform: windows",
         "Authority requested tier: Standard",
         "Authority active tier: Standard",
         "Authority state: Active",

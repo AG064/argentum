@@ -573,7 +573,29 @@ fn open_browser(url: &str) -> Result<(), AuthError> {
         Err(AuthError::Transport)
     }
 }
-#[cfg(not(windows))]
+/// The desktop's own URL handler at a fixed system path, never a PATH lookup
+/// or a shell. The URL is one argument.
+#[cfg(all(unix, not(target_os = "android")))]
+fn open_browser(url: &str) -> Result<(), AuthError> {
+    let opener = if cfg!(target_os = "macos") {
+        "/usr/bin/open"
+    } else {
+        "/usr/bin/xdg-open"
+    };
+    let status = std::process::Command::new(opener)
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|_| AuthError::Transport)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(AuthError::Transport)
+    }
+}
+#[cfg(not(any(windows, all(unix, not(target_os = "android")))))]
 fn open_browser(_url: &str) -> Result<(), AuthError> {
     Err(AuthError::Storage)
 }

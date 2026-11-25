@@ -13,6 +13,8 @@ pub const PDFIUM_DLL_SHA256: &str =
 pub const ARTIFACT_FONT_SHA256: &str =
     "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d";
 
+// The PDF worker runs only on Windows.
+#[cfg_attr(not(windows), allow(dead_code))]
 enum WorkerInput<'a> {
     Pdf(&'a [u8]),
     Markdown { source: &'a str, font: &'a Path },
