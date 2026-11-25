@@ -1421,10 +1421,13 @@ mod tests {
     #[test]
     fn local_download_target_uses_only_the_pinned_offer_filename() {
         let offer = local_model_offers().first().expect("starter offer");
-        let directory = &std::fs::canonicalize(std::env::temp_dir())
-            .expect("temp root")
-            .join("Argentum")
-            .join("models");
+        let directory = &if cfg!(windows) {
+            std::env::temp_dir()
+        } else {
+            std::fs::canonicalize(std::env::temp_dir()).expect("temp root")
+        }
+        .join("Argentum")
+        .join("models");
         assert_eq!(
             validate_download_destination(offer, directory).expect("download target"),
             directory.join(offer.filename)
