@@ -2835,8 +2835,11 @@ mod tests {
 
     #[test]
     fn discover_with_app_paths_uses_android_storage_and_inference_config() {
-        let data = tempfile::tempdir().expect("data root");
-        let workspace = tempfile::tempdir().expect("workspace");
+        // Below the resolved temp path: on macOS it runs through the /var link,
+        // which the data folder checks refuse.
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("temp root");
+        let data = tempfile::tempdir_in(&temp).expect("data root");
+        let workspace = tempfile::tempdir_in(&temp).expect("workspace");
         let paths = AppPaths::from_data_dir(data.path());
         let secret_store: Arc<dyn SecretStore> = Arc::new(UnavailableSecretStore);
 

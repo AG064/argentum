@@ -39,7 +39,8 @@ jobs:
       - name: Test an ordinary build
         run: |
           cargo test --locked -p argentum-cli --test benchmark_unattended
-          cargo test --locked -p argentum-execution --lib an_ordinary_build_refuses
+          # Ordinary Linux builds run commands in a process group too now.
+          cargo test --locked -p argentum-execution --lib process_group_tests
       - name: Test the benchmark build
         run: |
           cargo test --locked -p argentum-cli --features benchmark-unattended --test benchmark_unattended
