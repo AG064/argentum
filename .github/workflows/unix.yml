@@ -25,8 +25,11 @@ jobs:
             os: ubuntu-24.04
           - name: macos-arm64
             os: macos-15
+          # Intel runners take over two hours for the test suite, so this job
+          # builds, lints and starts the app; the tests run on Apple silicon.
           - name: macos-x64
             os: macos-15-intel
+            skip-tests: true
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     env:
@@ -60,7 +63,7 @@ jobs:
       # The UI tests open a window. Linux runners have no display, so they get a
       # virtual one; macOS runners have a desktop session.
       - name: Tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && !matrix.skip-tests }}
         run: |
           if [ "$RUNNER_OS" = Linux ]; then wrap='xvfb-run -a'; else wrap=''; fi
           $wrap cargo test --workspace --locked --offline --no-fail-fast
