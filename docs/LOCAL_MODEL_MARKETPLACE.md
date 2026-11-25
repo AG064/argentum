@@ -42,6 +42,35 @@ chosen as the llama.cpp model, and starting it asks for approval as before.
 - Model files have no publisher signature. The checksum proves the file is the
   one Hugging Face lists, not who made it. Read the model card and license.
 
+## Recommended for your hardware
+
+Argentum reads this computer's installed memory and its GPUs from Windows
+(`GlobalMemoryStatusEx` and DXGI adapter descriptions) when Settings opens. The
+values are shown at the top of the marketplace, used only for the marks below,
+and never sent, stored or logged. The GPU with the most dedicated memory is the
+one counted.
+
+Each quantization gets one of these marks, using the launcher's own rules
+(`crates/argentum-providers/src/local_fit.rs`):
+
+| Mark | Rule |
+| --- | --- |
+| Fits fully on GPU | File size plus the estimated KV cache fits in GPU memory minus the `--fit-target` margin the launcher uses: 1,024 MiB (llama.cpp's default), or 2,048 MiB with a vision projector. |
+| Fits with offload to system memory | It does not fit on the GPU, and the rest fits in system memory minus 4 GiB for Windows and other programs, and under the Job Object memory limit the launcher sets for that model. |
+| Runs on the CPU | No GPU was found and it fits in system memory as above. |
+| Will not fit | Neither, or the file is over the launcher's 256 GiB model limit. |
+
+The KV cache depends on the model's architecture, which the Hub does not list,
+so it is estimated: 128 KiB per context token for a model of about 4.5 GB,
+scaled with file size between a quarter and four times that, at the launcher's
+default context of 8,192 tokens. Mixture-of-experts models often need less than
+the estimate. llama.cpp still measures free memory at each launch and places
+what fits.
+
+The largest quantization that fits fully on the GPU is marked "recommended for
+this computer". If none does, the largest that runs with offload or on the CPU
+is marked instead.
+
 ## Gated models and the token
 
 Public models need no account. A gated model needs a Hugging Face token and

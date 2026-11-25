@@ -109,6 +109,10 @@ The first stable release, for Windows x64 and Android arm64:
   download one into the local model folder with resume, a disk space check
   and the SHA-256 Hugging Face publishes. An optional token for gated models
   stays in the system credential store. See `docs/LOCAL_MODEL_MARKETPLACE.md`.
+- **Recommended for your hardware:** the marketplace reads this computer's
+  memory and GPU locally and marks each quantization as fitting fully on the
+  GPU, with offload, on the CPU, or not at all, with the launcher's own memory
+  rules. Nothing about the computer is sent.
 
 ## Planned for 0.1.5
 

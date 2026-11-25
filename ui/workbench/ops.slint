@@ -829,6 +829,7 @@ export component LocalModelSection inherits VerticalLayout {
         }
     }
     if App.market_supported: SectionLabel { text: "MODEL MARKETPLACE (HUGGING FACE)"; height: 22px; }
+    if App.market_supported && App.market_hardware != "": Label { text: App.market_hardware; size: "sm"; tone: "muted"; wrap: word-wrap; }
     if App.market_supported && App.market_detail != "": Notice {
         text: App.market_detail;
         tone: App.market_error ? "danger" : "secondary";
@@ -880,6 +881,7 @@ export component LocalModelSection inherits VerticalLayout {
                 VerticalLayout {
                     horizontal-stretch: 1;
                     Label { text: file.label; }
+                    if file.fit != "": Label { text: file.fit; size: "sm"; tone: file.fit_tone; }
                     Label { text: file.detail; size: "sm"; tone: "muted"; wrap: word-wrap; }
                 }
                 Btn { label: "Review"; small: true; clicked => { App.market_choose(file.index); } }

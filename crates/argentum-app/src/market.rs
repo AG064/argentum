@@ -19,7 +19,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use argentum_platform::{AppPaths, SecretStore};
+use argentum_platform::{AppPaths, HardwareInfo, SecretStore};
+use argentum_providers::{launcher_context_tokens, local_model_fit, LocalModelFit, MemoryFacts};
 use argentum_security::SecretValue;
 use argentum_ui::{App, MainWindow, MarketFileView, MarketRepoView, UiHandle};
 use argentum_update::hub::{self, Hub, HubToken, Repo, RepoSummary, Variant, VariantKind};
@@ -60,6 +61,10 @@ pub(crate) fn connect(ui: &UiHandle, context: Context) {
     app.set_market_state("idle".into());
     app.set_market_detail(IDLE_TEXT.into());
     app.set_market_token_set(token(context.secrets.as_ref()).is_some());
+    // Read once, locally. Nothing about this computer is sent anywhere.
+    let hardware = argentum_platform::detect_hardware();
+    app.set_market_hardware(hardware_text(&hardware).into());
+    let _ = MEMORY.set(memory_facts(&hardware));
 
     let models_dir = Arc::new(models_dir);
     let shared = Arc::new(Mutex::new(Shared::default()));
@@ -344,6 +349,89 @@ pub(crate) fn connect(ui: &UiHandle, context: Context) {
     }
 }
 
+static MEMORY: std::sync::OnceLock<MemoryFacts> = std::sync::OnceLock::new();
+
+const GB: f64 = 1_000_000_000.0;
+
+pub(crate) fn memory_facts(hardware: &HardwareInfo) -> MemoryFacts {
+    MemoryFacts {
+        system_memory_bytes: hardware.system_memory_bytes,
+        gpu_memory_bytes: hardware.main_gpu().map(|gpu| gpu.dedicated_memory_bytes),
+    }
+}
+
+/// What the marketplace says about this computer. Shown only here.
+pub(crate) fn hardware_text(hardware: &HardwareInfo) -> String {
+    let ram = if hardware.system_memory_bytes == 0 {
+        "system memory could not be read".to_owned()
+    } else {
+        format!(
+            "{:.0} GB of system memory",
+            hardware.system_memory_bytes as f64 / GB
+        )
+    };
+    let gpu = hardware.main_gpu().map_or_else(
+        || "no GPU found, so models run on the CPU".to_owned(),
+        |gpu| {
+            format!(
+                "{} with {:.1} GB of GPU memory",
+                gpu.name,
+                gpu.dedicated_memory_bytes as f64 / GB
+            )
+        },
+    );
+    format!(
+        "This computer: {ram}, {gpu}. Read locally and never sent. Fit marks use the launcher's own memory rules at a {}-token context, with an estimated KV cache; llama.cpp measures again at launch.",
+        launcher_context_tokens()
+    )
+}
+
+/// The fit of each variant, `None` for projectors.
+pub(crate) fn variant_fits(repo: &Repo, memory: &MemoryFacts) -> Vec<Option<LocalModelFit>> {
+    repo.variants
+        .iter()
+        .map(|variant| {
+            (variant.kind == VariantKind::Model).then(|| {
+                local_model_fit(
+                    variant.size_bytes(),
+                    false,
+                    launcher_context_tokens(),
+                    memory,
+                )
+                .fit
+            })
+        })
+        .collect()
+}
+
+/// The largest model that fits fully on the GPU, or else the largest that
+/// runs with offload or on the CPU.
+pub(crate) fn recommended_variant(repo: &Repo, fits: &[Option<LocalModelFit>]) -> Option<usize> {
+    let best = |wanted: &[LocalModelFit]| {
+        repo.variants
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                fits.get(*index)
+                    .copied()
+                    .flatten()
+                    .is_some_and(|fit| wanted.contains(&fit))
+            })
+            .max_by_key(|(_, variant)| variant.size_bytes())
+            .map(|(index, _)| index)
+    };
+    best(&[LocalModelFit::FullGpu])
+        .or_else(|| best(&[LocalModelFit::Offload, LocalModelFit::CpuOnly]))
+}
+
+fn fit_tone(fit: LocalModelFit) -> &'static str {
+    match fit {
+        LocalModelFit::FullGpu => "ok",
+        LocalModelFit::Offload | LocalModelFit::CpuOnly => "secondary",
+        LocalModelFit::TooLarge => "danger",
+    }
+}
+
 const IDLE_TEXT: &str = "Search Hugging Face for GGUF models to run with the local model add-on. Searches go to huggingface.co only when you press Search, and nothing about this computer is sent.";
 
 fn token(secrets: &dyn SecretStore) -> Option<HubToken> {
@@ -555,14 +643,28 @@ fn show_repo(window: &MainWindow, repo: &Repo, models_dir: &Path, has_token: boo
     app.set_market_error(false);
     app.set_market_repo_title(repo.id.as_str().into());
     app.set_market_repo_detail(repo_detail(repo).into());
+    let memory = MEMORY.get().cloned().unwrap_or_default();
+    let fits = variant_fits(repo, &memory);
+    let recommended = recommended_variant(repo, &fits);
     app.set_market_files(ModelRc::new(VecModel::from(
         repo.variants
             .iter()
             .enumerate()
-            .map(|(index, variant)| MarketFileView {
-                index: i32::try_from(index).unwrap_or(i32::MAX),
-                label: variant.label().into(),
-                detail: variant_detail(variant, models_dir).into(),
+            .map(|(index, variant)| {
+                let fit = fits.get(index).copied().flatten();
+                let recommended = recommended == Some(index);
+                MarketFileView {
+                    index: i32::try_from(index).unwrap_or(i32::MAX),
+                    label: if recommended {
+                        format!("{}, recommended for this computer", variant.label())
+                    } else {
+                        variant.label()
+                    }
+                    .into(),
+                    detail: variant_detail(variant, models_dir).into(),
+                    fit: fit.map_or("", LocalModelFit::label).into(),
+                    fit_tone: fit.map_or("secondary", fit_tone).into(),
+                }
             })
             .collect::<Vec<_>>(),
     )));
@@ -704,6 +806,59 @@ mod tests {
             !models.exists(),
             "describing a download must not create files"
         );
+    }
+
+    #[test]
+    fn the_recommendation_is_the_largest_quant_that_fits() {
+        let payload = serde_json::json!({
+            "id": "tester/Fit-GGUF",
+            "sha": "0123456789abcdef0123456789abcdef01234567",
+            "siblings": [
+                { "rfilename": "Fit-Q4_K_M.gguf", "size": 4_000_000_000_u64, "lfs": { "sha256": "a".repeat(64), "size": 4_000_000_000_u64 } },
+                { "rfilename": "Fit-Q8_0.gguf", "size": 8_000_000_000_u64, "lfs": { "sha256": "b".repeat(64), "size": 8_000_000_000_u64 } },
+                { "rfilename": "Fit-F16.gguf", "size": 16_000_000_000_u64, "lfs": { "sha256": "c".repeat(64), "size": 16_000_000_000_u64 } },
+                { "rfilename": "mmproj-F16.gguf", "size": 600_000_000_u64, "lfs": { "sha256": "d".repeat(64), "size": 600_000_000_u64 } }
+            ]
+        });
+        let repo = hub::parse_repo(&serde_json::to_vec(&payload).expect("json")).expect("repo");
+        let gib = 1024 * 1024 * 1024;
+        let pc = MemoryFacts {
+            system_memory_bytes: 32 * gib,
+            gpu_memory_bytes: Some(8 * gib),
+        };
+        let fits = variant_fits(&repo, &pc);
+        assert_eq!(
+            fits,
+            [
+                Some(LocalModelFit::FullGpu),
+                Some(LocalModelFit::Offload),
+                Some(LocalModelFit::Offload),
+                None
+            ]
+        );
+        assert_eq!(recommended_variant(&repo, &fits), Some(0));
+        let small = MemoryFacts {
+            system_memory_bytes: 8 * gib,
+            gpu_memory_bytes: None,
+        };
+        let fits = variant_fits(&repo, &small);
+        assert_eq!(fits[2], Some(LocalModelFit::TooLarge));
+        assert_eq!(recommended_variant(&repo, &fits), None, "{fits:?}");
+    }
+
+    #[test]
+    fn the_hardware_line_names_memory_and_gpu() {
+        let text = hardware_text(&HardwareInfo {
+            system_memory_bytes: 34_359_738_368,
+            gpus: vec![argentum_platform::GpuInfo {
+                name: "Test GPU".into(),
+                dedicated_memory_bytes: 8_589_934_592,
+            }],
+        });
+        assert!(text.contains("34 GB of system memory"), "{text}");
+        assert!(text.contains("Test GPU with 8.6 GB"), "{text}");
+        assert!(text.contains("never sent"), "{text}");
+        assert!(hardware_text(&HardwareInfo::default()).contains("no GPU found"));
     }
 
     #[test]

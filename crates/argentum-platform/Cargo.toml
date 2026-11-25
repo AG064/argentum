@@ -38,8 +38,10 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_Security_Authorization",
     "Win32_Security_Credentials",
     "Win32_Storage_FileSystem",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
 ] }
+windows = { workspace = true, features = ["Win32_Graphics_Dxgi"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity.workspace = true
