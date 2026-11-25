@@ -21,7 +21,8 @@ adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard || true
 
 adb install -r -g "$apk"
-adb install -r -g "$test_apk"
+# The test APK is marked test-only, so it needs -t.
+adb install -r -t -g "$test_apk"
 # The app's own 127.0.0.1:PORT reaches the fake provider on the host.
 adb reverse "tcp:$port" "tcp:$port"
 adb logcat -c
