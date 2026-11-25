@@ -96,6 +96,7 @@ mod authority;
 mod diagnostics;
 #[cfg(feature = "extensions")]
 mod extensions;
+mod imports;
 mod modules;
 pub use authority::RuntimeHostAuthority;
 
@@ -3030,6 +3031,8 @@ impl RuntimeService {
                 self.publish_ui_preferences()
             }
             AppCommand::LoadProviderUsage => self.publish_provider_usage(),
+            AppCommand::ScanImports => self.publish_import_scan(Vec::new()),
+            AppCommand::ImportItems { ids } => self.import_items(ids),
             AppCommand::LoadProviderBalance { profile_id } => {
                 self.load_provider_balance(profile_id).await
             }
@@ -12478,6 +12481,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ToolCatalogSnapshot { .. }
         | AppEvent::SkillCatalogSnapshot { .. }
         | AppEvent::SkillInspectionSnapshot { .. }
+        | AppEvent::ImportScanSnapshot { .. }
         | AppEvent::AccountingSnapshot { .. }
         | AppEvent::RunDiagnosticsSnapshot { .. }
         | AppEvent::RunResultSnapshot { .. }
@@ -12634,6 +12638,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::ToolCatalogSnapshot { .. }
         | AppEvent::SkillCatalogSnapshot { .. }
         | AppEvent::SkillInspectionSnapshot { .. }
+        | AppEvent::ImportScanSnapshot { .. }
         | AppEvent::AccountingSnapshot { .. }
         | AppEvent::RunDiagnosticsSnapshot { .. }
         | AppEvent::RunResultSnapshot { .. }

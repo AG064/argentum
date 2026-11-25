@@ -1992,37 +1992,7 @@ fn sensitive_name(name: &str) -> bool {
 }
 
 pub(super) fn sensitive_body(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    [
-        "authorization:",
-        "authorization\\\"",
-        "bearer ",
-        "private key-----",
-        "api_key",
-        "api-key",
-        "api key",
-        "password",
-        "passwd",
-        "client_secret",
-        "client-secret",
-        "client secret",
-        "access_token",
-        "access-token",
-        "access token",
-        "refresh_token",
-        "refresh-token",
-        "refresh token",
-        "secret_access_key",
-        "secret-access-key",
-        "secret access key",
-        "private_key",
-        "private-key",
-        "private key",
-        "approval_ticket",
-        "grant_material",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker))
+    argentum_security::credentials::has_credential_marker(body)
 }
 
 fn sensitive_read_result(body: &str) -> bool {

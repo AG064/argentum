@@ -17,6 +17,7 @@ members = [
     "crates/argentum-extensions",
     "crates/argentum-artifacts",
     "crates/argentum-harness",
+    "crates/argentum-import",
     "crates/argentum-lifecycle",
     "crates/argentum-runtime",
     "crates/argentum-providers",
@@ -48,6 +49,7 @@ argentum-execution = { path = "crates/argentum-execution" }
 argentum-extensions = { path = "crates/argentum-extensions" }
 argentum-artifacts = { path = "crates/argentum-artifacts" }
 argentum-harness = { path = "crates/argentum-harness" }
+argentum-import = { path = "crates/argentum-import" }
 argentum-lifecycle = { path = "crates/argentum-lifecycle" }
 argentum-cli = { path = "crates/argentum-cli" }
 argentum-changes = { path = "crates/argentum-changes" }
@@ -96,6 +98,7 @@ ring = "0.17"
 rustls-pki-types = "1"
 rustls-webpki = { version = "0.103", default-features = false, features = ["ring", "std"] }
 thiserror = "2"
+toml = "1"
 time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
 tokio = { version = "1", features = ["fs", "io-std", "io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }

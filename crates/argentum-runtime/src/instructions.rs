@@ -316,46 +316,78 @@ fn resolve(
             ),
         };
         let scope = relative_label(directory)?;
-        let Some(content) = content else {
+        let mut selected: Vec<(PathBuf, String, bool)> = Vec::new();
+        let agents_text = content.clone();
+        if let Some(content) = content {
             selections.push(InstructionSelection {
-                scope,
-                outcome: "both_sources_absent",
+                scope: scope.clone(),
+                outcome: if override_selected {
+                    "override_replaces_ordinary"
+                } else {
+                    "ordinary_selected_override_absent"
+                },
             });
+            selected.push((source, content, override_selected));
+        }
+        // Claude Code's files sit beside AGENTS.md. An override still replaces
+        // everything in its folder, so they are read only without one.
+        if !override_selected {
+            for name in CLAUDE_SOURCES {
+                let path = directory.join(name);
+                let outcome = match read_optional(workspace, &path) {
+                    ClaudeSource::Absent => continue,
+                    ClaudeSource::Skipped => "claude_source_unreadable_skipped",
+                    ClaudeSource::Text(text) => {
+                        if duplicates_agents(&text, agents_text.as_deref()) {
+                            "claude_source_same_as_agents_skipped"
+                        } else {
+                            selected.push((path, text, false));
+                            "claude_source_selected"
+                        }
+                    }
+                };
+                selections.push(InstructionSelection {
+                    scope: scope.clone(),
+                    outcome,
+                });
+            }
+        }
+        if selected.is_empty() {
+            if !selections.iter().any(|selection| selection.scope == scope) {
+                selections.push(InstructionSelection {
+                    scope,
+                    outcome: "both_sources_absent",
+                });
+            }
             continue;
-        };
-        if documents.len() >= MAX_INSTRUCTION_DOCUMENTS {
-            return Err(failure(&source, InstructionFailure::DocumentLimit));
         }
-        let metadata = InstructionMetadata {
-            source: relative_label(&source)?,
-            scope: scope.clone(),
-            order: documents.len(),
-            sha256: format!("{:x}", Sha256::digest(content.as_bytes())),
-            bytes: content.len(),
-            override_selected,
-        };
-        if !documents.is_empty() {
-            serialized
-                .write_all(b",")
-                .map_err(|_| failure(&source, InstructionFailure::SerializedLimit))?;
+        for (source, content, override_selected) in selected {
+            if documents.len() >= MAX_INSTRUCTION_DOCUMENTS {
+                return Err(failure(&source, InstructionFailure::DocumentLimit));
+            }
+            let metadata = InstructionMetadata {
+                source: relative_label(&source)?,
+                scope: scope.clone(),
+                order: documents.len(),
+                sha256: format!("{:x}", Sha256::digest(content.as_bytes())),
+                bytes: content.len(),
+                override_selected,
+            };
+            if !documents.is_empty() {
+                serialized
+                    .write_all(b",")
+                    .map_err(|_| failure(&source, InstructionFailure::SerializedLimit))?;
+            }
+            serde_json::to_writer(
+                &mut serialized,
+                &Document {
+                    metadata: metadata.clone(),
+                    content,
+                },
+            )
+            .map_err(|_| failure(&source, InstructionFailure::SerializedLimit))?;
+            documents.push(metadata);
         }
-        serde_json::to_writer(
-            &mut serialized,
-            &Document {
-                metadata: metadata.clone(),
-                content,
-            },
-        )
-        .map_err(|_| failure(&source, InstructionFailure::SerializedLimit))?;
-        documents.push(metadata);
-        selections.push(InstructionSelection {
-            scope,
-            outcome: if override_selected {
-                "override_replaces_ordinary"
-            } else {
-                "ordinary_selected_override_absent"
-            },
-        });
     }
     serialized
         .write_all(b"]")
@@ -370,6 +402,44 @@ fn resolve(
         },
         serialized,
     })
+}
+
+/// Claude Code's project instruction files, read after `AGENTS.md` in each
+/// folder. `CLAUDE.local.md` is the owner's own, usually not committed.
+pub const CLAUDE_SOURCES: [&str; 2] = ["CLAUDE.md", "CLAUDE.local.md"];
+
+enum ClaudeSource {
+    Absent,
+    Skipped,
+    Text(String),
+}
+
+/// A Claude file that cannot be read (a link, too large, not text) is skipped
+/// instead of failing the run, so adding these files never breaks a project
+/// that worked with `AGENTS.md` alone.
+fn read_optional(workspace: &WorkspaceManager, path: &Path) -> ClaudeSource {
+    match read(workspace, path) {
+        Ok(Some(text)) => ClaudeSource::Text(text),
+        Ok(None) => ClaudeSource::Absent,
+        Err(_) => ClaudeSource::Skipped,
+    }
+}
+
+/// True when a Claude file repeats `AGENTS.md` or only points to it, as in
+/// `@AGENTS.md` or `See AGENTS.md`.
+fn duplicates_agents(text: &str, agents: Option<&str>) -> bool {
+    let trimmed = text.trim();
+    if agents.is_some_and(|agents| agents.trim() == trimmed) {
+        return true;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let reference = lower
+        .trim_start_matches("see ")
+        .trim_start_matches("read ")
+        .trim_start_matches('@')
+        .trim_start_matches("./")
+        .trim_end_matches('.');
+    agents.is_some() && reference == "agents.md"
 }
 
 struct LimitedWriter(Vec<u8>);
@@ -408,6 +478,98 @@ mod tests {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn claude_files_load_beside_agents_and_nested() {
+        let (root, workspace) = fixture();
+        write(root.path(), "AGENTS.md", "agents root");
+        write(root.path(), "CLAUDE.md", "claude root");
+        write(root.path(), "CLAUDE.local.md", "claude local");
+        write(root.path(), "a/CLAUDE.md", "claude nested");
+        let mut run = InstructionRun::new(Path::new("a")).unwrap();
+        let projection = run.project(&workspace).unwrap();
+        let sources: Vec<_> = projection
+            .preview
+            .documents
+            .iter()
+            .map(|doc| doc.source.as_str())
+            .collect();
+        assert_eq!(
+            sources,
+            ["AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", "a/CLAUDE.md"]
+        );
+        let value: serde_json::Value = serde_json::from_str(&projection.serialized).unwrap();
+        assert_eq!(value[3]["content"], "claude nested");
+        assert!(projection.preview.selections.iter().any(
+            |selection| selection.scope == "a" && selection.outcome == "claude_source_selected"
+        ));
+    }
+
+    #[test]
+    fn claude_files_that_repeat_agents_are_skipped() {
+        let (root, workspace) = fixture();
+        write(root.path(), "AGENTS.md", "same text\n");
+        write(root.path(), "CLAUDE.md", "same text");
+        write(root.path(), "a/AGENTS.md", "nested");
+        write(root.path(), "a/CLAUDE.md", "@AGENTS.md\n");
+        let mut run = InstructionRun::new(Path::new("a")).unwrap();
+        let projection = run.project(&workspace).unwrap();
+        assert_eq!(projection.preview.documents.len(), 2);
+        assert_eq!(
+            projection
+                .preview
+                .selections
+                .iter()
+                .filter(|selection| selection.outcome == "claude_source_same_as_agents_skipped")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn an_override_also_replaces_claude_files() {
+        let (root, workspace) = fixture();
+        write(root.path(), "AGENTS.override.md", "override");
+        write(root.path(), "CLAUDE.md", "CLAUDE_CANARY");
+        let mut run = InstructionRun::new(Path::new("")).unwrap();
+        let projection = run.project(&workspace).unwrap();
+        assert_eq!(projection.preview.documents.len(), 1);
+        assert!(!projection.serialized.contains("CLAUDE_CANARY"));
+    }
+
+    #[test]
+    fn an_unreadable_claude_file_is_skipped_not_fatal() {
+        let (root, workspace) = fixture();
+        write(root.path(), "AGENTS.md", "agents");
+        write(
+            root.path(),
+            "CLAUDE.md",
+            vec![b'x'; MAX_INSTRUCTION_FILE_BYTES + 1],
+        );
+        write(root.path(), "CLAUDE.local.md", [0xff_u8, 0xfe]);
+        let mut run = InstructionRun::new(Path::new("")).unwrap();
+        let projection = run.project(&workspace).unwrap();
+        assert_eq!(projection.preview.documents.len(), 1);
+        assert_eq!(
+            projection
+                .preview
+                .selections
+                .iter()
+                .filter(|selection| selection.outcome == "claude_source_unreadable_skipped")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn claude_file_alone_is_loaded() {
+        let (root, workspace) = fixture();
+        write(root.path(), "CLAUDE.md", "only claude");
+        let mut run = InstructionRun::new(Path::new("")).unwrap();
+        let projection = run.project(&workspace).unwrap();
+        assert_eq!(projection.preview.documents.len(), 1);
+        assert_eq!(projection.preview.documents[0].source, "CLAUDE.md");
     }
 
     #[test]

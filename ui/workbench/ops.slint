@@ -287,6 +287,7 @@ export component ToolsPage inherits VerticalLayout {
     init => {
         App.refresh_tool_catalog();
         App.refresh_skill_catalog();
+        App.scan_imports();
         App.list_extensions();
     }
     PageHead {
@@ -350,6 +351,46 @@ export component ToolsPage inherits VerticalLayout {
                 font-size: Theme.fs-sm;
                 wrap: word-wrap;
             }
+        }
+    }
+    VerticalLayout {
+        spacing: Theme.sp2;
+        SectionHead {
+            title: "IMPORT FROM OTHER AGENTS";
+            action: "Look again";
+            busy: App.import_loading;
+            activated => { App.scan_imports(); }
+        }
+        Label {
+            text: "MCP servers, skills and custom commands from Claude Code, Codex and OpenCode. Tick what to bring over. Importing grants no permission: servers are saved turned off, and skills keep no allowed tools.";
+            tone: "secondary";
+            size: "sm";
+            wrap: word-wrap;
+        }
+        if App.import_items.length == 0 && !App.import_loading: Label { text: "Nothing found yet. Press Look again to check."; tone: "muted"; size: "sm"; }
+        for item in App.import_items: HorizontalLayout {
+            padding-top: Theme.sp6;
+            padding-bottom: Theme.sp6;
+            spacing: Theme.sp8;
+            Switch {
+                y: Theme.sp2;
+                on: item.ticked;
+                enabled: item.importable;
+                label: "Import " + item.summary;
+                toggled(v) => { App.toggle_import(item.id, v); }
+            }
+            VerticalLayout {
+                spacing: Theme.sp2;
+                horizontal-stretch: 1;
+                Label { text: item.summary; wrap: word-wrap; }
+                Label { text: item.detail; tone: "muted"; size: "xs"; wrap: word-wrap; }
+                if item.note != "": Label { text: item.note; tone: "secondary"; size: "xs"; wrap: word-wrap; }
+            }
+        }
+        if App.import_status != "": Notice { text: App.import_status; tone: "muted"; }
+        if App.import_items.length > 0: HorizontalLayout {
+            alignment: end;
+            Btn { small: true; label: "Import ticked"; clicked => { App.import_ticked(); } }
         }
     }
     VerticalLayout {

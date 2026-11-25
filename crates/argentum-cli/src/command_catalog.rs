@@ -192,6 +192,13 @@ pub const COMMANDS: &[CommandEntry] = &[
     ),
     cmd(
         "core",
+        &["import"],
+        "List MCP servers, skills and commands from Claude Code, Codex and OpenCode, and import the ones you pick",
+        Gate::None,
+        true,
+    ),
+    cmd(
+        "core",
         &["status"],
         "Show workspace and provider readiness",
         Gate::None,

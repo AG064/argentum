@@ -47,6 +47,7 @@ mod devices;
 mod extensions;
 mod grant_lookup;
 mod history;
+mod imports;
 pub use grant_lookup::MAX_AUTHORIZATION_GRANTS;
 mod message_search;
 mod spend_limits;
@@ -4167,6 +4168,7 @@ impl Store {
         schema.commit()?;
         message_search::migrate(&connection)?;
         spend_limits::migrate(&connection)?;
+        imports::migrate(&connection)?;
         // The legacy bounded-counter rebuild needs foreign keys disabled before
         // its own transaction, so it stays outside the schema transaction.
         working_context::upgrade_run_limit(&connection)?;
@@ -6372,8 +6374,9 @@ mod tests {
             (tables, indexes, identity)
         };
         // The message search index is one FTS5 table with four shadow tables,
-        // file changes have an index by session, and spend limits a table.
-        assert_eq!((tables, indexes), (39, 30));
+        // file changes have an index by session, spend limits a table, and
+        // imported MCP server drafts a table.
+        assert_eq!((tables, indexes), (40, 30));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection

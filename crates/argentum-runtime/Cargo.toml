@@ -18,6 +18,7 @@ argentum-domain.workspace = true
 argentum-extensions = { workspace = true, optional = true }
 argentum-gitview.workspace = true
 argentum-harness.workspace = true
+argentum-import.workspace = true
 argentum-platform.workspace = true
 argentum-providers.workspace = true
 argentum-security.workspace = true

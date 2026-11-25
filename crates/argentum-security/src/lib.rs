@@ -17,6 +17,7 @@ use time::OffsetDateTime;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub mod authority;
+pub mod credentials;
 
 pub use authority::{
     authorize_profile_transition, execution_policy_digest, execution_policy_is_elevation,

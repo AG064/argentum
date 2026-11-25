@@ -23,6 +23,7 @@ pub mod goal_accounting;
 pub mod reply_steps;
 pub use reply_steps::{REASONING_STEP_BREAK, REASONING_STEP_MARK};
 pub mod goal_supervision;
+pub mod imports;
 pub mod process_job_contract;
 pub mod recovery;
 pub mod supplemental;
@@ -2909,6 +2910,14 @@ pub enum AppCommand {
         patch: Box<UiPatch>,
     },
     LoadProviderUsage,
+    /// Lists what can be imported from Claude Code, Codex and OpenCode.
+    /// Reads only.
+    ScanImports,
+    /// Imports the ticked items of a fresh scan. MCP servers become drafts
+    /// that are off, skills and commands become project skills. Grants nothing.
+    ImportItems {
+        ids: Vec<String>,
+    },
     /// Reads a provider profile's account balance from the provider, when the
     /// owner asks. Only DeepSeek and OpenRouter report one.
     LoadProviderBalance {
@@ -3014,6 +3023,12 @@ pub enum AppEvent {
     },
     SkillInspectionSnapshot {
         inspection: SkillInspectionView,
+    },
+    ImportScanSnapshot {
+        items: Vec<imports::ImportItemView>,
+        problems: Vec<String>,
+        /// Filled after an import, one entry per ticked item.
+        results: Vec<imports::ImportResultView>,
     },
     AccountingSnapshot {
         session_id: SessionId,
@@ -3306,6 +3321,7 @@ impl AppEvent {
             Self::GoalInvocationSnapshot { .. } => "goal_invocation_snapshot",
             Self::ToolCatalogSnapshot { .. } => "tool_catalog_snapshot",
             Self::SkillCatalogSnapshot { .. } => "skill_catalog_snapshot",
+            Self::ImportScanSnapshot { .. } => "import_scan_snapshot",
             Self::SkillInspectionSnapshot { .. } => "skill_inspection_snapshot",
             Self::AccountingSnapshot { .. } => "accounting_snapshot",
             Self::RunDiagnosticsSnapshot { .. } => "run_diagnostics_snapshot",
