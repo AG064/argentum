@@ -8428,9 +8428,9 @@ mod context_variant_tests {
                 size,
                 "--isolated",
                 "--workspace",
-                r"A:\fixture",
+                test_abs(r"A:\fixture", "/fixture"),
                 "--database",
-                r"A:\fixture\state.db",
+                test_abs(r"A:\fixture\state.db", "/fixture/state.db"),
             ])
             .unwrap();
             assert!(matches!(
@@ -9903,12 +9903,17 @@ mod tests {
 
     #[test]
     fn staging_artifact_directory_is_not_used_as_the_implicit_workspace() {
-        let staging = PathBuf::from(r"C:\argentum\artifacts\windows-cli\20260912-175637");
+        let root = PathBuf::from(test_abs(r"C:\", "/"));
+        let staging = root
+            .join("argentum")
+            .join("artifacts")
+            .join("windows-cli")
+            .join("20260912-175637");
         assert_eq!(
             avoid_staging_artifact_workspace(staging),
-            PathBuf::from(r"C:\argentum")
+            root.join("argentum")
         );
-        let ordinary = PathBuf::from(r"C:\projects\fixture");
+        let ordinary = root.join("projects").join("fixture");
         assert_eq!(avoid_staging_artifact_workspace(ordinary.clone()), ordinary);
     }
 
@@ -10029,8 +10034,10 @@ mod tests {
                 .expect("platform authority"),
         );
         let config = argentum_providers::LocalRuntimeConfig::new(
-            PathBuf::from(r"C:\argentum-test\bundle.zip"),
-            PathBuf::from(r"C:\argentum-test\models"),
+            std::env::temp_dir()
+                .join("argentum-test")
+                .join("bundle.zip"),
+            std::env::temp_dir().join("argentum-test").join("models"),
         )
         .expect("test runtime config");
         let (module, control) = argentum_providers::local_runtime_test_fixture(config, broker);
@@ -10984,7 +10991,7 @@ mod tests {
                 "--hwnd",
                 "0x1234",
                 "--output",
-                r"C:\temp\shot.png"
+                test_abs(r"C:\temp\shot.png", "/tmp/shot.png")
             ])
             .unwrap(),
             Arguments::Desktop {
@@ -11587,5 +11594,16 @@ mod cli_polish_tests {
         )))
         .starts_with("Local coding configuration ready"));
         assert!(coding_ready_message(None).starts_with("Local coding configuration ready"));
+    }
+}
+
+/// An absolute path literal for tests: the Windows spelling on Windows, the
+/// Unix one elsewhere.
+#[cfg(test)]
+fn test_abs(windows: &'static str, unix: &'static str) -> &'static str {
+    if cfg!(windows) {
+        windows
+    } else {
+        unix
     }
 }

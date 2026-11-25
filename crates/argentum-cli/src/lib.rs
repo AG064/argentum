@@ -3162,8 +3162,10 @@ mod tests {
     ) -> (CommandHost, LocalRuntimeTestControl) {
         let config = HostConfig::in_memory(workspace).with_local_runtime(
             LocalRuntimeConfig::new(
-                PathBuf::from(r"C:\argentum-test\bundle.zip"),
-                PathBuf::from(r"C:\argentum-test\models"),
+                std::env::temp_dir()
+                    .join("argentum-test")
+                    .join("bundle.zip"),
+                std::env::temp_dir().join("argentum-test").join("models"),
             )
             .expect("local runtime config"),
         );
@@ -3408,8 +3410,10 @@ mod tests {
     ) {
         let config = HostConfig::in_memory(workspace).with_local_runtime(
             LocalRuntimeConfig::new(
-                PathBuf::from(r"C:\argentum-test\bundle.zip"),
-                PathBuf::from(r"C:\argentum-test\models"),
+                std::env::temp_dir()
+                    .join("argentum-test")
+                    .join("bundle.zip"),
+                std::env::temp_dir().join("argentum-test").join("models"),
             )
             .expect("local runtime config"),
         );

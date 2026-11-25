@@ -9,10 +9,10 @@ license.workspace = true
 
 [features]
 artifact-render = []
-# Disposable Linux benchmark containers only. Other desktop non-Windows builds keep
-# refusing to run processes, because this is weaker than a Windows job object. Android
-# always uses a process group, with the app sandbox as the outer boundary.
-benchmark-process-group = ["dep:rustix"]
+# Kept for the benchmark build. Linux, macOS and Android always start commands in
+# their own process group now, which is weaker than a Windows job object. See
+# docs/SUPPORT_MATRIX.md.
+benchmark-process-group = []
 
 [dependencies]
 argentum-domain.workspace = true
@@ -29,10 +29,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
 
-[target.'cfg(target_os = "linux")'.dependencies]
-rustix = { workspace = true, features = ["process"], optional = true }
-
-[target.'cfg(target_os = "android")'.dependencies]
+[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]

@@ -5855,15 +5855,19 @@ mod tests {
 
     fn run_proxy_child_process(proxy_spelling: &str, direct_endpoint: &str, proxy_endpoint: &str) {
         let executable = std::env::current_exe().expect("test executable");
-        let system_root = std::env::var_os("SystemRoot").expect("SystemRoot");
         let path = std::env::var_os("PATH").expect("PATH");
-        let mut child = Command::new(executable)
+        let mut command = Command::new(executable);
+        command
             .arg("--exact")
             .arg("tests::local_sidecar_client_ignores_process_proxy_for_models")
             .arg("--nocapture")
             .env_clear()
-            .env("SystemRoot", system_root)
-            .env("PATH", path)
+            .env("PATH", path);
+        // Windows needs SystemRoot to start a process at all.
+        if let Some(system_root) = std::env::var_os("SystemRoot") {
+            command.env("SystemRoot", system_root);
+        }
+        let mut child = command
             .env(PROXY_CHILD_CASE, proxy_spelling)
             .env(PROXY_CHILD_DIRECT_ENDPOINT, direct_endpoint)
             .env(PROXY_CHILD_PROXY_ENDPOINT, proxy_endpoint)
