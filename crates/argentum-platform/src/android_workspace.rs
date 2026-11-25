@@ -666,6 +666,13 @@ fn validate_existing_path(path: &Path, expected: ExistingPathKind) -> Result<(),
 
 #[cfg(test)]
 mod tests {
+    /// A temporary folder below the resolved temp path. On macOS the temp
+    /// path runs through the /var link, which Android app storage never has,
+    /// and the workspace checks rightly refuse links.
+    fn canonical_tempdir() -> std::io::Result<tempfile::TempDir> {
+        tempfile::tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)
+    }
+
     use std::fs;
     use std::path::PathBuf;
     use std::sync::mpsc;
@@ -680,7 +687,7 @@ mod tests {
 
     #[test]
     fn default_android_workspace_is_created_below_the_private_root() {
-        let data = tempfile::tempdir().expect("data root");
+        let data = canonical_tempdir().expect("data root");
         let paths = AppPaths::from_data_dir(data.path());
 
         let workspace = android_app_private_workspace(&paths).expect("workspace");
@@ -715,7 +722,7 @@ mod tests {
 
     #[test]
     fn validated_android_token_owns_workspace_and_app_paths_together() {
-        let data = tempfile::tempdir().expect("data root");
+        let data = canonical_tempdir().expect("data root");
         let workspace = data.path().join("workspace");
         fs::create_dir(&workspace).expect("workspace");
         let workspace = fs::canonicalize(workspace).expect("canonical workspace");
@@ -736,8 +743,8 @@ mod tests {
 
     #[test]
     fn android_os_root_still_rejects_a_redirected_root() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
-        let outside = tempfile::tempdir().expect("outside root");
+        let declared_parent = canonical_tempdir().expect("declared parent");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let redirected_root = declared_parent.path().join("private-data");
@@ -765,8 +772,8 @@ mod tests {
 
     #[test]
     fn saved_outside_workspace_is_rejected_without_modifying_the_target() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -784,7 +791,7 @@ mod tests {
 
     #[test]
     fn saved_data_root_is_rejected_without_creating_a_workspace() {
-        let data = tempfile::tempdir().expect("data root");
+        let data = canonical_tempdir().expect("data root");
         let paths = AppPaths::from_data_dir(data.path());
         paths
             .save_workspace(data.path())
@@ -796,7 +803,7 @@ mod tests {
 
     #[test]
     fn nonexistent_saved_workspace_is_rejected_without_creating_it() {
-        let data = tempfile::tempdir().expect("data root");
+        let data = canonical_tempdir().expect("data root");
         let missing = data.path().join("missing");
         let paths = AppPaths::from_data_dir(data.path());
         fs::create_dir_all(&paths.data_dir).expect("data root");
@@ -808,8 +815,8 @@ mod tests {
 
     #[test]
     fn saved_directory_link_escape_is_rejected_where_supported() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let link = data.path().join("linked-workspace");
@@ -830,8 +837,8 @@ mod tests {
     #[test]
     fn forged_android_layout_fields_are_rejected_before_outside_mutation() {
         for field in ["workspace_config", "database", "logs_dir"] {
-            let data = tempfile::tempdir().expect("data root");
-            let outside = tempfile::tempdir().expect("outside root");
+            let data = canonical_tempdir().expect("data root");
+            let outside = canonical_tempdir().expect("outside root");
             let marker = outside.path().join("unchanged.txt");
             fs::write(&marker, b"unchanged").expect("outside marker");
             let redirected = outside.path().join(format!("redirected-{field}"));
@@ -856,8 +863,8 @@ mod tests {
 
     #[test]
     fn manually_constructed_inconsistent_android_layout_is_rejected() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let paths = AppPaths {
             data_dir: data.path().to_path_buf(),
             database: outside.path().join("argentum.db"),
@@ -873,8 +880,8 @@ mod tests {
 
     #[test]
     fn redirected_workspace_config_is_rejected_without_touching_its_target() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let target = outside.path().join("outside-config.json");
         fs::write(&target, b"unchanged").expect("outside config marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -892,8 +899,8 @@ mod tests {
 
     #[test]
     fn redirected_database_and_logs_are_rejected_without_touching_targets() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let database_target = outside.path().join("outside.db");
         let logs_target = outside.path().join("outside-logs");
         let marker = logs_target.join("unchanged.txt");
@@ -920,8 +927,8 @@ mod tests {
 
     #[test]
     fn redirected_data_dir_is_rejected_before_private_path_mutation() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
-        let outside = tempfile::tempdir().expect("outside root");
+        let declared_parent = canonical_tempdir().expect("declared parent");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let redirected_root = declared_parent.path().join("private-data");
@@ -941,8 +948,8 @@ mod tests {
 
     #[test]
     fn redirected_existing_ancestor_is_rejected_before_private_root_creation() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
-        let outside = tempfile::tempdir().expect("outside root");
+        let declared_parent = canonical_tempdir().expect("declared parent");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let redirected_ancestor = declared_parent.path().join("redirected-ancestor");
@@ -963,10 +970,10 @@ mod tests {
 
     #[test]
     fn synchronized_root_substitution_after_final_scan_fails_before_mutation() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
+        let declared_parent = canonical_tempdir().expect("declared parent");
         let data_root = declared_parent.path().join("private-data");
         fs::create_dir(&data_root).expect("declared data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         assert_directory_links_available(declared_parent.path(), outside.path());
@@ -1015,11 +1022,11 @@ mod tests {
 
     #[test]
     fn synchronized_ordinary_root_substitution_after_final_scan_fails_before_mutation() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
+        let declared_parent = canonical_tempdir().expect("declared parent");
         let data_root = declared_parent.path().join("private-data");
         let original_root = declared_parent.path().join("private-data-original");
         fs::create_dir(&data_root).expect("declared data root");
-        let replacement = tempfile::tempdir().expect("replacement root source");
+        let replacement = canonical_tempdir().expect("replacement root source");
         let marker = replacement.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("replacement marker");
         let paths = AppPaths::from_data_dir(&data_root);
@@ -1074,7 +1081,7 @@ mod tests {
 
     #[test]
     fn saved_workspace_root_substitution_during_load_validation_fails_closed() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
+        let declared_parent = canonical_tempdir().expect("declared parent");
         let data_root = declared_parent.path().join("private-data");
         let original_root = declared_parent.path().join("private-data-original");
         let workspace = data_root.join("workspace");
@@ -1119,13 +1126,13 @@ mod tests {
 
     #[test]
     fn synchronized_ordinary_ancestor_substitution_after_final_scan_fails_before_mutation() {
-        let declared_parent = tempfile::tempdir().expect("declared parent");
+        let declared_parent = canonical_tempdir().expect("declared parent");
         let ancestor = declared_parent.path().join("app-private");
         let original_ancestor = declared_parent.path().join("app-private-original");
         let data_root = ancestor.join("private-data");
         fs::create_dir(&ancestor).expect("declared ancestor");
         fs::create_dir(&data_root).expect("declared data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let paths = AppPaths::from_data_dir(&data_root);
@@ -1182,8 +1189,8 @@ mod tests {
 
     #[test]
     fn synchronized_precommit_workspace_substitution_quarantines_owned_config() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -1226,8 +1233,8 @@ mod tests {
 
     #[test]
     fn synchronized_postcommit_workspace_substitution_quarantines_owned_config() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -1265,8 +1272,8 @@ mod tests {
 
     #[test]
     fn synchronized_swapped_config_is_not_deleted_during_cleanup() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -1310,8 +1317,8 @@ mod tests {
 
     #[test]
     fn synchronized_swapped_config_link_does_not_touch_outside_target() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let outside_config = outside.path().join("outside-config.json");
         fs::write(&outside_config, b"outside-unchanged").expect("outside config marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -1355,8 +1362,8 @@ mod tests {
 
     #[test]
     fn synchronized_regular_quarantine_swap_after_verification_is_preserved() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let marker = outside.path().join("unchanged.txt");
         fs::write(&marker, b"unchanged").expect("outside marker");
         let paths = AppPaths::from_data_dir(data.path());
@@ -1407,8 +1414,8 @@ mod tests {
 
     #[test]
     fn synchronized_link_quarantine_swap_after_verification_is_preserved() {
-        let data = tempfile::tempdir().expect("data root");
-        let outside = tempfile::tempdir().expect("outside root");
+        let data = canonical_tempdir().expect("data root");
+        let outside = canonical_tempdir().expect("outside root");
         let outside_config = outside.path().join("outside-config.json");
         fs::write(&outside_config, b"outside-unchanged").expect("outside config marker");
         let paths = AppPaths::from_data_dir(data.path());
