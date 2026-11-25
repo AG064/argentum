@@ -773,12 +773,16 @@ fn decode_vault(
     {
         return Err(PlatformError::VaultCorrupt);
     }
+    // Read the nonce before the key exists, so a bad length cannot return
+    // early past the key's zeroizing.
+    let nonce = XNonce::try_from(&bytes[nonce_start..length_start])
+        .map_err(|_| PlatformError::VaultCorrupt)?;
     let mut key = derive_vault_key(passphrase, &bytes[salt_start..nonce_start])?;
     let cipher =
         XChaCha20Poly1305::new_from_slice(&key).map_err(|_| PlatformError::VaultCorrupt)?;
     let plaintext = cipher
         .decrypt(
-            XNonce::from_slice(&bytes[nonce_start..length_start]),
+            &nonce,
             Payload {
                 msg: &bytes[ciphertext_start..],
                 aad: VAULT_AAD,
@@ -840,7 +844,7 @@ fn encode_vault(
         XChaCha20Poly1305::new_from_slice(&key).map_err(|_| PlatformError::VaultUnavailable)?;
     let ciphertext = cipher
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: &plaintext,
                 aad: VAULT_AAD,
@@ -1220,5 +1224,53 @@ mod tests {
             .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp"))
             .count();
         assert_eq!(temporary_files, 0);
+    }
+}
+
+#[cfg(test)]
+mod vault_compatibility_tests {
+    use super::*;
+
+    /// A vault written by Argentum 0.1.0 (argon2 0.5, chacha20poly1305 0.10),
+    /// holding provider.fixture = fixture-secret-value under the passphrase
+    /// "fixture passphrase". Later crate versions must still open it.
+    const VAULT_0_1_0: &[&str] = &[
+        "41475641554c5431010ab9554c47554e8a0f596b04b27f652f43eb41c1493e0516e999a4139e7b88",
+        "121bdd34043a96edec4b0000004db1f0e483f2c176726073e62f95525a9bb33d1dc9a1509dddcfd6",
+        "4dad81a76fdf650af373a8636ae8fb7e44fe5466a3f934fb553d192aaf8501a10212287dcbff6892",
+        "94e0ec359dd6ae13",
+    ];
+
+    fn hex_bytes(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn a_vault_written_by_0_1_0_still_opens() {
+        let bytes = hex_bytes(&VAULT_0_1_0.concat());
+        let values = decode_vault(&bytes, &SecretValue::new("fixture passphrase")).unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(
+            values
+                .get("provider.fixture")
+                .map(|value| value.expose().to_owned()),
+            Some("fixture-secret-value".to_owned())
+        );
+        assert!(matches!(
+            decode_vault(&bytes, &SecretValue::new("wrong passphrase")),
+            Err(PlatformError::VaultAuthenticationFailed)
+        ));
+    }
+
+    #[test]
+    fn the_vault_key_derivation_is_unchanged() {
+        let key = derive_vault_key(&SecretValue::new("fixture passphrase"), &[7u8; 16]).unwrap();
+        assert_eq!(
+            key.to_vec(),
+            hex_bytes("7ea5cc2148631b120d31e471d7b0613e62e0bc17c2e9126e3daec445ef3200de")
+        );
     }
 }
