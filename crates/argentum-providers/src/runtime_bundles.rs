@@ -176,21 +176,21 @@ pub struct LocalRuntimeOffer {
 }
 
 const LOCAL_RUNTIME_OFFERS: [LocalRuntimeOffer; 1] = [LocalRuntimeOffer {
-    id: "llama-cpp-v0.3.0-b10621-vulkan-x64",
-    version: "v0.3.0",
+    id: "llama-cpp-v0.4.0-b12650-vulkan-x64",
+    version: "v0.4.0",
     backend: "vulkan",
     platform: "windows",
     arch: "x86_64",
     install_dir: "vulkan-x64",
-    filename: "llama-b10621-bin-win-vulkan-x64.zip",
+    filename: "llama-b12650-bin-win-vulkan-x64.zip",
     download_url:
-        "https://github.com/ggml-org/llama.cpp/releases/download/b10621/llama-b10621-bin-win-vulkan-x64.zip",
-    size_bytes: 34_403_304,
-    sha256: "2672d85bf87c8280d94dee01eb6a86280046878f70a07d786a93637fa9081163",
+        "https://github.com/ggml-org/llama.cpp/releases/download/b12650/llama-b12650-bin-win-vulkan-x64.zip",
+    size_bytes: 38_939_284,
+    sha256: "6dea3c0aa58319337bfbe32046d3b36573e8ac742ebefbccc6dedd9b283b6876",
     executable: "llama-server.exe",
-    executable_size_bytes: 9_216,
+    executable_size_bytes: 10_240,
     executable_sha256:
-        "0f706d509ce7937504d527f49cc1e68a0e45ee60cfc4153b3ff16f76a0f4e3ac",
+        "f57bf386996a089974133e96f31acc4e429fcb691516c9f0684ffa11d6606b9b",
     license: "MIT",
 }];
 

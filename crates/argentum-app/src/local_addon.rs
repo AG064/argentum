@@ -68,13 +68,7 @@ pub(crate) fn connect(ui: &UiHandle, context: Context) {
             .map(|model| AddonModelView {
                 id: model.id.into(),
                 label: model.label.into(),
-                detail: format!(
-                    "{}, {}, {}",
-                    size_text(model.artifact.size_bytes),
-                    model.license,
-                    model.source
-                )
-                .into(),
+                detail: model_detail_text(model).into(),
             })
             .collect::<Vec<_>>(),
     )));
@@ -347,6 +341,16 @@ fn host_of(url: &str) -> &str {
         .unwrap_or_default()
 }
 
+fn model_detail_text(model: &ModelPin) -> String {
+    format!(
+        "{} model files, {}, {}, {}",
+        model.artifacts().count(),
+        size_text(model.total_size_bytes()),
+        model.license,
+        model.source
+    )
+}
+
 /// What the owner approves: every file, its size, where it comes from, how it
 /// is checked, and where it goes.
 fn confirm_text(layout: &Layout, model: &ModelPin) -> String {
@@ -362,18 +366,21 @@ fn confirm_text(layout: &Layout, model: &ModelPin) -> String {
             host_of(runtime.artifact.url)
         ));
     }
-    if !status
+    let model_installed = status
         .models
         .iter()
-        .any(|installed| installed.id == model.id)
-    {
-        lines.push(format!(
-            "{}: {}, {} license, from {}. Its SHA-256 is pinned in Argentum. Model files have no publisher signature to check.",
-            model.label,
-            size_text(model.artifact.size_bytes),
-            model.license,
-            model.source
-        ));
+        .any(|installed| installed.id == model.id);
+    if !model_installed {
+        for artifact in model.artifacts() {
+            lines.push(format!(
+                "{}: {}, {} license, from {} ({}). Its SHA-256 is pinned in Argentum. Model files have no publisher signature to check.",
+                artifact.file_name,
+                size_text(artifact.size_bytes),
+                model.license,
+                host_of(artifact.url),
+                model.source
+            ));
+        }
     }
     if lines.is_empty() {
         return format!(
@@ -381,20 +388,25 @@ fn confirm_text(layout: &Layout, model: &ModelPin) -> String {
             model.label
         );
     }
-    let total: u64 = (!status.runtime_installed)
+    let file_count = (if status.runtime_installed { 0 } else { 1 })
+        + if model_installed {
+            0
+        } else {
+            model.artifacts().count()
+        };
+    let total = (!status.runtime_installed)
         .then_some(runtime.artifact.size_bytes)
         .into_iter()
         .chain(
-            (!status
-                .models
-                .iter()
-                .any(|installed| installed.id == model.id))
-            .then_some(model.artifact.size_bytes),
+            (!model_installed)
+                .then(|| model.artifacts().map(|artifact| artifact.size_bytes))
+                .into_iter()
+                .flatten(),
         )
-        .sum();
+        .fold(0_u64, u64::saturating_add);
     format!(
-        "Argentum will download {} over HTTPS, {} in total, and keep each file only if its checks pass.\n\n{}\n\nThe files go to {}. If a check fails or the download stops, nothing is installed. Nothing runs until you start the local model, which asks for approval.",
-        if lines.len() == 1 { "1 file" } else { "2 files" },
+        "Argentum may download up to {} over HTTPS, up to {} total. Existing files are reused only when their pinned checks pass.\n\n{}\n\nThe files go to {}. If a check fails or the download stops, downloaded files are removed. Nothing runs until you start the local model, which asks for approval.",
+        if file_count == 1 { "1 file".to_owned() } else { format!("{file_count} files") },
         size_text(total),
         lines.join("\n"),
         display_root(layout).display()
@@ -437,6 +449,26 @@ mod tests {
             assert_eq!(model.artifact.size_bytes, offer.size_bytes);
             assert_eq!(model.artifact.sha256, offer.sha256);
         }
+
+        let inkling = addon::model("Inkling-2-Mini-AD-Q4_K.gguf").expect("Inkling pin");
+        let components = argentum_providers::local_model_components(inkling.id);
+        assert_eq!(components.len(), inkling.additional_artifacts.len());
+        for (component, artifact) in components.iter().zip(inkling.additional_artifacts) {
+            assert_eq!(component.filename, artifact.file_name);
+            assert_eq!(component.size_bytes, artifact.size_bytes);
+            assert_eq!(component.sha256, artifact.sha256);
+            assert!(
+                matches!(
+                    (component.kind, artifact.file_name),
+                    (argentum_providers::LocalModelComponentKind::Lora, name)
+                        if name.ends_with("LoRA.gguf")
+                ) || matches!(
+                    (component.kind, artifact.file_name),
+                    (argentum_providers::LocalModelComponentKind::Mmproj, name)
+                        if name.starts_with("mmproj-")
+                )
+            );
+        }
     }
 
     #[test]
@@ -450,6 +482,32 @@ mod tests {
         assert!(text.contains("no publisher signature"));
         assert!(text.contains(addon::MODELS[1].label));
         assert!(text.contains("nothing is installed"));
+        assert!(
+            !data.exists(),
+            "describing a download must not create files"
+        );
+    }
+
+    #[test]
+    fn the_inkling_approval_lists_the_complete_model_set_and_gpu_mode() {
+        let data =
+            std::env::temp_dir().join(format!("argentum-inkling-confirm-{}", std::process::id()));
+        let layout = layout(&data).expect("layout");
+        let model = addon::model("Inkling-2-Mini-AD-Q4_K.gguf").expect("Inkling model");
+        let text = confirm_text(&layout, model);
+        assert!(model_detail_text(model).contains("3 model files, 17.21 GB"));
+        assert!(text.contains("up to 4 files"), "{text}");
+        assert!(text.contains("up to 17.25 GB"), "{text}");
+        assert!(text.contains("Inkling-2-Mini-AD-Q4_K.gguf"), "{text}");
+        assert!(
+            text.contains("Inkling-2-Mini-Uncensored-LoRA.gguf"),
+            "{text}"
+        );
+        assert!(text.contains("mmproj-Inkling-2-Mini-F16.gguf"), "{text}");
+        assert!(text.contains("Hugging Face, AtomicChat/Inkling-2-Mini-GGUF"));
+        assert!(text.contains("SHA-256 is pinned in Argentum"));
+        assert_eq!(model.artifacts().count(), 3);
+        assert_eq!(model.total_size_bytes(), 17_208_713_408);
         assert!(
             !data.exists(),
             "describing a download must not create files"

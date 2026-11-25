@@ -55,16 +55,16 @@ mod tls_contract_tests;
 mod tool_contract;
 mod usage_accounting;
 pub use local_models::{
-    android_local_model_offers, download_local_model, local_model_offers, LocalLlamaCppProvider,
-    LocalModelOffer,
+    android_local_model_offers, download_local_model, local_model_components, local_model_offers,
+    LocalLlamaCppProvider, LocalModelComponent, LocalModelComponentKind, LocalModelOffer,
 };
 #[cfg(feature = "test-support")]
 pub use local_runtime::{
     local_runtime_recording_test_fixture, local_runtime_test_fixture, LocalRuntimeTestControl,
 };
 pub use local_runtime::{
-    LocalRuntimeClient, LocalRuntimeConfig, LocalRuntimeLaunchApproval, LocalRuntimeLaunchPlan,
-    LocalRuntimeModule, PreparedLocalRuntime, SidecarLease,
+    LocalRuntimeAuxiliaryFile, LocalRuntimeClient, LocalRuntimeConfig, LocalRuntimeLaunchApproval,
+    LocalRuntimeLaunchPlan, LocalRuntimeModule, PreparedLocalRuntime, SidecarLease,
 };
 pub use runtime_bundles::{
     install_local_runtime, local_runtime_bundle_path, local_runtime_offers,

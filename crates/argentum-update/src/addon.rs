@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
 
-//! The optional local model add-on: the llama.cpp runtime and one model, which
-//! the owner installs from Settings instead of receiving them with the app.
+//! The optional local model add-on: the llama.cpp runtime and a model with its
+//! required files, which the owner installs from Settings instead of receiving
+//! them with the app.
 //!
 //! Every file is pinned here by URL, size, and SHA-256. The runtime archive must
 //! also be listed, with that SHA-256, in llama.cpp's own signed build attestation
@@ -55,32 +56,44 @@ pub struct ModelPin {
     pub id: &'static str,
     pub label: &'static str,
     pub artifact: Artifact,
+    pub additional_artifacts: &'static [Artifact],
     pub license: &'static str,
     pub source: &'static str,
 }
 
-/// llama.cpp b10621 for Windows x64 with the Vulkan backend. These values must
+impl ModelPin {
+    pub fn artifacts(&self) -> impl Iterator<Item = &Artifact> {
+        std::iter::once(&self.artifact).chain(self.additional_artifacts.iter())
+    }
+
+    pub fn total_size_bytes(&self) -> u64 {
+        self.artifacts().fold(0_u64, |total, artifact| {
+            total.saturating_add(artifact.size_bytes)
+        })
+    }
+}
+
+/// llama.cpp b12650 for Windows x64 with the Vulkan backend. These values must
 /// match the local runtime's own pin in `argentum-providers`, which re-checks the
 /// archive and its `llama-server.exe` before every launch.
 pub const LLAMA_CPP_RUNTIME: RuntimePin = RuntimePin {
-    label: "llama.cpp b10621, Windows x64, Vulkan",
+    label: "llama.cpp b12650, Windows x64, Vulkan prerelease",
     artifact: Artifact {
-        file_name: "llama-b10621-bin-win-vulkan-x64.zip",
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b10621/llama-b10621-bin-win-vulkan-x64.zip",
-        size_bytes: 34_403_304,
-        sha256: "2672d85bf87c8280d94dee01eb6a86280046878f70a07d786a93637fa9081163",
+        file_name: "llama-b12650-bin-win-vulkan-x64.zip",
+        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12650/llama-b12650-bin-win-vulkan-x64.zip",
+        size_bytes: 38_939_284,
+        sha256: "6dea3c0aa58319337bfbe32046d3b36573e8ac742ebefbccc6dedd9b283b6876",
     },
     license: "MIT",
-    attestation: include_bytes!("../pins/llama-b10621-bin-win-vulkan-x64.sigstore.json"),
+    attestation: include_bytes!("../pins/llama-b12650-bin-win-vulkan-x64.sigstore.json"),
     publisher: PublisherIdentity {
-        workflow:
-            "https://github.com/ggml-org/llama.cpp/.github/workflows/release.yml@refs/heads/master",
+        workflow: "https://github.com/ggml-org/llama.cpp/.github/workflows/release-publish.yml@refs/heads/master",
         issuer: "https://token.actions.githubusercontent.com",
     },
 };
 
-/// The models the owner can pick from, each pinned to one repository commit.
-pub const MODELS: [ModelPin; 3] = [
+/// The models the owner can pick from, each pinned to a repository commit.
+pub const MODELS: [ModelPin; 4] = [
     ModelPin {
         id: "Qwen3.5-0.8B-Q8_0.gguf",
         label: "Qwen3.5 0.8B Q8_0",
@@ -90,6 +103,7 @@ pub const MODELS: [ModelPin; 3] = [
             size_bytes: 833_592_096,
             sha256: "37ae482d336108d23516fa35e8e0c4126688d81018b87178a18d752a1357814f",
         },
+        additional_artifacts: &[],
         license: "Apache-2.0",
         source: "Hugging Face, ggml-org/Qwen3.5-0.8B-GGUF",
     },
@@ -102,6 +116,7 @@ pub const MODELS: [ModelPin; 3] = [
             size_bytes: 1_280_835_840,
             sha256: "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
         },
+        additional_artifacts: &[],
         license: "Apache-2.0",
         source: "Hugging Face, unsloth/Qwen3.5-2B-GGUF",
     },
@@ -114,8 +129,35 @@ pub const MODELS: [ModelPin; 3] = [
             size_bytes: 2_740_937_888,
             sha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
         },
+        additional_artifacts: &[],
         license: "Apache-2.0",
         source: "Hugging Face, unsloth/Qwen3.5-4B-GGUF",
+    },
+    ModelPin {
+        id: "Inkling-2-Mini-AD-Q4_K.gguf",
+        label: "Inkling-2-Mini AD-Q4_K with Uncensored LoRA",
+        artifact: Artifact {
+            file_name: "Inkling-2-Mini-AD-Q4_K.gguf",
+            url: "https://huggingface.co/AtomicChat/Inkling-2-Mini-GGUF/resolve/309509848b3151419aa26d069eb03db57fd29a00/Inkling-2-Mini-AD-Q4_K.gguf",
+            size_bytes: 16_525_559_776,
+            sha256: "2bfc233e10925297cc79dffce5d9be4f2a2b43e499ea6a1bf03b9242867dce9e",
+        },
+        additional_artifacts: &[
+            Artifact {
+                file_name: "Inkling-2-Mini-Uncensored-LoRA.gguf",
+                url: "https://huggingface.co/AtomicChat/Inkling-2-Mini-Uncensored-GGUF/resolve/40886ab636cabb4decf4998224f790b462ab048e/Inkling-2-Mini-Uncensored-LoRA.gguf",
+                size_bytes: 43_805_184,
+                sha256: "42914b85c874e7fe249e93f0ac6e8abf08dc0bdf32aa1ec46c72714e64808f12",
+            },
+            Artifact {
+                file_name: "mmproj-Inkling-2-Mini-F16.gguf",
+                url: "https://huggingface.co/AtomicChat/Inkling-2-Mini-GGUF/resolve/309509848b3151419aa26d069eb03db57fd29a00/mmproj-Inkling-2-Mini-F16.gguf",
+                size_bytes: 639_348_448,
+                sha256: "5a72e0b6e2bef13c3f455f4edb85df0c752b92ff76ab46af879eae088163efe6",
+            },
+        ],
+        license: "Apache-2.0",
+        source: "Hugging Face, AtomicChat/Inkling-2-Mini-GGUF and AtomicChat/Inkling-2-Mini-Uncensored-GGUF",
     },
 ];
 
@@ -148,6 +190,10 @@ impl Layout {
     fn model_path(&self, model: &ModelPin) -> PathBuf {
         self.models_dir.join(model.artifact.file_name)
     }
+
+    fn artifact_path(&self, artifact: &Artifact) -> PathBuf {
+        self.models_dir.join(artifact.file_name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,7 +222,11 @@ pub fn status(layout: &Layout) -> Status {
         ),
         models: MODELS
             .iter()
-            .filter(|model| has_size(&layout.model_path(model), model.artifact.size_bytes))
+            .filter(|model| {
+                model
+                    .artifacts()
+                    .all(|artifact| has_size(&layout.artifact_path(artifact), artifact.size_bytes))
+            })
             .collect(),
     }
 }
@@ -214,7 +264,12 @@ pub fn recover(layout: &Layout) -> Result<(), UpdateError> {
 }
 
 fn is_inside(path: &Path, layout: &Layout) -> bool {
-    *path == layout.runtime_bundle || MODELS.iter().any(|model| *path == layout.model_path(model))
+    *path == layout.runtime_bundle
+        || MODELS.iter().any(|model| {
+            model
+                .artifacts()
+                .any(|artifact| *path == layout.artifact_path(artifact))
+        })
 }
 
 fn remove_file_if_present(path: &Path) -> Result<(), UpdateError> {
@@ -382,21 +437,24 @@ pub async fn install(
         check_runtime(&staged)?;
         moves.push((staged, layout.runtime_bundle.clone()));
     }
-    let model_target = layout.model_path(model);
-    if !file_matches(&model_target, &model.artifact) {
-        if fs::symlink_metadata(&model_target).is_ok() {
+    for artifact in model.artifacts() {
+        let target = layout.artifact_path(artifact);
+        if file_matches(&target, artifact) {
+            continue;
+        }
+        if fs::symlink_metadata(&target).is_ok() {
             return Err(UpdateError(format!(
                 "{} already exists and is not the expected file. Move it away and try again.",
-                model_target.display()
+                target.display()
             )));
         }
-        let staged = staging.join(model.artifact.file_name);
+        let staged = staging.join(artifact.file_name);
         source
-            .fetch(&model.artifact, &staged, &mut |received, total| {
-                progress(Step::Downloading(model.label), received, total)
+            .fetch(artifact, &staged, &mut |received, total| {
+                progress(Step::Downloading(artifact.file_name), received, total)
             })
             .await?;
-        moves.push((staged, model_target));
+        moves.push((staged, target));
     }
 
     progress(Step::Placing, 0, None);
@@ -443,7 +501,9 @@ pub fn remove(layout: &Layout) -> Result<(), UpdateError> {
         )),
     }
     for model in &MODELS {
-        remove_file_if_present(&layout.model_path(model))?;
+        for artifact in model.artifacts() {
+            remove_file_if_present(&layout.artifact_path(artifact))?;
+        }
     }
     Ok(())
 }
@@ -790,7 +850,7 @@ Connection: close
             &source,
             |_| Ok(()),
             |step, _, _| {
-                if step == Step::Downloading(MODELS[0].label) {
+                if step == Step::Downloading(MODELS[0].artifact.file_name) {
                     started.store(true, std::sync::atomic::Ordering::SeqCst);
                 }
             },
@@ -899,7 +959,7 @@ Connection: close
     #[test]
     fn pins_are_well_formed() {
         let all = std::iter::once(&LLAMA_CPP_RUNTIME.artifact)
-            .chain(MODELS.iter().map(|model| &model.artifact));
+            .chain(MODELS.iter().flat_map(ModelPin::artifacts));
         for artifact in all {
             assert_eq!(artifact.sha256.len(), 64);
             assert!(artifact
@@ -912,6 +972,10 @@ Connection: close
         for model in &MODELS {
             assert_eq!(model.id, model.artifact.file_name);
             assert!(model.artifact.file_name.ends_with(".gguf"));
+            assert_eq!(
+                model.total_size_bytes(),
+                model.artifacts().map(|artifact| artifact.size_bytes).sum()
+            );
         }
     }
 }
