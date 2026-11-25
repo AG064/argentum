@@ -22,6 +22,7 @@ mod android_secret_store;
 mod android_shared_storage;
 mod android_workspace;
 mod authority;
+mod hardware;
 pub use android_secret_store::AndroidSecretStore;
 pub use android_shared_storage::{
     shared_path_from_tree, shared_workspace_at_start, validate_shared_workspace,
@@ -40,6 +41,7 @@ pub use authority::{
     AuthorityDependentService, PlatformAuthorityBridge, PlatformAuthorityBroker,
     PlatformAuthorityFuture, PlatformAuthorityLease, PlatformCapabilityProbe,
 };
+pub use hardware::{detect_hardware, GpuInfo, HardwareInfo};
 
 const MAX_WORKSPACE_CONFIG_BYTES: u64 = 8 * 1024;
 const DATA_DIR_ENV: &str = "ARGENTUM_DATA_DIR";

@@ -37,15 +37,15 @@ use crate::{
 const LOCAL_RUNTIME_MODULE_ID: &str = "first-party.local-runtime";
 const LOCAL_RUNTIME_EFFECT_LABEL: &str = "process:llama-cpp-sidecar";
 const LOCAL_RUNTIME_HOST: &str = "127.0.0.1";
-const LOCAL_RUNTIME_CONTEXT: u32 = crate::SIDECAR_CONTEXT_TOKENS;
+pub(crate) const LOCAL_RUNTIME_CONTEXT: u32 = crate::SIDECAR_CONTEXT_TOKENS;
 const LOCAL_RUNTIME_GPU_LAYER_POLICY: &str = "llama.cpp memory fit";
-const LOCAL_RUNTIME_MMPROJ_FIT_TARGET_MIB: u32 = 2_048;
+pub(crate) const LOCAL_RUNTIME_MMPROJ_FIT_TARGET_MIB: u32 = 2_048;
 const LOCAL_RUNTIME_MAX_PREDICTION: i32 = -1;
 const LOCAL_RUNTIME_READY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const LOCAL_RUNTIME_STOP_TIMEOUT: Duration = Duration::from_secs(15);
 const LOCAL_RUNTIME_MIN_MODEL_BYTES: u64 = 1024 * 1024;
 const LOCAL_RUNTIME_DEFAULT_MODEL_BYTES: u64 = 64 * 1024 * 1024 * 1024;
-const LOCAL_RUNTIME_MAX_MODEL_BYTES: u64 = 256 * 1024 * 1024 * 1024;
+pub(crate) const LOCAL_RUNTIME_MAX_MODEL_BYTES: u64 = 256 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalRuntimeLimits {

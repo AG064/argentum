@@ -39,6 +39,11 @@ pub use local_backend::{
     AndroidForegroundStop, AndroidLlamaCppBackend, LlamaCppSidecarBackend, LocalBackendLease,
     LocalBackendStatus, LocalInferenceBackend,
 };
+mod local_fit;
+pub use local_fit::{
+    estimated_kv_cache_bytes, launcher_context_tokens, launcher_fit_target_mib, local_model_fit,
+    LocalModelFit, LocalModelFitEstimate, MemoryFacts,
+};
 mod local_models;
 mod minimax_continuation;
 pub use minimax_continuation::{ContinuationScope, MinimaxAssistantState};

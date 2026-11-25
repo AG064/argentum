@@ -463,6 +463,7 @@ fn marketplace(ui: &UiHandle, state: &str) {
     app.set_addon_detail("Installed: llama.cpp runtime with Qwen3.5 4B Q4_K_M.".into());
     app.set_market_supported(true);
     app.set_market_query("qwen coder".into());
+    app.set_market_hardware("This computer: 34 GB of system memory, Example GPU with 8.6 GB of GPU memory. Read locally and never sent. Fit marks use the launcher's own memory rules at a 8192-token context, with an estimated KV cache; llama.cpp measures again at launch.".into());
     app.set_market_state(state.into());
     app.set_market_detail(
         "3 GGUF repositories, most downloaded first. Open one to see its files.".into(),
@@ -486,7 +487,7 @@ fn marketplace(ui: &UiHandle, state: &str) {
     );
     app.set_market_files(ModelRc::new(VecModel::from(
         [
-            ("Q4_K_M", "4.68 GB, Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"),
+            ("Q4_K_M, recommended for this computer", "4.68 GB, Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"),
             ("Q8_0", "8.10 GB, Qwen2.5-Coder-7B-Instruct-Q8_0.gguf"),
             ("F16, 2 parts", "15.24 GB, Qwen2.5-Coder-7B-Instruct-F16-00001-of-00002.gguf, Qwen2.5-Coder-7B-Instruct-F16-00002-of-00002.gguf"),
         ]
@@ -496,6 +497,8 @@ fn marketplace(ui: &UiHandle, state: &str) {
             index: index as i32,
             label: (*label).into(),
             detail: (*detail).into(),
+            fit: ["Fits fully on GPU", "Fits with offload to system memory", "Will not fit"][index].into(),
+            fit_tone: ["ok", "secondary", "danger"][index].into(),
         })
         .collect::<Vec<_>>(),
     )));
