@@ -44,3 +44,6 @@ Thumbs.db
 /fuzz/corpus/
 /fuzz/artifacts/
 /fuzz/coverage/
+
+# Built documentation site
+/docs/site/book/
