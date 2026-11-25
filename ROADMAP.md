@@ -65,26 +65,30 @@ The first stable release, for Windows x64 and Android arm64:
   after the app opens again, in the app and in `argentum chat`.
 - **Execution environment:** a plain description of what commands can reach on
   each platform, for the agent and in Settings > Permissions.
+- **Tool output kept:** directory listings and file metadata stay available to
+  the agent in later turns, shortened to their first and last lines. Command,
+  shell and Git output stay private to the turn that made it.
+- **Context breakdown:** what fills the context window, by part: messages,
+  system prompt, tool descriptions, skills, project instructions and free
+  space, with how much is left before compaction starts. Counts come from the
+  usage each provider reports, and are marked as estimates until it does.
+- **Account balances:** the Usage panel reads the balance of a DeepSeek or
+  OpenRouter account when you ask, with the key you saved for it.
+- **Spend limit:** a monthly token limit for each provider, which warns as it
+  gets close and stops new requests when it is reached.
+- **Dependencies:** argon2 0.6, chacha20poly1305 0.11, getrandom 0.4 and base64
+  0.23. Data stored by 0.1.0 stays readable.
 
 ## Planned for 0.1.1
 
 - **Exact token counts:** counting with each provider's own tokenizer where one
-  is available, and learning from the usage each provider reports.
-- **Dependencies:** the major updates of the crypto and encoding crates
-  (argon2, chacha20poly1305, sha2, getrandom, base64) after their own review,
-  and Android Gradle plugin 9.5 with Gradle 9.9, once their checksums are added
-  to the Android build's dependency verification.
-- **Run details for the agent:** tool output that stays available after the
-  turn that made it.
-- **Context breakdown:** what fills the context window, by part: messages,
-  system prompt, tool descriptions, skills, project instructions and free
-  space, with how much is left before compaction starts.
-- **Provider limits and balances:** each provider's own usage limits where it
-  reports them, such as requests and tokens per minute or a subscription's
-  usage window, with how much is left and when it resets; the account balance
-  for providers that report one, such as DeepSeek and OpenRouter; and a spend
-  limit you set for each provider, which warns as it gets close and stops new
-  requests when it is reached.
+  is available offline.
+- **Provider limits:** each provider's own usage limits where it reports them,
+  such as requests and tokens per minute or a subscription's usage window,
+  with how much is left and when it resets.
+- **Dependencies:** sha2 0.11, and Android Gradle plugin 9.5 with Gradle 9.9,
+  once their checksums are added to the Android build's dependency
+  verification.
 
 ## Planned for 0.1.5
 
