@@ -91,7 +91,7 @@ files. Nobody has used them on a real desktop yet, so treat them as previews.
 | --- | --- | --- |
 | Supported | x64 with glibc 2.35 or later, such as Ubuntu 22.04, Debian 12 and Fedora 36 or later | macOS 11 or later, on Apple silicon (arm64) and Intel (x64) |
 | Files | `Argentum-<version>-linux-x64.tar.gz` (desktop app), `argentum-genesis-<version>-linux-x64.tar.gz` (CLI), `argentum_<version>_amd64.deb` (both) | `Argentum-<version>-macos-arm64.tar.gz` and `-macos-x64.tar.gz` (`Argentum.app`), `argentum-genesis-<version>-macos-arm64.tar.gz` and `-macos-x64.tar.gz` (CLI) |
-| Tested | CI only: workspace tests on Ubuntu 24.04, release build on Ubuntu 22.04, `.deb` install and removal, desktop app start under a virtual display | CI only: workspace tests and desktop app start on the GitHub macOS 15 runners |
+| Tested | CI only: workspace tests on Ubuntu 24.04, release build on Ubuntu 22.04, `.deb` install and removal, desktop app start under a virtual display | CI only: workspace tests on macOS 15 Apple silicon; build, strict lint and desktop app start on Apple silicon and Intel |
 | Desktop needs | X11 or Wayland, fontconfig and libxkbcommon | Nothing extra |
 | Signing | Not signed | Not signed or notarized. macOS blocks the app the first time: Control-click it, choose Open, or run `xattr -d com.apple.quarantine Argentum.app` |
 
