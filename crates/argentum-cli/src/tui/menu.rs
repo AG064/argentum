@@ -195,6 +195,13 @@ pub(super) const COMMANDS: &[Command] = &[
         false
     ),
     cmd!(
+        "/tiers",
+        "Model per task: tiers and the tier each step uses",
+        "conversation",
+        None,
+        false
+    ),
+    cmd!(
         "/context",
         "Selected context, separate from scrollback",
         "diagnostics",

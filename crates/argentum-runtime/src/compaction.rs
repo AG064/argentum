@@ -859,12 +859,18 @@ impl RuntimeService {
             if prompt.len() > MAX_SUMMARIZER_PROMPT_BYTES {
                 break;
             }
+            let (summary_profile, step_budget, summary_choice) = self.step_route(
+                argentum_domain::model_tiers::ModelStep::Summaries,
+                profile,
+                &summary_budget,
+            )?;
+            self.record_step_model(session, operation, summary_choice)?;
             let request = ModelRequest {
                 disable_thinking: true,
                 require_tool_call: false,
                 continuation_scope: None,
-                output_limit: summary_budget.requested_output_tokens,
-                model: profile.model.clone(),
+                output_limit: step_budget.requested_output_tokens,
+                model: summary_profile.model.clone(),
                 system: Some(format!(
                     "{}{SUMMARY_RULES}{SUMMARY_ENCODING_RULES}",
                     super::presentation::summarizer_guidance(base.system.as_deref().unwrap_or(""))
@@ -879,12 +885,16 @@ impl RuntimeService {
                 &request.prompt,
                 &[],
             )?;
-            let prepared =
-                self.prepare_context_request(provider.as_ref(), profile, &summary_budget, request)?;
+            let prepared = self.prepare_context_request(
+                provider.as_ref(),
+                &summary_profile,
+                &step_budget,
+                request,
+            )?;
             let mut accounting = prepared.accounting().clone();
             let validation = provider.validate_prepared_request(&prepared).await?;
             ensure_compaction_runtime_evidence(&validation, &admitted_runtime_evidence)?;
-            self.apply_provider_request_validation(&summary_budget, &mut accounting, &validation)?;
+            self.apply_provider_request_validation(&step_budget, &mut accounting, &validation)?;
             if !accounting.fits {
                 break;
             }

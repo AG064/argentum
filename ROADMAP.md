@@ -104,6 +104,13 @@ The first stable release, for Windows x64 and Android arm64:
   import only what you tick. Servers are saved turned off without their secret
   values, skills keep no allowed tools, and nothing is overwritten. Importing
   grants no permission.
+- **Model per task:** name tiers for a project, such as cheap or strong, with
+  `/tiers` in `argentum chat`, and pick one for planning (a run's first
+  request), editing (its later requests) and compaction summaries. Run details
+  say which model each step used and why. A tier only picks the model: it never
+  changes permissions, and only tiers on the provider a run already uses
+  apply, so a step never sends the conversation to another provider. A tier's
+  model is used only when its known context window holds the run's limits.
 
 ## Planned for 0.1.1
 

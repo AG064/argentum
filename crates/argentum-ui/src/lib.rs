@@ -411,6 +411,9 @@ impl UiHandle {
             AppEvent::SummaryTransportObserved { .. }
             | AppEvent::ExtensionOperationRecorded { .. }
             | AppEvent::GoalRequestAccounting { .. } => {}
+            // Model tiers are set in `argentum chat` for now; which model each
+            // step used shows in run details.
+            AppEvent::ModelStepChosen { .. } | AppEvent::ModelTiersLoaded { .. } => {}
             // The current Slint client has no supplemental-check surface. The
             // typed receipt remains in the shared store/review; it is not a
             // task-terminal event or independent proof of task correctness.

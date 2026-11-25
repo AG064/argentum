@@ -24,6 +24,7 @@ pub mod reply_steps;
 pub use reply_steps::{REASONING_STEP_BREAK, REASONING_STEP_MARK};
 pub mod goal_supervision;
 pub mod imports;
+pub mod model_tiers;
 pub mod process_job_contract;
 pub mod recovery;
 pub mod supplemental;
@@ -2930,6 +2931,13 @@ pub enum AppCommand {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         monthly_tokens: Option<u64>,
     },
+    /// Model per task: reads the project's tiers.
+    LoadModelTiers,
+    /// Replaces the project's tiers and the tier each step uses. The owner's
+    /// setting; it changes which model answers, never what is allowed.
+    SaveModelTiers {
+        settings: model_tiers::ModelTierSettings,
+    },
     RefreshGitStatus,
     LoadGitFileDiff {
         path: String,
@@ -2988,6 +2996,12 @@ pub enum AppEvent {
         request_id: Uuid,
         purpose: String,
         accounting: context_budget::RequestAccounting,
+    },
+    /// Which model a step of a run used, and why. Journaled for run details.
+    ModelStepChosen {
+        session_id: SessionId,
+        run_id: RunId,
+        choice: model_tiers::StepModelChoice,
     },
     ModelRequestAttempt {
         session_id: SessionId,
@@ -3281,6 +3295,18 @@ pub enum AppEvent {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         error: String,
     },
+    ModelTiersLoaded {
+        settings: model_tiers::ModelTierSettings,
+        /// Profiles a tier can use, as `(id, label)`.
+        profiles: Vec<(String, String)>,
+        /// The profile runs use now. Only tiers on it apply inside a run.
+        #[serde(default)]
+        selected_profile_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notice: Option<String>,
+        #[serde(default)]
+        refused: bool,
+    },
     ProviderUsageLoaded {
         rows: Vec<ProviderUsageRow>,
         #[serde(default)]
@@ -3313,6 +3339,7 @@ impl AppEvent {
             Self::GoalRequestAccounting { .. } => "goal_request_accounting",
             Self::ContextRequestAccounted { .. } => "context_request_accounted",
             Self::ModelRequestAttempt { .. } => "model_request_attempt",
+            Self::ModelStepChosen { .. } => "model_step_chosen",
             Self::SteeringChanged(_) => "steering_changed",
             Self::PlatformAuthorityChanged(_) => "platform_authority_changed",
             Self::WorkspaceStateLoaded(_) => "workspace_state_loaded",
@@ -3346,6 +3373,7 @@ impl AppEvent {
             Self::AssistantReasoningDelta { .. } => "assistant_reasoning_delta",
             Self::UiPreferencesLoaded { .. } => "ui_preferences_loaded",
             Self::ProviderUsageLoaded { .. } => "provider_usage_loaded",
+            Self::ModelTiersLoaded { .. } => "model_tiers_loaded",
             Self::ProviderBalanceLoaded { .. } => "provider_balance_loaded",
             Self::GitStatusLoaded(_) => "git_status_loaded",
             Self::GitDiffLoaded(_) => "git_diff_loaded",

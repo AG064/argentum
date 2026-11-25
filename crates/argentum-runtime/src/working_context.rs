@@ -694,7 +694,7 @@ impl RuntimeService {
         Ok(budget)
     }
 
-    fn validate_model_budget(
+    pub(super) fn validate_model_budget(
         &self,
         profile: &argentum_domain::ProviderProfile,
         budget: &argentum_domain::context_budget::ModelBudget,
