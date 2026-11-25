@@ -373,7 +373,8 @@ fn confirm_text(layout: &Layout, model: &ModelPin) -> String {
     if !model_installed {
         for artifact in model.artifacts() {
             lines.push(format!(
-                "{}: {}, {} license, from {} ({}). Its SHA-256 is pinned in Argentum. Model files have no publisher signature to check.",
+                "{} ({}): {}, {} license, from {} ({}). Its SHA-256 is pinned in Argentum. Model files have no publisher signature to check.",
+                model.label,
                 artifact.file_name,
                 size_text(artifact.size_bytes),
                 model.license,
@@ -451,23 +452,27 @@ mod tests {
         }
 
         let inkling = addon::model("Inkling-2-Mini-AD-Q4_K.gguf").expect("Inkling pin");
-        let components = argentum_providers::local_model_components(inkling.id);
-        assert_eq!(components.len(), inkling.additional_artifacts.len());
-        for (component, artifact) in components.iter().zip(inkling.additional_artifacts) {
-            assert_eq!(component.filename, artifact.file_name);
-            assert_eq!(component.size_bytes, artifact.size_bytes);
-            assert_eq!(component.sha256, artifact.sha256);
-            assert!(
-                matches!(
-                    (component.kind, artifact.file_name),
-                    (argentum_providers::LocalModelComponentKind::Lora, name)
-                        if name.ends_with("LoRA.gguf")
-                ) || matches!(
-                    (component.kind, artifact.file_name),
-                    (argentum_providers::LocalModelComponentKind::Mmproj, name)
-                        if name.starts_with("mmproj-")
-                )
-            );
+        // The adapter list the add-on writes is one the local runtime accepts,
+        // and names only files downloaded with the model.
+        let models = std::env::temp_dir().join(format!(
+            "argentum-addon-adapters-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&models).expect("models folder");
+        std::fs::write(
+            argentum_providers::local_model_adapters_path(&models, inkling.id),
+            inkling.adapter_list.expect("Inkling adapter list"),
+        )
+        .expect("write list");
+        let adapters =
+            argentum_providers::local_model_adapters(&models, inkling.id).expect("valid list");
+        let _ = std::fs::remove_dir_all(&models);
+        assert_eq!(adapters.len(), inkling.additional_artifacts.len());
+        for adapter in adapters {
+            assert!(inkling
+                .additional_artifacts
+                .iter()
+                .any(|artifact| artifact.file_name == adapter.filename));
         }
     }
 
@@ -481,7 +486,7 @@ mod tests {
         assert!(text.contains("signed build attestation"));
         assert!(text.contains("no publisher signature"));
         assert!(text.contains(addon::MODELS[1].label));
-        assert!(text.contains("nothing is installed"));
+        assert!(text.contains("downloaded files are removed"));
         assert!(
             !data.exists(),
             "describing a download must not create files"

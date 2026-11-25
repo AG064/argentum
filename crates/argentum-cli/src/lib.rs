@@ -2826,7 +2826,7 @@ mod tests {
         let runtime = config.local_runtime.expect("local runtime config");
         assert!(runtime.bundle_path.ends_with(
             Path::new("llama-cpp")
-                .join("v0.3.0")
+                .join("v0.4.0")
                 .join("vulkan-x64")
                 .join("bundle.zip")
         ));

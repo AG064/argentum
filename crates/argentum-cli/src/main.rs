@@ -2931,7 +2931,7 @@ where
 
 fn format_local_runtime_launch_plan(plan: &LocalRuntimeLaunchPlan) -> String {
     let mut text = format!(
-        "Contained local runtime launch plan:\n  Runtime: {} {}\n  Bundle SHA-256: {}\n  Launcher: {}\n  Launcher SHA-256: {}\n  Model: {}\n  Model path: {}\n  Model bytes: {}\n  Model maximum bytes: {}\n  Managed active process limit: {}\n  Managed CPU rate percent: {}\n  Managed process memory bytes: {}\n  Managed job memory bytes: {}\n  Managed output hash bytes per stream: {}\n  Model SHA-256: {}\n  Auxiliary model files: {}\n  Bind: {}:{}\n  API prefix: {}\n  Context tokens: {}\n  GPU placement policy: {}\n  Environment SHA-256: {}\n  Disabled features: {}\n  Exact process arguments:\n",
+        "Contained local runtime launch plan:\n  Runtime: {} {}\n  Bundle SHA-256: {}\n  Launcher: {}\n  Launcher SHA-256: {}\n  Model: {}\n  Model path: {}\n  Model bytes: {}\n  Model maximum bytes: {}\n  Managed active process limit: {}\n  Managed CPU rate percent: {}\n  Managed process memory bytes: {}\n  Managed job memory bytes: {}\n  Managed output hash bytes per stream: {}\n  Model SHA-256: {}\n  Adapter files: {}\n{}  Bind: {}:{}\n  API prefix: {}\n  Context tokens: {}\n  GPU placement policy: {}\n  Environment SHA-256: {}\n  Disabled features: {}\n  Exact process arguments:\n",
         plan.runtime_id,
         plan.runtime_version,
         plan.runtime_bundle_sha256,
@@ -2948,6 +2948,22 @@ fn format_local_runtime_launch_plan(plan: &LocalRuntimeLaunchPlan) -> String {
         plan.managed_output_hash_limit,
         plan.model_sha256,
         plan.auxiliary_model_files.len(),
+        plan.auxiliary_model_files
+            .iter()
+            .map(|file| {
+                let kind = match file.kind {
+                    argentum_providers::LocalModelComponentKind::Lora => "LoRA",
+                    argentum_providers::LocalModelComponentKind::Mmproj => "mmproj",
+                };
+                format!(
+                    "    {kind}: {} bytes, SHA-256 {}, {}
+",
+                    file.size_bytes,
+                    file.sha256,
+                    file.path.display()
+                )
+            })
+            .collect::<String>(),
         plan.host,
         plan.port,
         plan.api_prefix,
@@ -2956,18 +2972,6 @@ fn format_local_runtime_launch_plan(plan: &LocalRuntimeLaunchPlan) -> String {
         plan.environment_sha256.0,
         plan.disabled_features.join(", ")
     );
-    for file in &plan.auxiliary_model_files {
-        let kind = match file.kind {
-            argentum_providers::LocalModelComponentKind::Lora => "LoRA",
-            argentum_providers::LocalModelComponentKind::Mmproj => "mmproj",
-        };
-        text.push_str(&format!(
-            "    {kind}: {} bytes, SHA-256 {}, {}\n",
-            file.size_bytes,
-            file.sha256,
-            file.path.display()
-        ));
-    }
     for argument in &plan.arguments {
         text.push_str("    ");
         text.push_str(argument);
@@ -9956,8 +9960,13 @@ mod tests {
         let first_digest = plan.digest();
         let first_display = format_local_runtime_launch_plan(&plan);
         assert!(first_display.contains("Model maximum bytes: 67108864"));
-        assert!(first_display.contains("Auxiliary model files: 1"));
+        assert!(first_display.contains("Adapter files: 1"));
         assert!(first_display.contains(r"mmproj: 3 bytes, SHA-256"));
+        // Adapters are listed with the model, not among the process arguments.
+        assert!(
+            first_display.find("mmproj: 3 bytes").unwrap()
+                < first_display.find("Exact process arguments:").unwrap()
+        );
         assert!(first_display.contains(r"C:\models\mmproj.gguf"));
         assert!(first_display.contains("Managed active process limit: 4"));
         assert!(first_display.contains("Managed CPU rate percent: 95"));

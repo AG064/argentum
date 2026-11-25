@@ -57,6 +57,10 @@ pub struct ModelPin {
     pub label: &'static str,
     pub artifact: Artifact,
     pub additional_artifacts: &'static [Artifact],
+    /// The adapter list written next to the model, `<model>.gguf.adapters`,
+    /// in the format the local runtime reads. The owner can edit or delete it,
+    /// for example to run the model without its LoRA.
+    pub adapter_list: Option<&'static str>,
     pub license: &'static str,
     pub source: &'static str,
 }
@@ -104,6 +108,7 @@ pub const MODELS: [ModelPin; 4] = [
             sha256: "37ae482d336108d23516fa35e8e0c4126688d81018b87178a18d752a1357814f",
         },
         additional_artifacts: &[],
+        adapter_list: None,
         license: "Apache-2.0",
         source: "Hugging Face, ggml-org/Qwen3.5-0.8B-GGUF",
     },
@@ -117,6 +122,7 @@ pub const MODELS: [ModelPin; 4] = [
             sha256: "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
         },
         additional_artifacts: &[],
+        adapter_list: None,
         license: "Apache-2.0",
         source: "Hugging Face, unsloth/Qwen3.5-2B-GGUF",
     },
@@ -130,6 +136,7 @@ pub const MODELS: [ModelPin; 4] = [
             sha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
         },
         additional_artifacts: &[],
+        adapter_list: None,
         license: "Apache-2.0",
         source: "Hugging Face, unsloth/Qwen3.5-4B-GGUF",
     },
@@ -156,10 +163,20 @@ pub const MODELS: [ModelPin; 4] = [
                 sha256: "5a72e0b6e2bef13c3f455f4edb85df0c752b92ff76ab46af879eae088163efe6",
             },
         ],
+        adapter_list: Some(
+            "# Written by the Argentum local model add-on. Delete the lora line to
+             # run Inkling without the Uncensored LoRA.
+             lora Inkling-2-Mini-Uncensored-LoRA.gguf
+             mmproj mmproj-Inkling-2-Mini-F16.gguf
+",
+        ),
         license: "Apache-2.0",
         source: "Hugging Face, AtomicChat/Inkling-2-Mini-GGUF and AtomicChat/Inkling-2-Mini-Uncensored-GGUF",
     },
 ];
+
+/// Must match `LOCAL_MODEL_ADAPTERS_SUFFIX` in `argentum-providers`.
+const ADAPTER_LIST_SUFFIX: &str = ".adapters";
 
 pub fn model(id: &str) -> Option<&'static ModelPin> {
     MODELS.iter().find(|model| model.id == id)
@@ -187,8 +204,14 @@ impl Layout {
         self.work_dir.join("install-journal.json")
     }
 
+    #[cfg(test)]
     fn model_path(&self, model: &ModelPin) -> PathBuf {
         self.models_dir.join(model.artifact.file_name)
+    }
+
+    fn adapter_list_path(&self, model: &ModelPin) -> PathBuf {
+        self.models_dir
+            .join(format!("{}{ADAPTER_LIST_SUFFIX}", model.artifact.file_name))
     }
 
     fn artifact_path(&self, artifact: &Artifact) -> PathBuf {
@@ -269,6 +292,7 @@ fn is_inside(path: &Path, layout: &Layout) -> bool {
             model
                 .artifacts()
                 .any(|artifact| *path == layout.artifact_path(artifact))
+                || (model.adapter_list.is_some() && *path == layout.adapter_list_path(model))
         })
 }
 
@@ -337,7 +361,7 @@ pub(crate) async fn download_artifact(
 ) -> Result<(), UpdateError> {
     let partial = destination.with_extension("partial");
     let guard = PartialFile::create(&partial)
-        .map_err(|_| UpdateError("The download file could not be created.".into()))?;
+        .map_err(|error| UpdateError(format!("The download file could not be created: {error}")))?;
     let mut progress = progress;
     crate::stream_checked(
         client,
@@ -419,7 +443,7 @@ pub async fn install(
 
     let staging = layout.staging();
     fs::create_dir_all(&staging)
-        .map_err(|_| UpdateError("The add-on download folder could not be created.".into()))?;
+        .map_err(|error| UpdateError(format!("The add-on download folder could not be created: {error}")))?;
     let mut transaction = Transaction {
         layout,
         placed: Vec::new(),
@@ -456,30 +480,44 @@ pub async fn install(
             .await?;
         moves.push((staged, target));
     }
+    if let Some(list) = model.adapter_list {
+        let target = layout.adapter_list_path(model);
+        // Keep a list the owner has already written or edited.
+        if fs::symlink_metadata(&target).is_err() {
+            let staged = staging.join(format!(
+                "{}{ADAPTER_LIST_SUFFIX}",
+                model.artifact.file_name
+            ));
+            fs::write(&staged, list).map_err(|error| {
+                UpdateError(format!("The adapter list could not be written: {error}"))
+            })?;
+            moves.push((staged, target));
+        }
+    }
 
     progress(Step::Placing, 0, None);
     let journal = Journal {
         placed: moves.iter().map(|(_, target)| target.clone()).collect(),
     };
     let journal_bytes = serde_json::to_vec(&journal)
-        .map_err(|_| UpdateError("The install record could not be written.".into()))?;
+        .map_err(|error| UpdateError(format!("The install record could not be written: {error}")))?;
     fs::write(layout.journal(), journal_bytes)
-        .map_err(|_| UpdateError("The install record could not be written.".into()))?;
+        .map_err(|error| UpdateError(format!("The install record could not be written: {error}")))?;
     for (staged, target) in moves {
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)
-                .map_err(|_| UpdateError("The add-on folder could not be created.".into()))?;
+                .map_err(|error| UpdateError(format!("The add-on folder could not be created: {error}")))?;
         }
         if fs::symlink_metadata(&target).is_ok() {
             // Present but wrong, such as a damaged runtime archive. Replace it.
             remove_file_if_present(&target)?;
         }
         fs::rename(&staged, &target)
-            .map_err(|_| UpdateError("The add-on could not be put in place.".into()))?;
+            .map_err(|error| UpdateError(format!("The add-on could not be put in place: {error}")))?;
         transaction.placed.push(target);
     }
     fs::remove_file(layout.journal())
-        .map_err(|_| UpdateError("The install record could not be closed.".into()))?;
+        .map_err(|error| UpdateError(format!("The install record could not be closed: {error}")))?;
     transaction.committed = true;
     let _ = fs::remove_dir_all(staging);
     Ok(())
@@ -503,6 +541,9 @@ pub fn remove(layout: &Layout) -> Result<(), UpdateError> {
     for model in &MODELS {
         for artifact in model.artifacts() {
             remove_file_if_present(&layout.artifact_path(artifact))?;
+        }
+        if model.adapter_list.is_some() {
+            remove_file_if_present(&layout.adapter_list_path(model))?;
         }
     }
     Ok(())
@@ -972,9 +1013,25 @@ Connection: close
         for model in &MODELS {
             assert_eq!(model.id, model.artifact.file_name);
             assert!(model.artifact.file_name.ends_with(".gguf"));
+            // Every file the adapter list names is downloaded with the model.
+            for line in model.adapter_list.unwrap_or("").lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                let (kind, file) = line.split_once(' ').expect("kind and file");
+                assert!(matches!(kind, "lora" | "mmproj"), "{line}");
+                assert!(
+                    model
+                        .additional_artifacts
+                        .iter()
+                        .any(|artifact| artifact.file_name == file),
+                    "{line}"
+                );
+            }
             assert_eq!(
                 model.total_size_bytes(),
-                model.artifacts().map(|artifact| artifact.size_bytes).sum()
+                model.artifacts().map(|artifact| artifact.size_bytes).sum::<u64>()
             );
         }
     }

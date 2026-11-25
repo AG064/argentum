@@ -1078,7 +1078,21 @@ impl ManagedProcess {
     where
         F: FnOnce() -> bool + Send,
     {
-        let suspended = Self::spawn_suspended(spec, limits, None).await?;
+        Self::spawn_checked_with_output(spec, limits, None, pre_resume_check).await
+    }
+
+    /// Like [`Self::spawn_checked`], and also sends the process output to
+    /// `output`, so a caller can show why the process stopped.
+    pub async fn spawn_checked_with_output<F>(
+        spec: ProcessSpec,
+        limits: ManagedProcessLimits,
+        output: Option<mpsc::UnboundedSender<ProcessOutputChunk>>,
+        pre_resume_check: F,
+    ) -> Result<Self, ProcessError>
+    where
+        F: FnOnce() -> bool + Send,
+    {
+        let suspended = Self::spawn_suspended(spec, limits, output).await?;
         if !pre_resume_check() {
             suspended.reject().await?;
             return Err(ProcessError::PreResumeCheckFailed);

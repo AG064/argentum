@@ -3646,6 +3646,15 @@ mod tests {
     }
 
     #[test]
+    fn exit_is_an_alias_for_quit() {
+        for command in ["/quit", "/exit"] {
+            let mut state = TuiState::new(PathBuf::from("workspace"), true);
+            state.apply_input(InputEvent::Text(command.into()));
+            assert_eq!(state.apply_input(InputEvent::Enter), TuiAction::Exit, "{command}");
+        }
+    }
+
+    #[test]
     fn first_ctrl_c_without_a_run_clears_and_arms_exit() {
         let mut state = TuiState::new(PathBuf::from("workspace"), true);
         state.apply_input(InputEvent::Text("draft".into()));
