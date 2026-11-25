@@ -5,7 +5,7 @@ command or CI job that proves it. A check passes only with current evidence for
 the exact commit being released: a run link, a command result, or a file hash.
 
 Releases have no paid code-signing certificate and no Google Play listing. The
-Windows files are unsigned. The Android APK is release-signed in CI with the
+Windows, Linux and macOS files are unsigned, and the macOS app is not notarized. The Android APK is release-signed in CI with the
 project key. Local llama.cpp is an optional add-on and is not in the installer,
 the zips or the APK.
 
@@ -26,26 +26,29 @@ the zips or the APK.
 
 | Check | Proof | Where |
 | --- | --- | --- |
-| Locked fresh build | `cargo build --locked --release` on a clean runner | `Release` workflow, jobs `windows` and `android` |
+| Locked fresh build | `cargo build --locked --release` on a clean runner | `Release` workflow, jobs `windows`, `linux-x64`, `macos-arm64`, `macos-x64` and `android` |
 | Complete applicable offline tests | `scripts/test-offline.ps1` | `Native CLI qualification`, job `windows`, step "Credential-free tests" |
 | Store tests on Linux | `cargo test --locked -p argentum-store --lib` | `Android and Linux`, job `linux-store` |
+| Linux and macOS tests | `cargo build`, strict Clippy and `cargo test --workspace` on Ubuntu 24.04, macOS 15 arm64 and macOS 15 Intel, then a desktop app start check with a screenshot | `Linux and macOS` workflow, jobs `linux-x64`, `macos-arm64` and `macos-x64`, artifacts `desktop-start-*` |
 | Format and strict lint | `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` | `Native CLI qualification`, job `windows`; Android lint in `Android and Linux`, job `android-lint` |
 | Source policy, license and advisory review | `cargo deny check` with `deny.toml` | `Native CLI qualification`, job `windows`, step "Advisory, source and license policy" |
 | Source review | Merged pull requests to `development`; a security review of security-sensitive changes per `SECURITY.md` | Pull request history |
 | Static analysis | CodeQL | `CodeQL` workflow on the release commit |
 | Safe CI | Workflows pin actions by commit, use read-only tokens by default, and only `draft-release` gets `contents: write` | Run `actionlint .github/workflows/*.yml` locally (CI does not run it); review `.github/workflows/release.yml` |
-| Release files | `Argentum-<version>-windows-x64.msi`, `Argentum-<version>-windows-x64.zip`, `Argentum.exe` (used by the in-app updater), `Argentum-<version>-android-arm64.apk`, `argentum-genesis-<version>-windows-x64.zip`, `argentum-genesis-desktop-control-<version>-windows-x64.zip`, `argentum-<version>-sbom.spdx.json`, `SHA256SUMS.txt`, `provenance.intoto.jsonl` | `Release` workflow, artifact `argentum-<version>-release` |
+| Release files | `Argentum-<version>-windows-x64.msi`, `Argentum-<version>-windows-x64.zip`, `Argentum.exe` (used by the in-app updater), `Argentum-<version>-android-arm64.apk`, `argentum-genesis-<version>-windows-x64.zip`, `argentum-genesis-desktop-control-<version>-windows-x64.zip`, `Argentum-<version>-linux-x64.tar.gz`, `argentum-genesis-<version>-linux-x64.tar.gz`, `argentum_<version>_amd64.deb`, `Argentum-<version>-macos-arm64.tar.gz`, `argentum-genesis-<version>-macos-arm64.tar.gz`, `Argentum-<version>-macos-x64.tar.gz`, `argentum-genesis-<version>-macos-x64.tar.gz`, `argentum-<version>-sbom.spdx.json`, `SHA256SUMS.txt`, `provenance.intoto.jsonl` | `Release` workflow, artifact `argentum-<version>-release` |
 | Checksums | `SHA256SUMS.txt` covers the release files except itself and the provenance bundle; check with `sha256sum -c SHA256SUMS.txt` | `Release` workflow, job `release-files` |
 | Provenance | Signed build provenance, saved as `provenance.intoto.jsonl`; check each file with `gh attestation verify <file> --repo AG064/argentum` | `Release` workflow, job `release-files` |
 | SBOM | `argentum-<version>-sbom.spdx.json` (SPDX, from the source tree) | `Release` workflow, job `release-files` |
 | Installer | Per-user install, Start menu entries, CLI on PATH, clean uninstall, user data kept, opt-in `REMOVEUSERDATA=1` | `Release` workflow, job `windows`, step "Install and uninstall the installer" (`scripts/test-windows-installer.ps1 -TestDataRemoval`); repeat locally with `scripts/test-windows-installer.ps1 -Installer <msi> -LogDirectory <folder>` without `-TestDataRemoval` |
-| No llama.cpp in release files | Build and test scripts fail on llama.cpp or model files | `scripts/build-windows-installer.ps1`, `Release` job `android` step "Check the signed APK" |
+| No llama.cpp in release files | Build and test scripts fail on llama.cpp or model files | `scripts/build-windows-installer.ps1`, `Release` job `android` step "Check the signed APK", Linux and macOS step "Check the release files" |
+| Linux package | The `.deb` installs, `argentum --version` runs from `/usr/bin`, and it removes cleanly; the CLI tarball runs after extraction | `Release` workflow, job `linux-x64`, step "Check the release files" |
+| Linux and macOS desktop use | Start the desktop app from the tarball on a real Linux desktop and a real Mac, first run and restart | Manual; record the system and version in the release notes |
 | Isolated first-run and restart | Fresh profile first run, then restart, from the installed app and from the extracted zip | Manual, on a Windows PC; record the result in the release notes |
 | Outside-checkout launch with spaces and non-ASCII paths | Extract the zip to a folder such as `D:\Release Test Ä\Argentum` and start `Argentum.exe` and `argentum.exe --version` | Manual, on a Windows PC |
 | Android release build and signing | `./gradlew :app:assembleRelease` builds the native libraries with cargo-ndk, then CI signs the APK. `apksigner verify --print-certs`, only `arm64-v8a` libraries | `Release` workflow, job `android`, step "Check the signed APK" |
 | Android device qualification | Install the signed APK on an arm64 device, first run, restart | Manual, on a device; record the device and Android version |
 | Slint visual acceptance | Owner review of the desktop and Android UI on real screens | Manual, owner |
-| Code signing | Windows files are not code signed | Release notes state it |
+| Code signing | Windows, Linux and macOS files are not code signed, and the macOS app is not notarized | Release notes state it |
 
 ## Tag and draft
 

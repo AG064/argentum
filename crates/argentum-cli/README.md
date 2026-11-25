@@ -24,7 +24,7 @@ Download one of these from [Argentum 0.1.0](https://github.com/AG064/argentum/re
 
 You can also install the desktop app, which puts `argentum` on your PATH. The files are not
 code signed. What each platform and provider supports is in
-[the support matrix](../../docs/SUPPORT_MATRIX.md). On Linux and macOS, build it from source.
+[the support matrix](../../docs/SUPPORT_MATRIX.md). Linux and macOS files come with the next release; until then, build it from source.
 
 ## Install from source
 

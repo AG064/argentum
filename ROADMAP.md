@@ -63,6 +63,13 @@ The first stable release, for Windows x64 and Android arm64:
   stopped.
 - **Usage across restarts:** the context meter shows the latest reported use
   after the app opens again, in the app and in `argentum chat`.
+- **Linux and macOS:** the desktop app and the CLI build and pass their tests
+  on Linux x64 and macOS (Apple silicon and Intel) in CI, and the release
+  workflow makes their files: tarballs, a `.deb` for Linux, and an unsigned
+  `Argentum.app`. Commands run in their own process group, without the Windows
+  job limits. Supplemental Rust checks, the local model add-on, desktop control
+  and installing updates from the app stay Windows-only for now. See
+  [the support matrix](docs/SUPPORT_MATRIX.md#linux-and-macos).
 - **Execution environment:** a plain description of what commands can reach on
   each platform, for the agent and in Settings > Permissions.
 - **Tool output kept:** directory listings and file metadata stay available to
@@ -209,7 +216,9 @@ are used, including ideas from Claude Code and Codex.
   with the same checks and approvals as other interface changes.
 - **Android:** working with folders on shared storage, and Termux as an optional
   shell.
-- **Platforms:** release files for Linux and macOS, then an iOS app.
+- **Platforms:** Windows features on Linux and macOS (resource limits for
+  commands, supplemental Rust checks, the local model add-on, installing
+  updates from the app), a signed and notarized macOS app, then an iOS app.
 - **Signing:** code-signed Windows releases.
 - **Extensions:** MCP servers and portable skills in the standard build, with the
   same approvals as built-in tools.

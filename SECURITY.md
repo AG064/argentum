@@ -23,6 +23,7 @@ Include the Argentum version, your platform, the steps to reproduce, and what an
 In scope:
 
 - the Windows desktop app and installer
+- the Linux and macOS builds of the desktop app and the CLI
 - the Android app
 - the Argentum Genesis command-line agent (`argentum`)
 - the release files and the in-app update flow
@@ -42,11 +43,11 @@ Argentum is a single-user app. It limits what the agent can do on your behalf an
 - **Files stay in the project.** File tools resolve paths inside the project folder. Paths that go up a level, leave the folder, or pass through a symbolic link are refused.
 - **Changes need approval.** Writing files, running shell commands, network access, and starting other programs ask first, unless your profile allows them. An approval covers the exact action it was given for. A changed command, argument, or path needs a new one.
 - **Edits are checked.** An edit must match the file the agent read. If the file changed in the meantime, the edit is refused. Every change is recorded and can be restored.
-- **Child processes are contained.** Commands run with a cleared environment and limited output. On Windows they run in a job object with CPU and memory caps, and they are stopped when Argentum exits.
+- **Child processes are contained.** Commands run with a cleared environment and limited output. On Windows they run in a job object with CPU and memory caps, and they are stopped when Argentum exits. On Linux, macOS and Android they run in their own process group, which is stopped as a whole, with no CPU, memory or process-count caps; a program that deliberately leaves its group can outlive the command.
 - **Git is limited.** The agent can read status, diffs, logs, and branches, and with approval can add, commit, restore, and create branches and worktrees. It has no push, merge, rebase, reset, tag, or remote commands.
 - **The agent has no general network tool.** It reaches the network only through the model provider you chose.
 - **Full Access is local only.** Only you can choose Full Access, in the app or at the local command line. Remote clients, paired devices, and scripted clients cannot. Operating-system permissions still apply in Full Access.
-- **Keys are stored by the system.** Provider keys are kept in Windows Credential Manager or the Android Keystore, and each key is only sent to the address of its own provider.
+- **Keys are stored by the system.** Provider keys are kept in Windows Credential Manager, the macOS Keychain, the Linux kernel key store (in memory, cleared at restart) or the Android Keystore, and each key is only sent to the address of its own provider.
 - **Exports are redacted.** Session exports remove saved keys and known secret values. Review an export before you share it.
 
 ## What Argentum does not protect against
