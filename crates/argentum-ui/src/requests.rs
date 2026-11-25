@@ -8,6 +8,9 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 use argentum_domain::context_budget::RequestAccounting;
+
+/// Component keys that measure part of the system message; see the provider.
+const WITHIN_SYSTEM_PREFIX: &str = "within_system:";
 use argentum_domain::{RunId, ToolTrace};
 
 const MAX_REQUESTS: usize = 200;
@@ -163,6 +166,21 @@ impl RequestLog {
         }
     }
 
+    /// Tokens per serialized byte for a model, from the newest request of
+    /// that model whose input tokens the provider reported.
+    pub fn scale_for(&self, model: &str) -> TokenScale {
+        self.records
+            .iter()
+            .rev()
+            .filter(|record| record.model == model)
+            .find_map(|record| {
+                let bytes = record.accounting.wire_bytes()?;
+                let reported = record.input_tokens?;
+                (bytes > 0 && reported > 0).then(|| reported as f64 / bytes as f64)
+            })
+            .map_or(TokenScale::Estimated, TokenScale::Measured)
+    }
+
     pub fn records(&self) -> impl Iterator<Item = &RequestRecord> {
         self.records.iter().rev()
     }
@@ -172,8 +190,41 @@ impl RequestLog {
     }
 }
 
-/// What filled the context of one request, largest first.
-pub(crate) fn context_parts(accounting: &RequestAccounting) -> Vec<ContextPart> {
+/// Share of the usable context at which compaction starts, in percent. It
+/// matches the runtime, which shortens old tool output from here.
+pub(crate) const COMPACTION_START_PERCENT: u64 = 85;
+
+/// How serialized bytes become tokens for the breakdown.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum TokenScale {
+    /// Tokens per byte, from the input tokens the provider reported for an
+    /// earlier request of the same model and that request's size.
+    Measured(f64),
+    /// No reported usage yet: the runtime's own estimate.
+    Estimated,
+}
+
+impl TokenScale {
+    pub(crate) fn tokens(self, bytes: u64) -> u64 {
+        match self {
+            Self::Measured(per_byte) => (bytes as f64 * per_byte).round() as u64,
+            Self::Estimated => {
+                argentum_domain::context_budget::estimated_tokens_for_wire_bytes(bytes)
+            }
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Measured(_) => "Tokens measured from the usage the provider reported",
+            Self::Estimated => "Estimated tokens, until the provider reports usage",
+        }
+    }
+}
+
+/// What filled the context of one request, in tokens, largest first, with
+/// the free space last. Parts the runtime counts in tokens stay as they are.
+pub(crate) fn context_parts(accounting: &RequestAccounting, scale: TokenScale) -> Vec<ContextPart> {
     let component = |key: &str| accounting.message_components.get(key).copied().unwrap_or(0);
     let known = [
         "current_task",
@@ -185,21 +236,31 @@ pub(crate) fn context_parts(accounting: &RequestAccounting) -> Vec<ContextPart> 
     let other: u64 = accounting
         .message_components
         .iter()
-        .filter(|(key, _)| !known.contains(&key.as_str()))
+        .filter(|(key, _)| !known.contains(&key.as_str()) && !key.starts_with(WITHIN_SYSTEM_PREFIX))
         .map(|(_, amount)| *amount)
         .sum();
+    let instructions = component("within_system:project_instructions");
+    let skill = component("within_system:skill");
+    let system = component("host_guidance_and_fresh_instructions")
+        .saturating_sub(instructions)
+        .saturating_sub(skill);
     let mut parts = vec![
         (
             "Tool calls and results this run",
-            component("current_complete_exchanges"),
+            scale.tokens(component("current_complete_exchanges")),
         ),
-        ("Earlier conversation", component("historical_projection")),
         (
-            "Instructions",
-            component("host_guidance_and_fresh_instructions"),
+            "Earlier conversation",
+            scale.tokens(component("historical_projection")),
         ),
-        ("Your message", component("current_task")),
-        ("Tool definitions", accounting.serialized_catalog_bytes),
+        ("System prompt", scale.tokens(system)),
+        ("Project instructions", scale.tokens(instructions)),
+        ("Skill", scale.tokens(skill)),
+        ("Your message", scale.tokens(component("current_task"))),
+        (
+            "Tool descriptions",
+            scale.tokens(accounting.serialized_catalog_bytes),
+        ),
         (
             "Reserved for the answer",
             u64::from(accounting.output_reserve),
@@ -207,11 +268,18 @@ pub(crate) fn context_parts(accounting: &RequestAccounting) -> Vec<ContextPart> 
         ("Safety margin", accounting.uncertainty_allowance),
         (
             "Other",
-            component("message_array_overhead") + accounting.serialized_envelope_bytes + other,
+            scale.tokens(
+                component("message_array_overhead") + accounting.serialized_envelope_bytes + other,
+            ),
         ),
     ];
     parts.retain(|(_, amount)| *amount > 0);
     parts.sort_by_key(|part| std::cmp::Reverse(part.1));
+    let used: u64 = parts.iter().map(|part| part.1).sum();
+    let free = accounting.usable_context.saturating_sub(used);
+    if free > 0 {
+        parts.push(("Free space", free));
+    }
     let usable = accounting.usable_context.max(1) as f32;
     parts
         .into_iter()
@@ -221,6 +289,11 @@ pub(crate) fn context_parts(accounting: &RequestAccounting) -> Vec<ContextPart> 
             share: (amount as f32 / usable).min(1.0),
         })
         .collect()
+}
+
+/// Tokens left before compaction starts, given what the request holds.
+pub(crate) fn left_before_compaction(accounting: &RequestAccounting, input_tokens: u64) -> u64 {
+    (accounting.usable_context * COMPACTION_START_PERCENT / 100).saturating_sub(input_tokens)
 }
 
 #[cfg(test)]
@@ -260,14 +333,43 @@ mod tests {
     }
 
     #[test]
-    fn context_parts_are_largest_first_and_share_the_window() {
-        let parts = context_parts(&accounting());
+    fn context_parts_are_largest_first_and_end_with_free_space() {
+        let mut accounting = accounting();
+        accounting
+            .message_components
+            .insert("within_system:project_instructions".into(), 1_000);
+        // One token per byte keeps the arithmetic readable.
+        let parts = context_parts(&accounting, TokenScale::Measured(1.0));
         assert_eq!(parts[0].label, "Tool calls and results this run");
         assert!((parts[0].share - 0.15).abs() < 0.001);
         assert!(parts.iter().all(|part| part.amount > 0));
         assert!(!parts
             .iter()
             .any(|part| part.label == "Earlier conversation"));
+        let amount = |label: &str| parts.iter().find(|p| p.label == label).map(|p| p.amount);
+        assert_eq!(amount("Project instructions"), Some(1_000));
+        assert_eq!(amount("System prompt"), Some(3_000));
+        assert_eq!(parts.last().unwrap().label, "Free space");
+        let total: u64 = parts.iter().map(|part| part.amount).sum();
+        assert_eq!(total, accounting.usable_context);
+        assert_eq!(left_before_compaction(&accounting, 30_000), 55_000);
+        assert_eq!(left_before_compaction(&accounting, 90_000), 0);
+    }
+
+    #[test]
+    fn reported_usage_turns_bytes_into_measured_tokens() {
+        let mut log = RequestLog::default();
+        let run = RunId::new_v4();
+        log.accounted(uuid::Uuid::new_v4(), run, "main_generation", &accounting());
+        assert_eq!(log.scale_for("deepseek-flash"), TokenScale::Estimated);
+        // 29,100 bytes on the wire, and the provider reported 9,700 tokens.
+        log.usage(run, 9_700, None, 10);
+        let TokenScale::Measured(per_byte) = log.scale_for("deepseek-flash") else {
+            panic!("measured");
+        };
+        assert!((per_byte - 9_700.0 / 29_100.0).abs() < 1e-9);
+        assert_eq!(log.scale_for("other-model"), TokenScale::Estimated);
+        assert_eq!(TokenScale::Measured(per_byte).tokens(2_910), 970);
     }
 
     #[test]

@@ -3784,6 +3784,30 @@ pub fn account_chat_request(
     ))
 }
 
+/// Keys of message components that measure part of the system message. They
+/// are already counted in `host_guidance_and_fresh_instructions`, so a sum of
+/// components skips them.
+pub const WITHIN_SYSTEM_PREFIX: &str = "within_system:";
+
+/// The repository instruction documents and a selected skill inside the system
+/// message, in UTF-8 bytes of their text, for the context breakdown. They are
+/// found by the fixed headings the runtime writes before each.
+pub(crate) fn system_parts(system: Option<&str>) -> Vec<(&'static str, u64)> {
+    const INSTRUCTIONS: &str = "Repository instruction documents (JSON):\n";
+    const SKILL: &str = "\n\nRepository-authored procedural context follows.";
+    let Some(system) = system else {
+        return Vec::new();
+    };
+    let skill_start = system.find(SKILL).unwrap_or(system.len());
+    let instructions = system[..skill_start]
+        .find(INSTRUCTIONS)
+        .map_or(0, |start| skill_start - start - INSTRUCTIONS.len());
+    vec![
+        ("within_system:project_instructions", instructions as u64),
+        ("within_system:skill", (system.len() - skill_start) as u64),
+    ]
+}
+
 fn prepare_compatible_wire(
     profile: &ProviderProfile,
     budget: &argentum_domain::context_budget::ModelBudget,
@@ -3925,6 +3949,9 @@ fn prepare_compatible_wire(
             .ok_or(ProviderError::InvalidRequest(
                 "component accounting overflow",
             ))?;
+        accounting.message_components.insert(name.into(), bytes);
+    }
+    for (name, bytes) in system_parts(request.system.as_deref()) {
         accounting.message_components.insert(name.into(), bytes);
     }
     accounting.message_components.insert(
@@ -7349,6 +7376,32 @@ mod tests {
             assert_eq!(error.to_string(), "provider returned retryable HTTP 429");
             let _ = server.finish();
         }
+    }
+
+    #[test]
+    fn the_system_message_is_split_into_guidance_instructions_and_skill() {
+        assert!(system_parts(None).is_empty());
+        let plain = system_parts(Some("You are Argentum."));
+        assert_eq!(
+            plain,
+            [
+                ("within_system:project_instructions", 0),
+                ("within_system:skill", 0)
+            ]
+        );
+        let system = "Guidance.\nRepository instruction documents (JSON):\n[1,2]\n\nRepository-authored procedural context follows. Skill body";
+        let parts = system_parts(Some(system));
+        assert_eq!(
+            parts[0],
+            ("within_system:project_instructions", "[1,2]".len() as u64)
+        );
+        assert_eq!(
+            parts[1].1,
+            "\n\nRepository-authored procedural context follows. Skill body".len() as u64
+        );
+        assert!(parts
+            .iter()
+            .all(|(name, _)| name.starts_with(WITHIN_SYSTEM_PREFIX)));
     }
 
     #[test]

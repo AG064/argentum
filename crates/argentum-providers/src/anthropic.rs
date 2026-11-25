@@ -252,6 +252,9 @@ pub(crate) fn prepare_messages_wire(
     accounting
         .message_components
         .insert("host_guidance_and_fresh_instructions".into(), system);
+    for (name, bytes) in super::system_parts(request.system.as_deref()) {
+        accounting.message_components.insert(name.into(), bytes);
+    }
     accounting
         .message_components
         .insert("historical_projection_and_current_task".into(), messages);
