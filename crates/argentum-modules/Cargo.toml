@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+[package]
+name = "argentum-modules"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argentum-browser.workspace = true
+argentum-domain.workspace = true
+argentum-security.workspace = true
+argentum-tools.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+argentum-workspaces.workspace = true
+tempfile.workspace = true
+tokio-util.workspace = true

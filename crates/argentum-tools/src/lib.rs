@@ -157,7 +157,13 @@ pub struct ToolContext {
     pub process_jobs: Option<Arc<ProcessJobManager>>,
     pub process_job_owner: Option<(ProjectId, SessionId, String)>,
     pub remaining_execution_time: Option<Duration>,
+    /// Owner settings of agent modules, by module id and then key. Read-only
+    /// data for module tools; settings never grant authority.
+    pub module_settings: Arc<ModuleSettings>,
 }
+
+/// Owner settings of agent modules, by module id and then key.
+pub type ModuleSettings = BTreeMap<String, BTreeMap<String, String>>;
 
 impl ToolContext {
     pub fn new(
@@ -177,7 +183,13 @@ impl ToolContext {
             process_jobs: None,
             process_job_owner: None,
             remaining_execution_time: None,
+            module_settings: Arc::default(),
         }
+    }
+
+    pub fn with_module_settings(mut self, settings: Arc<ModuleSettings>) -> Self {
+        self.module_settings = settings;
+        self
     }
 
     pub fn with_grants(mut self, grants: Vec<ApprovalGrantRecord>) -> Self {
@@ -381,7 +393,8 @@ impl ToolRegistry {
             | ToolInput::CancelProcessJob { .. }
             | ToolInput::Extension { .. }
             | ToolInput::InspectUi
-            | ToolInput::UpdateUi { .. } => None,
+            | ToolInput::UpdateUi { .. }
+            | ToolInput::Module { .. } => None,
             ToolInput::DesktopListWindows { .. }
             | ToolInput::DesktopInspect { .. }
             | ToolInput::DesktopInvoke { .. }
@@ -1074,8 +1087,9 @@ impl AgentTool for BuiltinTool {
     }
 }
 
-fn tool_id_for_input(input: &ToolInput) -> &'static str {
+fn tool_id_for_input(input: &ToolInput) -> &str {
     match input {
+        ToolInput::Module { tool, .. } => tool,
         ToolInput::InspectUi => "ui_inspect",
         ToolInput::UpdateUi { .. } => "ui_update",
         ToolInput::ListDirectory { .. } => "list_directory",
@@ -1895,6 +1909,9 @@ async fn execute_builtin(
         | ToolInput::DesktopPressKeys { .. }
         | ToolInput::DesktopScreenshot { .. } => Err(ToolError::NotRegistered(
             "desktop control is not compiled in this build".into(),
+        )),
+        ToolInput::Module { .. } => Err(ToolError::Execution(
+            "module tools run through their module".into(),
         )),
         ToolInput::InspectUi | ToolInput::UpdateUi { .. } => Err(ToolError::Execution(
             "interface tools are runtime-owned".into(),

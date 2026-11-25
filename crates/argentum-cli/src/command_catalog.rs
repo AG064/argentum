@@ -563,6 +563,13 @@ pub const COMMANDS: &[CommandEntry] = &[
     ),
     cmd(
         "harness",
+        &["harness", "module-setting"],
+        "Set an agent module setting as KEY=VALUE",
+        Gate::None,
+        true,
+    ),
+    cmd(
+        "harness",
         &["harness", "backend"],
         "Enable or disable a local backend",
         Gate::None,

@@ -848,6 +848,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::SelectHarnessProfile { .. }
         | AppCommand::SelectExecutionProfile { .. }
         | AppCommand::SetHarnessCapabilityEnabled { .. }
+        | AppCommand::SetModuleSetting { .. }
         | AppCommand::SetHarnessModule { .. }
         | AppCommand::SetLocalBackendEnabled { .. }
         | AppCommand::BeginOnboarding

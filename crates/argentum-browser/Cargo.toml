@@ -10,6 +10,8 @@ license.workspace = true
 [dependencies]
 argentum-domain.workspace = true
 reqwest.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net"] }
 url.workspace = true
 
 [dev-dependencies]

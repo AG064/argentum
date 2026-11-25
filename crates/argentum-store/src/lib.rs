@@ -51,6 +51,8 @@ mod imports;
 mod memory;
 pub use grant_lookup::MAX_AUTHORIZATION_GRANTS;
 mod message_search;
+mod module_settings;
+pub use module_settings::ModuleSettings;
 mod spend_limits;
 pub use spend_limits::{month_start, SPEND_WARNING_PERCENT};
 mod review;
@@ -4187,6 +4189,7 @@ impl Store {
         )?;
         extensions::migrate(&additive)?;
         devices::migrate(&additive)?;
+        module_settings::migrate(&additive)?;
         additive.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         ensure_column(&additive, "goal_invocations", "owner_generation", "INTEGER")?;
         // F09 development builds may already have created schema 18 before

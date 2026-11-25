@@ -125,6 +125,13 @@ impl ExecutionAuthorizer {
             return Ok(AuthorizationDecision::Prompt);
         }
 
+        // Network is never policy-ambient either. Agent modules that reach the
+        // network need an owner grant for the exact host (an action grant) or
+        // the exact call, whatever the profile or approval mode says.
+        if request.capability == Capability::Network {
+            return Ok(AuthorizationDecision::Prompt);
+        }
+
         // This is a separate explicit owner enablement, not inherited fixed-verifier authority.
         if request.capability == Capability::ExternalProcess
             && request.tool_id == "check_rust"
@@ -237,6 +244,17 @@ fn grant_matches(grant: &ApprovalGrantRecord, request: &AuthorizationRequest) ->
         || grant
             .revoked_at
             .is_some_and(|revoked_at| revoked_at <= request.at)
+    {
+        return false;
+    }
+
+    // A grant for a whole run, session, workspace or profile does not open the
+    // network. Only a grant bound to one host (action) or one call counts.
+    if request.capability == Capability::Network
+        && !matches!(
+            grant.subject,
+            GrantSubject::Action { .. } | GrantSubject::ToolCall { .. }
+        )
     {
         return false;
     }
@@ -1141,6 +1159,100 @@ mod tests {
             ExecutionAuthorizer::authorize(&request, &[]).unwrap(),
             AuthorizationDecision::AllowedByPolicy
         );
+    }
+
+    #[test]
+    fn network_needs_a_host_or_call_grant_in_every_profile() {
+        let mut request = phase4_request(
+            phase4_policy(
+                "full-access",
+                SandboxScope::Unrestricted,
+                ApprovalMode::Never,
+            ),
+            Capability::Network,
+            ToolRisk::ReadOnly,
+        );
+        request.tool_id = "web_fetch".into();
+        request.target = "web host example.com".into();
+        assert_eq!(
+            ExecutionAuthorizer::authorize(&request, &[]).expect("decision"),
+            AuthorizationDecision::Prompt
+        );
+        let grant = |subject: GrantSubject| ApprovalGrantRecord {
+            id: uuid::Uuid::new_v4(),
+            audit_id: uuid::Uuid::new_v4(),
+            capability: Capability::Network,
+            scope: subject.scope(),
+            subject,
+            created_at: request.at,
+            expires_at: None,
+            issuer: GrantIssuer::User,
+            reason: "test grant".into(),
+            revoked_at: None,
+        };
+        for broad in [
+            GrantSubject::Run {
+                run_id: request.run_id,
+            },
+            GrantSubject::Session {
+                session_id: request.session_id,
+            },
+            GrantSubject::Workspace {
+                project_id: request.project_id,
+            },
+            GrantSubject::PersistentProfile {
+                profile_id: request.policy.profile_id.clone(),
+            },
+        ] {
+            assert_eq!(
+                ExecutionAuthorizer::authorize(&request, &[grant(broad)]).expect("decision"),
+                AuthorizationDecision::Prompt
+            );
+        }
+        let host = grant(GrantSubject::Action {
+            tool_id: "web_fetch".into(),
+            target: "web host example.com".into(),
+            binding: request.binding.clone(),
+        });
+        assert!(matches!(
+            ExecutionAuthorizer::authorize(&request, std::slice::from_ref(&host)),
+            Ok(AuthorizationDecision::AllowedByGrants(_))
+        ));
+        let other_host = phase4_request(
+            phase4_policy(
+                "full-access",
+                SandboxScope::Unrestricted,
+                ApprovalMode::Never,
+            ),
+            Capability::Network,
+            ToolRisk::ReadOnly,
+        );
+        let mut other_host = AuthorizationRequest {
+            tool_id: "web_fetch".into(),
+            target: "web host other.example".into(),
+            ..other_host
+        };
+        other_host.at = request.at;
+        assert_eq!(
+            ExecutionAuthorizer::authorize(&other_host, &[host]).expect("decision"),
+            AuthorizationDecision::Prompt
+        );
+        let call = grant(GrantSubject::ToolCall {
+            tool_call_id: request.tool_call_id,
+        });
+        assert!(matches!(
+            ExecutionAuthorizer::authorize(&request, &[call]),
+            Ok(AuthorizationDecision::AllowedByGrants(_))
+        ));
+        let observe = phase4_request(
+            phase4_policy("observe", SandboxScope::ReadOnly, ApprovalMode::Always),
+            Capability::Network,
+            ToolRisk::ReadOnly,
+        );
+        assert!(matches!(
+            ExecutionAuthorizer::authorize(&observe, &[]),
+            Err(SecurityError::SandboxDenied(Capability::Network))
+        ));
     }
 
     #[test]

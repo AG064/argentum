@@ -118,6 +118,15 @@ impl RuntimeService {
                     }),
                 )
             }
+            AppCommand::SetModuleSetting {
+                module_id,
+                key,
+                value,
+            } => Ok(Some(LocalAuthorityAction::ChangeModuleSetting {
+                module_id: module_id.clone(),
+                key: key.clone(),
+                value: value.clone(),
+            })),
             AppCommand::ApproveTool { approval_id, scope } => {
                 Ok(Some(LocalAuthorityAction::ApproveTool {
                     approval_id: *approval_id,

@@ -45,7 +45,7 @@ Argentum is a single-user app. It limits what the agent can do on your behalf an
 - **Edits are checked.** An edit must match the file the agent read. If the file changed in the meantime, the edit is refused. Every change is recorded and can be restored.
 - **Child processes are contained.** Commands run with a cleared environment and limited output. On Windows they run in a job object with CPU and memory caps, and they are stopped when Argentum exits. On Linux, macOS and Android they run in their own process group, which is stopped as a whole, with no CPU, memory or process-count caps; a program that deliberately leaves its group can outlive the command.
 - **Git is limited.** The agent can read status, diffs, logs, and branches, and with approval can add, commit, restore, and create branches and worktrees. It has no push, merge, rebase, reset, tag, or remote commands.
-- **The agent has no general network tool.** It reaches the network only through the model provider you chose.
+- **The agent reaches the network only through modules you turn on.** Without them it reaches only the model provider you chose. The Web fetch and Web search modules are off by default. When on, every request needs your approval for its host, in every permission profile, and an approval for a run, session or workspace does not count. Local and private network addresses are refused unless you allow them in the module's settings.
 - **Full Access is local only.** Only you can choose Full Access, in the app or at the local command line. Remote clients, paired devices, and scripted clients cannot. Operating-system permissions still apply in Full Access.
 - **Keys are stored by the system.** Provider keys are kept in Windows Credential Manager, the macOS Keychain, the Linux kernel key store (in memory, cleared at restart) or the Android Keystore, and each key is only sent to the address of its own provider.
 - **Exports are redacted.** Session exports remove saved keys and known secret values. Review an export before you share it.
@@ -70,6 +70,7 @@ Argentum is a single-user app. It limits what the agent can do on your behalf an
 | Local PDF artifacts | Not in any release file. Optional at build time. |
 | Project memory | Notes are stored in the local database with the project, never in the repository unless you export them. The agent can only add notes, each one paragraph of at most 500 characters, and you can delete any. A note that looks like it holds a key or password is refused. Notes reach the model as data and cannot change permissions or approve anything. |
 | Import from other agents | Reads Claude Code, Codex and OpenCode settings only when you open the import list. Imports only what you tick: MCP servers as drafts that are off, without environment or header values; skills and commands as new files in `.agents/skills`, without `allowed-tools`, never replacing a file. It grants no permission and cannot be started by the agent, over JSONL or from a paired device. |
+| Web fetch and Web search modules | Off. When on, each host asks first, redirects to another host ask again, no cookies are kept and no script runs. Page text and search results reach the model as untrusted data and cannot change permissions. Web search sends your query to the search address you set. |
 
 ## Network use
 
@@ -81,6 +82,7 @@ Argentum contacts:
 - huggingface.co, only when you search, open or download in the model marketplace
 - GitHub, when you press "Refresh speeds" in the model marketplace, for the community speed table
 - a web page, only when you open it in the page reader
+- a web page or your search address, only when the Web fetch or Web search module is on and you approve its host
 
 There is no telemetry.
 

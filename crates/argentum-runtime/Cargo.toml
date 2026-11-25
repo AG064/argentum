@@ -19,6 +19,7 @@ argentum-extensions = { workspace = true, optional = true }
 argentum-gitview.workspace = true
 argentum-harness.workspace = true
 argentum-import.workspace = true
+argentum-modules.workspace = true
 argentum-platform.workspace = true
 argentum-providers.workspace = true
 argentum-security.workspace = true

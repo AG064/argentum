@@ -19,6 +19,7 @@ members = [
     "crates/argentum-harness",
     "crates/argentum-import",
     "crates/argentum-lifecycle",
+    "crates/argentum-modules",
     "crates/argentum-runtime",
     "crates/argentum-providers",
     "crates/argentum-tools",
@@ -51,6 +52,7 @@ argentum-artifacts = { path = "crates/argentum-artifacts" }
 argentum-harness = { path = "crates/argentum-harness" }
 argentum-import = { path = "crates/argentum-import" }
 argentum-lifecycle = { path = "crates/argentum-lifecycle" }
+argentum-modules = { path = "crates/argentum-modules" }
 argentum-cli = { path = "crates/argentum-cli" }
 argentum-changes = { path = "crates/argentum-changes" }
 argentum-devices = { path = "crates/argentum-devices" }
