@@ -1487,7 +1487,8 @@ mod tests {
             let broker = Arc::clone(&broker);
             tokio::spawn(async move { broker.retire(&CancellationToken::new()).await })
         };
-        proceed.notify_waiters();
+        // notify_one keeps the wakeup if the service has not started waiting.
+        proceed.notify_one();
 
         let (first_result, second_result) = timeout(Duration::from_secs(2), async {
             tokio::join!(first, second)
