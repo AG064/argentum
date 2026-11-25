@@ -129,6 +129,43 @@ pub struct LocalModelOffer {
     pub context_window_tokens: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalModelComponentKind {
+    Lora,
+    Mmproj,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalModelComponent {
+    pub kind: LocalModelComponentKind,
+    pub filename: &'static str,
+    pub size_bytes: u64,
+    pub sha256: &'static str,
+}
+
+const INKLING_UNCENSORED_COMPONENTS: [LocalModelComponent; 2] = [
+    LocalModelComponent {
+        kind: LocalModelComponentKind::Lora,
+        filename: "Inkling-2-Mini-Uncensored-LoRA.gguf",
+        size_bytes: 43_805_184,
+        sha256: "42914b85c874e7fe249e93f0ac6e8abf08dc0bdf32aa1ec46c72714e64808f12",
+    },
+    LocalModelComponent {
+        kind: LocalModelComponentKind::Mmproj,
+        filename: "mmproj-Inkling-2-Mini-F16.gguf",
+        size_bytes: 639_348_448,
+        sha256: "5a72e0b6e2bef13c3f455f4edb85df0c752b92ff76ab46af879eae088163efe6",
+    },
+];
+
+pub fn local_model_components(model_filename: &str) -> &'static [LocalModelComponent] {
+    if model_filename == "Inkling-2-Mini-AD-Q4_K.gguf" {
+        &INKLING_UNCENSORED_COMPONENTS
+    } else {
+        &[]
+    }
+}
+
 const LOCAL_MODEL_OFFERS: [LocalModelOffer; 1] = [LocalModelOffer {
     id: "Qwen3.5-0.8B-Q8_0.gguf",
     label: "Qwen3.5 0.8B Q8_0",

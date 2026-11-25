@@ -29,13 +29,17 @@ use tokio_util::sync::CancellationToken;
 use crate::runtime_bundles::{
     extract_runtime_session_leased, open_runtime_archive_lease, open_runtime_launcher_lease,
 };
-use crate::{local_runtime_offers, ModelProvider, OpenAiCompatibleProvider, ProviderError};
+use crate::{
+    local_model_components, local_runtime_offers, LocalModelComponentKind, ModelProvider,
+    OpenAiCompatibleProvider, ProviderError,
+};
 
 const LOCAL_RUNTIME_MODULE_ID: &str = "first-party.local-runtime";
 const LOCAL_RUNTIME_EFFECT_LABEL: &str = "process:llama-cpp-sidecar";
 const LOCAL_RUNTIME_HOST: &str = "127.0.0.1";
 const LOCAL_RUNTIME_CONTEXT: u32 = crate::SIDECAR_CONTEXT_TOKENS;
-const LOCAL_RUNTIME_GPU_LAYERS: u32 = 99;
+const LOCAL_RUNTIME_GPU_LAYER_POLICY: &str = "llama.cpp memory fit";
+const LOCAL_RUNTIME_MMPROJ_FIT_TARGET_MIB: u32 = 2_048;
 const LOCAL_RUNTIME_MAX_PREDICTION: i32 = -1;
 const LOCAL_RUNTIME_READY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const LOCAL_RUNTIME_MIN_MODEL_BYTES: u64 = 1024 * 1024;
@@ -124,6 +128,7 @@ pub struct LocalRuntimeLaunchPlan {
     pub model_path: PathBuf,
     pub model_sha256: String,
     pub model_size_bytes: u64,
+    pub auxiliary_model_files: Vec<LocalRuntimeAuxiliaryFile>,
     pub max_model_bytes: u64,
     pub managed_active_process_limit: u32,
     pub managed_cpu_rate_percent: u32,
@@ -136,11 +141,27 @@ pub struct LocalRuntimeLaunchPlan {
     pub port: u16,
     pub api_prefix: String,
     pub context_tokens: u32,
-    pub gpu_layers: u32,
+    pub gpu_layer_policy: String,
     pub disabled_features: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalRuntimeAuxiliaryFile {
+    pub kind: LocalModelComponentKind,
+    pub path: PathBuf,
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
 impl LocalRuntimeLaunchPlan {
+    pub fn total_model_size_bytes(&self) -> Option<u64> {
+        self.auxiliary_model_files
+            .iter()
+            .try_fold(self.model_size_bytes, |total, artifact| {
+                total.checked_add(artifact.size_bytes)
+            })
+    }
+
     pub fn digest(&self) -> Sha256Digest {
         let mut hasher = Sha256::new();
         for value in [
@@ -168,6 +189,18 @@ impl LocalRuntimeLaunchPlan {
             hasher.update(feature.as_bytes());
             hasher.update([0xfe]);
         }
+        for artifact in &self.auxiliary_model_files {
+            hasher.update(match artifact.kind {
+                LocalModelComponentKind::Lora => b"lora".as_slice(),
+                LocalModelComponentKind::Mmproj => b"mmproj".as_slice(),
+            });
+            hasher.update([0xfd]);
+            hasher.update(artifact.path.to_string_lossy().as_bytes());
+            hasher.update([0xfc]);
+            hasher.update(artifact.sha256.as_bytes());
+            hasher.update([0xfb]);
+            hasher.update(artifact.size_bytes.to_le_bytes());
+        }
         hasher.update(self.model_size_bytes.to_le_bytes());
         hasher.update(self.max_model_bytes.to_le_bytes());
         hasher.update(self.managed_active_process_limit.to_le_bytes());
@@ -178,7 +211,7 @@ impl LocalRuntimeLaunchPlan {
         hasher.update(self.generation.to_le_bytes());
         hasher.update(self.port.to_le_bytes());
         hasher.update(self.context_tokens.to_le_bytes());
-        hasher.update(self.gpu_layers.to_le_bytes());
+        hasher.update(self.gpu_layer_policy.as_bytes());
         Sha256Digest(format!("{:x}", hasher.finalize()))
     }
 
@@ -196,6 +229,7 @@ impl LocalRuntimeLaunchPlan {
             model_path: PathBuf::from(r"C:\models\model.gguf"),
             model_sha256: "d".repeat(64),
             model_size_bytes: 4,
+            auxiliary_model_files: Vec::new(),
             max_model_bytes: LOCAL_RUNTIME_DEFAULT_MODEL_BYTES,
             managed_active_process_limit: 4,
             managed_cpu_rate_percent: 95,
@@ -208,7 +242,7 @@ impl LocalRuntimeLaunchPlan {
             port: 43_123,
             api_prefix: "/argentum/generation-1/epoch".into(),
             context_tokens: LOCAL_RUNTIME_CONTEXT,
-            gpu_layers: LOCAL_RUNTIME_GPU_LAYERS,
+            gpu_layer_policy: LOCAL_RUNTIME_GPU_LAYER_POLICY.into(),
             disabled_features: disabled_runtime_features(),
         }
     }
@@ -1387,6 +1421,7 @@ struct ProductionPreparedRuntime {
     archive_lease: Option<VerifiedFileLease>,
     launcher_lease: Option<VerifiedFileLease>,
     model_lease: Option<ModelFileLease>,
+    auxiliary_model_leases: Option<Vec<ModelFileLease>>,
     max_model_bytes: u64,
     endpoint: String,
     #[cfg(test)]
@@ -1400,12 +1435,22 @@ struct ProductionPreparedRuntime {
 impl ProductionPreparedRuntime {
     fn take_started_resources(
         &mut self,
-    ) -> Option<(ModelFileLease, PrivateFile, tempfile::TempDir)> {
-        if self.model_lease.is_none() || self.key_file.is_none() || self.session.is_none() {
+    ) -> Option<(
+        ModelFileLease,
+        Vec<ModelFileLease>,
+        PrivateFile,
+        tempfile::TempDir,
+    )> {
+        if self.model_lease.is_none()
+            || self.auxiliary_model_leases.is_none()
+            || self.key_file.is_none()
+            || self.session.is_none()
+        {
             return None;
         }
         Some((
             self.model_lease.take()?,
+            self.auxiliary_model_leases.take()?,
             self.key_file.take()?,
             self.session.take()?,
         ))
@@ -1418,6 +1463,7 @@ impl Drop for ProductionPreparedRuntime {
         drop(self.archive_lease.take());
         drop(self.key_file.take());
         drop(self.model_lease.take());
+        drop(self.auxiliary_model_leases.take());
         if let Some(session) = self.session.take() {
             let _ = session.close();
         }
@@ -1429,6 +1475,7 @@ struct ProductionRuntimeInstance {
     key_file: Option<PrivateFile>,
     session_path: Option<PathBuf>,
     _model_lease: Arc<StdMutex<ModelFileLease>>,
+    _auxiliary_model_leases: Arc<StdMutex<Vec<ModelFileLease>>>,
 }
 
 #[async_trait]
@@ -1530,11 +1577,38 @@ fn verify_pre_spawn_artifacts_blocking(
         .map_err(|error_value| {
             control.classify(error_value, ArtifactVerificationStage::PreSpawn)
         })?;
+    let auxiliary_model_leases = resources
+        .auxiliary_model_leases
+        .as_mut()
+        .ok_or(ProviderError::LocalRuntimeApprovalStale)?;
+    if auxiliary_model_leases.len() != plan.auxiliary_model_files.len() {
+        return Err(ProviderError::LocalRuntimeApprovalStale);
+    }
+    for (lease, expected) in auxiliary_model_leases
+        .iter_mut()
+        .zip(&plan.auxiliary_model_files)
+    {
+        lease
+            .verify_unchanged_with(|| control.checkpoint())
+            .and_then(|()| lease.verify_identity())
+            .map_err(|error_value| {
+                control.classify(error_value, ArtifactVerificationStage::PreSpawn)
+            })?;
+        if lease.path() != expected.path
+            || lease.sha256() != expected.sha256
+            || lease.size_bytes() != expected.size_bytes
+        {
+            return Err(ProviderError::LocalRuntimeApprovalStale);
+        }
+    }
+    let total_model_size_bytes = plan
+        .total_model_size_bytes()
+        .ok_or(ProviderError::LocalRuntimeApprovalStale)?;
     if model.path() != plan.model_path
         || model.sha256() != plan.model_sha256
         || model.size_bytes() != plan.model_size_bytes
         || resources.max_model_bytes != plan.max_model_bytes
-        || model.size_bytes() > plan.max_model_bytes
+        || total_model_size_bytes > plan.max_model_bytes
     {
         return Err(ProviderError::LocalRuntimeApprovalStale);
     }
@@ -1581,7 +1655,17 @@ fn verify_post_resume_artifact_identities(
         .as_ref()
         .ok_or(ProviderError::LocalRuntimeApprovalStale)?
         .verify_identity()
-        .map_err(|_| ProviderError::LocalRuntimeApprovalStale)
+        .map_err(|_| ProviderError::LocalRuntimeApprovalStale)?;
+    for lease in resources
+        .auxiliary_model_leases
+        .as_ref()
+        .ok_or(ProviderError::LocalRuntimeApprovalStale)?
+    {
+        lease
+            .verify_identity()
+            .map_err(|_| ProviderError::LocalRuntimeApprovalStale)?;
+    }
+    Ok(())
 }
 
 fn verify_post_readiness_model_blocking(
@@ -1595,7 +1679,19 @@ fn verify_post_readiness_model_blocking(
         .verify_unchanged_with(|| control.checkpoint())
         .map_err(|error_value| {
             control.classify(error_value, ArtifactVerificationStage::ModelReadiness)
-        })
+        })?;
+    for lease in resources
+        .auxiliary_model_leases
+        .as_mut()
+        .ok_or(ProviderError::LocalRuntimeApprovalStale)?
+    {
+        lease
+            .verify_unchanged_with(|| control.checkpoint())
+            .map_err(|error_value| {
+                control.classify(error_value, ArtifactVerificationStage::ModelReadiness)
+            })?;
+    }
+    Ok(())
 }
 
 async fn cleanup_prepared_resources(
@@ -1606,6 +1702,7 @@ async fn cleanup_prepared_resources(
     drop(resources.archive_lease.take());
     drop(resources.key_file.take());
     drop(resources.model_lease.take());
+    drop(resources.auxiliary_model_leases.take());
     #[cfg(test)]
     if resources.fail_session_cleanup {
         if let Some(session) = resources.session.take() {
@@ -1646,6 +1743,7 @@ async fn cleanup_failed_runtime_start(
 struct ProductionLeaseVerifier {
     process: Arc<Mutex<Option<ManagedProcess>>>,
     model_lease: Arc<StdMutex<ModelFileLease>>,
+    auxiliary_model_leases: Arc<StdMutex<Vec<ModelFileLease>>>,
     expected_port: u16,
     authority: LocalRuntimeAuthority,
 }
@@ -1697,7 +1795,18 @@ impl LeaseVerifier for ProductionLeaseVerifier {
             .lock()
             .map_err(|_| ProviderError::LocalRuntimeLeaseStale)?
             .verify_identity()
-            .map_err(|_| ProviderError::LocalRuntimeLeaseStale)
+            .map_err(|_| ProviderError::LocalRuntimeLeaseStale)?;
+        for lease in self
+            .auxiliary_model_leases
+            .lock()
+            .map_err(|_| ProviderError::LocalRuntimeLeaseStale)?
+            .iter()
+        {
+            lease
+                .verify_identity()
+                .map_err(|_| ProviderError::LocalRuntimeLeaseStale)?;
+        }
+        Ok(())
     }
 }
 
@@ -1723,6 +1832,18 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             config.limits.max_model_bytes,
         )?;
         protect_selected_model_file(&model_path)?;
+        let auxiliary_model_paths = local_model_components(&profile.model)
+            .iter()
+            .map(|component| {
+                let path = resolve_selected_model_with_limit(
+                    &config.models_dir,
+                    component.filename,
+                    config.limits.max_model_bytes,
+                )?;
+                protect_selected_model_file(&path)?;
+                Ok((*component, path))
+            })
+            .collect::<Result<Vec<_>, ProviderError>>()?;
         let offer = *local_runtime_offers()
             .first()
             .ok_or(ProviderError::LocalRuntimeBundleInvalid)?;
@@ -1739,11 +1860,28 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             let launcher_lease = open_runtime_launcher_lease(session.path(), &offer)?;
             let model_lease = ModelFileLease::open(&model_path, max_model_bytes)
                 .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
-            Ok::<_, ProviderError>((session, archive_lease, launcher_lease, model_lease))
+            let mut auxiliary_model_leases = Vec::with_capacity(auxiliary_model_paths.len());
+            for (component, path) in auxiliary_model_paths {
+                let lease = ModelFileLease::open(&path, max_model_bytes)
+                    .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
+                if lease.size_bytes() != component.size_bytes || lease.sha256() != component.sha256
+                {
+                    return Err(ProviderError::LocalRuntimeModelInvalid);
+                }
+                auxiliary_model_leases.push((component.kind, lease));
+            }
+            Ok::<_, ProviderError>((
+                session,
+                archive_lease,
+                launcher_lease,
+                model_lease,
+                auxiliary_model_leases,
+            ))
         })
         .await
         .map_err(|_| ProviderError::LocalRuntimeLaunchFailed { stage: "prepare" })??;
-        let (session, archive_lease, launcher_lease, model_lease) = prepared_files;
+        let (session, archive_lease, launcher_lease, model_lease, auxiliary_model_leases) =
+            prepared_files;
 
         let reserved_listener =
             std::net::TcpListener::bind((LOCAL_RUNTIME_HOST, 0)).map_err(|_| {
@@ -1768,14 +1906,33 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
                 }
             })?;
         let program = launcher_lease.path().to_path_buf();
-        let arguments = llama_server_arguments_with_context(
+        let auxiliary_model_files = auxiliary_model_leases
+            .iter()
+            .map(|(kind, lease)| LocalRuntimeAuxiliaryFile {
+                kind: *kind,
+                path: lease.path().to_path_buf(),
+                sha256: lease.sha256().to_owned(),
+                size_bytes: lease.size_bytes(),
+            })
+            .collect::<Vec<_>>();
+        let arguments = llama_server_arguments_with_context_and_auxiliary(
             model_lease.path(),
             &key_path,
             port,
             &api_prefix,
             config.context_tokens,
+            &auxiliary_model_files,
         );
-        let process_limits = ManagedProcessLimits::for_local_model(model_lease.size_bytes())
+        let total_model_size_bytes = auxiliary_model_files
+            .iter()
+            .try_fold(model_lease.size_bytes(), |total, file| {
+                total.checked_add(file.size_bytes)
+            })
+            .ok_or(ProviderError::LocalRuntimeModelInvalid)?;
+        if total_model_size_bytes > config.limits.max_model_bytes {
+            return Err(ProviderError::LocalRuntimeModelInvalid);
+        }
+        let process_limits = ManagedProcessLimits::for_local_model(total_model_size_bytes)
             .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
         let process_spec = ProcessSpec::argv(
             program.to_string_lossy().into_owned(),
@@ -1798,6 +1955,7 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             model_path: model_lease.path().to_path_buf(),
             model_sha256: model_lease.sha256().to_owned(),
             model_size_bytes: model_lease.size_bytes(),
+            auxiliary_model_files,
             max_model_bytes: config.limits.max_model_bytes,
             managed_active_process_limit: process_limits.active_process_limit(),
             managed_cpu_rate_percent: process_limits.cpu_rate_percent(),
@@ -1810,7 +1968,7 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             port,
             api_prefix,
             context_tokens: config.context_tokens,
-            gpu_layers: LOCAL_RUNTIME_GPU_LAYERS,
+            gpu_layer_policy: LOCAL_RUNTIME_GPU_LAYER_POLICY.into(),
             disabled_features: disabled_runtime_features(),
         };
         Ok(PreparedLocalRuntime {
@@ -1826,6 +1984,12 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
                 archive_lease: Some(archive_lease),
                 launcher_lease: Some(launcher_lease),
                 model_lease: Some(model_lease),
+                auxiliary_model_leases: Some(
+                    auxiliary_model_leases
+                        .into_iter()
+                        .map(|(_, lease)| lease)
+                        .collect(),
+                ),
                 max_model_bytes,
                 endpoint,
                 #[cfg(test)]
@@ -2033,12 +2197,15 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
 
         let process_id = process.id();
         let process_started_at = process.process_started_at();
-        let Some((model_lease, key_file, session)) = resources.take_started_resources() else {
+        let Some((model_lease, auxiliary_model_leases, key_file, session)) =
+            resources.take_started_resources()
+        else {
             cleanup_failed_runtime_start(process, &mut resources).await?;
             return Err(ProviderError::LocalRuntimeApprovalStale);
         };
         let process = Arc::new(Mutex::new(Some(process)));
         let model_lease = Arc::new(StdMutex::new(model_lease));
+        let auxiliary_model_leases = Arc::new(StdMutex::new(auxiliary_model_leases));
         let session_path = session.keep();
         let lease = Arc::new(SidecarLease {
             epoch: prepared.plan.epoch.clone(),
@@ -2051,6 +2218,7 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
         let verifier = Arc::new(ProductionLeaseVerifier {
             process: Arc::clone(&process),
             model_lease: Arc::clone(&model_lease),
+            auxiliary_model_leases: Arc::clone(&auxiliary_model_leases),
             expected_port: prepared.plan.port,
             authority,
         });
@@ -2068,6 +2236,7 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
                 key_file: Some(key_file),
                 session_path: Some(session_path),
                 _model_lease: model_lease,
+                _auxiliary_model_leases: auxiliary_model_leases,
             }),
         })
     }
@@ -2163,7 +2332,25 @@ fn llama_server_arguments_with_context(
     api_prefix: &str,
     context_tokens: u32,
 ) -> Vec<String> {
-    vec![
+    llama_server_arguments_with_context_and_auxiliary(
+        model_path,
+        key_path,
+        port,
+        api_prefix,
+        context_tokens,
+        &[],
+    )
+}
+
+fn llama_server_arguments_with_context_and_auxiliary(
+    model_path: &Path,
+    key_path: &Path,
+    port: u16,
+    api_prefix: &str,
+    context_tokens: u32,
+    auxiliary_model_files: &[LocalRuntimeAuxiliaryFile],
+) -> Vec<String> {
+    let mut arguments = vec![
         "--model".into(),
         model_path.to_string_lossy().into_owned(),
         "--host".into(),
@@ -2176,8 +2363,8 @@ fn llama_server_arguments_with_context(
         key_path.to_string_lossy().into_owned(),
         "--ctx-size".into(),
         context_tokens.to_string(),
-        "--n-gpu-layers".into(),
-        LOCAL_RUNTIME_GPU_LAYERS.to_string(),
+        "--fit".into(),
+        "on".into(),
         "--parallel".into(),
         "1".into(),
         "--predict".into(),
@@ -2189,7 +2376,24 @@ fn llama_server_arguments_with_context(
         "--no-webui".into(),
         "--no-slots".into(),
         "--offline".into(),
-    ]
+    ];
+    if auxiliary_model_files
+        .iter()
+        .any(|artifact| artifact.kind == LocalModelComponentKind::Mmproj)
+    {
+        arguments.extend([
+            "--fit-target".into(),
+            LOCAL_RUNTIME_MMPROJ_FIT_TARGET_MIB.to_string(),
+        ]);
+    }
+    for artifact in auxiliary_model_files {
+        match artifact.kind {
+            LocalModelComponentKind::Lora => arguments.push("--lora".into()),
+            LocalModelComponentKind::Mmproj => arguments.push("--mmproj".into()),
+        }
+        arguments.push(artifact.path.to_string_lossy().into_owned());
+    }
+    arguments
 }
 
 fn disabled_runtime_features() -> Vec<String> {
@@ -2507,7 +2711,7 @@ mod tests {
     }
 
     #[test]
-    fn llama_server_arguments_are_fixed_gpu_first_and_private() {
+    fn llama_server_arguments_fit_gpu_memory_and_keep_private_defaults() {
         let arguments = llama_server_arguments(
             Path::new(r"C:\models\selected.gguf"),
             Path::new(r"C:\runtime\api-key.txt"),
@@ -2528,8 +2732,8 @@ mod tests {
             r"C:\runtime\api-key.txt",
             "--ctx-size",
             "8192",
-            "--n-gpu-layers",
-            "99",
+            "--fit",
+            "on",
             "--predict",
             "-1",
             "--jinja",
@@ -2546,9 +2750,57 @@ mod tests {
             );
         }
         for forbidden in [
-            "--tools", "--agent", "--mcp", "--media", "--router", "0.0.0.0",
+            "--n-gpu-layers",
+            "--n-cpu-moe",
+            "--tools",
+            "--agent",
+            "--mcp",
+            "--media",
+            "--router",
+            "0.0.0.0",
         ] {
             assert!(!joined.contains(forbidden), "included {forbidden}");
+        }
+    }
+
+    #[test]
+    fn llama_server_arguments_load_the_pinned_lora_and_mmproj() {
+        let auxiliary_model_files = [
+            LocalRuntimeAuxiliaryFile {
+                kind: LocalModelComponentKind::Lora,
+                path: PathBuf::from(r"C:\models\adapter.gguf"),
+                sha256: "a".repeat(64),
+                size_bytes: 1,
+            },
+            LocalRuntimeAuxiliaryFile {
+                kind: LocalModelComponentKind::Mmproj,
+                path: PathBuf::from(r"C:\models\mmproj.gguf"),
+                sha256: "b".repeat(64),
+                size_bytes: 2,
+            },
+        ];
+        let arguments = llama_server_arguments_with_context_and_auxiliary(
+            Path::new(r"C:\models\selected.gguf"),
+            Path::new(r"C:\runtime\api-key.txt"),
+            43123,
+            "/fixture",
+            LOCAL_RUNTIME_CONTEXT,
+            &auxiliary_model_files,
+        );
+        for expected in [
+            "--fit",
+            "on",
+            "--fit-target",
+            "2048",
+            "--lora",
+            r"C:\models\adapter.gguf",
+            "--mmproj",
+            r"C:\models\mmproj.gguf",
+        ] {
+            assert!(
+                arguments.iter().any(|value| value == expected),
+                "missing {expected}"
+            );
         }
     }
 
@@ -3276,6 +3528,7 @@ mod tests {
             model_path: model_lease.path().to_path_buf(),
             model_sha256: model_lease.sha256().to_owned(),
             model_size_bytes: model_lease.size_bytes(),
+            auxiliary_model_files: Vec::new(),
             max_model_bytes: 1024 * 1024,
             managed_active_process_limit: process_limits.active_process_limit(),
             managed_cpu_rate_percent: process_limits.cpu_rate_percent(),
@@ -3288,7 +3541,7 @@ mod tests {
             port: 43_123,
             api_prefix: "/test".into(),
             context_tokens: LOCAL_RUNTIME_CONTEXT,
-            gpu_layers: LOCAL_RUNTIME_GPU_LAYERS,
+            gpu_layer_policy: LOCAL_RUNTIME_GPU_LAYER_POLICY.into(),
             disabled_features: disabled_runtime_features(),
         };
         (
@@ -3305,6 +3558,7 @@ mod tests {
                     archive_lease: Some(archive_lease),
                     launcher_lease: Some(launcher_lease),
                     model_lease: Some(model_lease),
+                    auxiliary_model_leases: Some(Vec::new()),
                     max_model_bytes: 1024 * 1024,
                     endpoint: "http://127.0.0.1:43123/test/v1/".into(),
                     verification_failure,

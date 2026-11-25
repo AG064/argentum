@@ -51,10 +51,11 @@ Every file is pinned by address, size, and SHA-256.
 
 | Download | Size | Suggested free memory |
 | --- | --- | --- |
-| llama.cpp runtime b10621, Vulkan build | 34 MB | |
+| llama.cpp runtime b12650 prerelease, Vulkan build | 38.9 MB | |
 | Qwen3.5 0.8B, Q8_0 | 0.83 GB | 2 GB |
 | Qwen3.5 2B, Q4_K_M | 1.28 GB | 3 GB |
 | Qwen3.5 4B, Q4_K_M | 2.74 GB | 5 GB |
+| Inkling-2-Mini AD-Q4_K with LoRA and mmproj | 17.2 GB | Depends on GPU memory and context size |
 
 The memory figures are estimates. A graphics card with a current Vulkan driver
 makes local models faster. Small local models are fine for questions and small

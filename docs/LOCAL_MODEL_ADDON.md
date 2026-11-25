@@ -10,9 +10,10 @@ depend on it.
 
 ## What you see
 
-1. Settings lists three models with their size, license and source.
-2. "Review" shows exactly what would be downloaded: each file, its size, its host,
-   how it is checked and the folder it goes to. Files already in place are left out.
+1. Settings lists four models with their combined model-file size, license and source.
+2. "Review" lists every required file, its size, its host, how it is checked and
+   the folder it goes to. The displayed transfer count and size are maximums:
+   existing files are reused after their pinned checks pass.
 3. Nothing is downloaded until you press "Download and install". That press
    approves only the files shown. "Cancel download" stops the download and rolls
    it back.
@@ -29,10 +30,31 @@ model add-on is not installed" and points you to Settings.
 
 | Item | Source | Checks |
 | --- | --- | --- |
-| llama.cpp b10621, Windows x64, Vulkan | github.com/ggml-org/llama.cpp release | Pinned size and SHA-256, the publisher's signed attestation, then the runtime's own archive checks |
+| llama.cpp b12650 prerelease, Windows x64, Vulkan | github.com/ggml-org/llama.cpp release | Pinned size and SHA-256, the publisher's signed attestation, then the runtime's own archive checks |
 | Qwen3.5 0.8B Q8_0 | Hugging Face, ggml-org/Qwen3.5-0.8B-GGUF at a pinned commit | Pinned size and SHA-256 |
 | Qwen3.5 2B Q4_K_M | Hugging Face, unsloth/Qwen3.5-2B-GGUF at a pinned commit | Pinned size and SHA-256 |
 | Qwen3.5 4B Q4_K_M | Hugging Face, unsloth/Qwen3.5-4B-GGUF at a pinned commit | Pinned size and SHA-256 |
+| Inkling-2-Mini AD-Q4_K with Uncensored LoRA | Hugging Face, AtomicChat at pinned commits | Base GGUF, LoRA GGUF and mmproj GGUF each have pinned size and SHA-256 |
+
+Inkling is a 26.4B Mixture of Experts model with 3.4B active parameters. Its
+model files total 17.21 GB. Argentum lets llama.cpp choose GPU placement at each
+launch and enables `--fit`. llama.cpp measures currently available device memory,
+places as many layers and MoE tensors on the GPU as its fit algorithm allows,
+and leaves the rest in system memory. For models with an mmproj, Argentum sets a
+2,048 MiB fit target to leave room for the projector and runtime allocations.
+On an 8 GB GPU, full GPU residency cannot fit this model's weights, before
+accounting for the KV cache and runtime workspace. The automatic split can use
+the GPU for dense layers and the experts that fit, while keeping the remaining
+experts in host memory.
+
+MoE expert caching can improve token generation when some expert tensors remain
+in host memory, but the best cache size depends on the GPU, system memory, model
+and workload. Argentum leaves the cache disabled by default. llama.cpp provides
+a cache tuner to measure cache sizes and CPU shares for a specific machine and
+workload.
+
+The mmproj file is passed to llama.cpp. This change does not add image attachment
+support to Argentum's chat interface.
 
 The pins are in `crates/argentum-update/src/addon.rs`. The runtime pin must match
 the local runtime's own pin in `crates/argentum-providers/src/runtime_bundles.rs`.
@@ -47,7 +69,7 @@ Argentum checks it offline, before any download
 1. The signing certificate chains to the pinned Sigstore Fulcio root, for code
    signing, at the time the Rekor log recorded.
 2. The certificate names the workflow
-   `https://github.com/ggml-org/llama.cpp/.github/workflows/release.yml@refs/heads/master`
+   `https://github.com/ggml-org/llama.cpp/.github/workflows/release-publish.yml@refs/heads/master`
    and the issuer `https://token.actions.githubusercontent.com`.
 3. The statement's signature verifies with the certificate's key.
 4. Rekor's signed entry timestamp verifies with the pinned Rekor key, and the log
@@ -67,7 +89,7 @@ Limits:
 
 Under the Argentum data folder (`<data>`):
 
-- Runtime: `<data>/runtimes/llama-cpp/v0.3.0/vulkan-x64/bundle.zip`
+- Runtime: `<data>/runtimes/llama-cpp/v0.4.0/vulkan-x64/bundle.zip`
 - Models: `<data>/models/`
 - Temporary files: `<data>/addons/`
 
