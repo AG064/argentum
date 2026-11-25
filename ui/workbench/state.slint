@@ -371,6 +371,10 @@ export global App {
 
     // Usage module.
     in-out property <[ProviderUsageView]> usage_rows: [];
+    // The balance asked for in the Usage panel: which profile, and its text.
+    in-out property <string> balance_profile_id: "";
+    in-out property <string> balance_text: "";
+    callback load_balance(string);
     // The Requests module, for this session only.
     in-out property <[UsageDayView]> usage_days: [];
     in-out property <[ProjectView]> projects: [];

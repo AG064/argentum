@@ -867,7 +867,9 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::ListWorkspaceDirectory { .. }
         | AppCommand::PreviewWorkspaceFile { .. }
         // Spend limits are the owner's setting, in the app or the local CLI.
-        | AppCommand::SetProviderSpendLimit { .. } => false,
+        | AppCommand::SetProviderSpendLimit { .. }
+        // A balance is read with the owner's key, only when the owner asks in the app.
+        | AppCommand::LoadProviderBalance { .. } => false,
     }
 }
 

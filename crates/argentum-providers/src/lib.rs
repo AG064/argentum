@@ -8,6 +8,7 @@ use std::time::Duration;
 use argentum_domain::{ProviderKind, ProviderProfile, ProviderStatus};
 use argentum_platform::{AuthorityDependentService, PlatformError};
 use argentum_security::SecretValue;
+mod balance;
 mod chatgpt;
 pub mod chatgpt_auth;
 mod chatgpt_identity;
@@ -1449,6 +1450,14 @@ pub trait ModelProvider: Send + Sync {
         })
     }
 
+    /// The owner's account balance, for providers that report one. `None`
+    /// for every other provider.
+    async fn account_balance(
+        &self,
+    ) -> Result<Option<argentum_domain::AccountBalance>, ProviderError> {
+        Ok(None)
+    }
+
     /// Validate an assembled request and any required already-active runtime
     /// state without beginning inference. A contained sidecar may use its
     /// authenticated local metadata/token-count IPC, never a hosted inference call.
@@ -1966,6 +1975,35 @@ impl OpenAiCompatibleProvider {
         Ok(status)
     }
 
+    /// Reads a balance with the probe client, its timeout and its bounded
+    /// body. The key goes only into the authorization header.
+    async fn fetch_balance(
+        &self,
+        route: balance::BalanceRoute,
+        url: Url,
+    ) -> Result<argentum_domain::AccountBalance, ProviderError> {
+        let Some(api_key) = &self.api_key else {
+            return Err(ProviderError::InvalidResponse(
+                "no key is saved for this provider".into(),
+            ));
+        };
+        let response = self
+            .probe_client
+            .get(url)
+            .timeout(self.probe_timeout)
+            .bearer_auth(api_key.expose())
+            .send()
+            .await
+            .map_err(|error| self.map_probe_request_error(error))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(ProviderError::ProbeHttpStatus {
+                status: status.as_u16(),
+            });
+        }
+        route.parse(&self.read_probe_body(response).await?)
+    }
+
     async fn list_openai_models(&self) -> Result<Vec<ProviderModel>, ProviderError> {
         let mut request = self
             .probe_client
@@ -2401,6 +2439,16 @@ impl ModelProvider for OpenAiCompatibleProvider {
 
     async fn list_models(&self) -> Result<Vec<ProviderModel>, ProviderError> {
         self.list_openai_models().await
+    }
+
+    async fn account_balance(
+        &self,
+    ) -> Result<Option<argentum_domain::AccountBalance>, ProviderError> {
+        let Some(route) = balance::BalanceRoute::for_endpoint(&self.endpoint) else {
+            return Ok(None);
+        };
+        let url = route.url(&self.endpoint)?;
+        self.fetch_balance(route, url).await.map(Some)
     }
 
     async fn stream(
@@ -5324,6 +5372,56 @@ mod tests {
             stop,
             handle,
         }
+    }
+
+    #[tokio::test]
+    async fn a_balance_is_read_with_the_saved_key_from_a_local_fake_server() {
+        let body =
+            r#"{"is_available":true,"balance_infos":[{"currency":"USD","total_balance":"42.50"}]}"#;
+        let server = spawn_observed_server(format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ));
+        let provider = OpenAiCompatibleProvider::new(
+            &server.endpoint,
+            "deepseek-chat",
+            Some(SecretValue::new("fixture-balance-key")),
+            ProviderKind::OpenAiCompatible,
+            "DeepSeek",
+        )
+        .unwrap();
+        // The fake server is not DeepSeek's host, so no balance is offered.
+        assert_eq!(provider.account_balance().await.unwrap(), None);
+        let url = Url::parse(&server.endpoint)
+            .unwrap()
+            .join("/user/balance")
+            .unwrap();
+        let balance = provider
+            .fetch_balance(balance::BalanceRoute::DeepSeek, url)
+            .await
+            .unwrap();
+        assert_eq!(balance.remaining, "42.50 USD");
+        let request = server.finish().expect("balance request");
+        assert!(request.starts_with("GET /user/balance "), "{request}");
+        assert!(request
+            .to_ascii_lowercase()
+            .contains("authorization: bearer fixture-balance-key"));
+
+        let keyless = OpenAiCompatibleProvider::new(
+            "http://127.0.0.1:9/v1",
+            "deepseek-chat",
+            None,
+            ProviderKind::OpenAiCompatible,
+            "DeepSeek",
+        )
+        .unwrap();
+        assert!(keyless
+            .fetch_balance(
+                balance::BalanceRoute::DeepSeek,
+                Url::parse("http://127.0.0.1:9/user/balance").unwrap()
+            )
+            .await
+            .is_err());
     }
 
     impl MockServer {

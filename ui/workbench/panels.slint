@@ -626,6 +626,17 @@ export component UsagePanel inherits Rectangle {
                         Label { text: row.output + " out"; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
                     }
                     if row.compaction != "": Label { text: "Includes " + row.compaction; tone: "muted"; size: "xs"; }
+                    if row.has_balance: HorizontalLayout {
+                        spacing: Theme.sp6;
+                        Label {
+                            horizontal-stretch: 1;
+                            text: App.balance_profile_id == row.id ? App.balance_text : "Account balance";
+                            tone: "muted";
+                            size: "xs";
+                            wrap: word-wrap;
+                        }
+                        Btn { y: (parent.height - self.height) / 2; label: "Check balance"; small: true; kind: "ghost"; clicked => { App.load_balance(row.id); } }
+                    }
                     Label {
                         text: row.spend_state == "stopped" ? row.month + ". Limit reached: new requests stop until next month or a higher limit."
                             : row.spend_state == "warn" ? row.month + ". Close to the limit."

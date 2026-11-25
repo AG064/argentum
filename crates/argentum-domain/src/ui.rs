@@ -848,6 +848,16 @@ pub enum UiChangeSource {
     Agent,
 }
 
+/// What a provider says is left on the owner's account, as it reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountBalance {
+    /// "110.00 USD".
+    pub remaining: String,
+    /// More the provider said, such as how much of the credit was used.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub detail: String,
+}
+
 /// Token totals reported by one provider profile in this project.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderUsageRow {

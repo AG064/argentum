@@ -2909,6 +2909,11 @@ pub enum AppCommand {
         patch: Box<UiPatch>,
     },
     LoadProviderUsage,
+    /// Reads a provider profile's account balance from the provider, when the
+    /// owner asks. Only DeepSeek and OpenRouter report one.
+    LoadProviderBalance {
+        profile_id: String,
+    },
     /// Sets a provider profile's monthly token limit, or clears it with
     /// `None`. New requests stop once the month's reported tokens reach it.
     SetProviderSpendLimit {
@@ -3252,6 +3257,15 @@ pub enum AppEvent {
         summary: String,
         undo: Option<Box<UiPatch>>,
     },
+    /// A provider's account balance, `None` when it reports none, or why it
+    /// could not be read.
+    ProviderBalanceLoaded {
+        profile_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        balance: Option<AccountBalance>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        error: String,
+    },
     ProviderUsageLoaded {
         rows: Vec<ProviderUsageRow>,
         #[serde(default)]
@@ -3316,6 +3330,7 @@ impl AppEvent {
             Self::AssistantReasoningDelta { .. } => "assistant_reasoning_delta",
             Self::UiPreferencesLoaded { .. } => "ui_preferences_loaded",
             Self::ProviderUsageLoaded { .. } => "provider_usage_loaded",
+            Self::ProviderBalanceLoaded { .. } => "provider_balance_loaded",
             Self::GitStatusLoaded(_) => "git_status_loaded",
             Self::GitDiffLoaded(_) => "git_diff_loaded",
             Self::BrowserPageLoaded(_) => "browser_page_loaded",
