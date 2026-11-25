@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+name: Argentum pull request
+description: >-
+  Run Argentum headless on a pull request to review it, or to fix a failing
+  check, and post the result as a comment or as review suggestions.
+author: AG064
+branding:
+  icon: git-pull-request
+  color: gray-dark
+inputs:
+  mode:
+    description: "review (read-only) or fix (changes files; needs allow-write)."
+    default: review
+  provider:
+    description: >-
+      A provider preset id, such as deepseek or anthropic (see
+      `argentum provider presets`). With endpoint, the id of your own profile.
+    default: deepseek
+  model:
+    description: The exact model id. Empty uses the preset's default model.
+    default: ''
+  endpoint:
+    description: The address of your own OpenAI-compatible server, instead of a preset.
+    default: ''
+  limits:
+    description: >-
+      Token budget TOTAL,INPUT,MAX_OUTPUT,REQUESTED_OUTPUT,UNCERTAINTY, for a
+      model whose limits Argentum does not know.
+    default: ''
+  api-key:
+    description: The provider key, from a repository secret. Never put a key in the workflow file.
+    default: ''
+  github-token:
+    description: Token for reading the pull request and posting. Pushing needs contents write.
+    default: ${{ github.token }}
+  instructions:
+    description: Extra instructions from you, added to the review or fix task.
+    default: ''
+  check-log:
+    description: Fix mode. A file with the failing check output, read into the task.
+    default: ''
+  pull-request:
+    description: The pull request number, for events other than pull_request.
+    default: ''
+  post:
+    description: "comment (post to the pull request) or summary (job summary only)."
+    default: comment
+  allow-write:
+    description: Fix mode. Let Argentum change files in this job's checkout.
+    default: 'false'
+  allow-push:
+    description: Fix mode. Push the fix to the pull request branch. Needs allow-write.
+    default: 'false'
+  fix-profile:
+    description: >-
+      Fix mode. The permission profile: verification (read, edit and the fixed
+      Rust checks), automatic (in-process edits only) or full-access (any
+      enabled tool, including commands, without approval).
+    default: verification
+  commit-author:
+    description: Fix mode with allow-push. The author of the pushed commit.
+    default: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+  sign-off:
+    description: Fix mode with allow-push. Add a Signed-off-by line for DCO checks.
+    default: 'false'
+  allow-pull-request-target:
+    description: Run on pull_request_target. Read docs/CI_PULL_REQUESTS.md first.
+    default: 'false'
+  argentum-path:
+    description: A ready Argentum CLI for Linux to use instead of building one from this action's source.
+    default: ''
+outputs:
+  ran:
+    description: true when Argentum ran.
+    value: ${{ steps.run.outputs.ran }}
+  run-state:
+    description: complete, failed, cancelled, interrupted or not_final.
+    value: ${{ steps.run.outputs.run-state }}
+  result-file:
+    description: The final-result JSON file.
+    value: ${{ steps.run.outputs.result-file }}
+  changed:
+    description: Fix mode. true when files changed.
+    value: ${{ steps.run.outputs.changed }}
+  patch-file:
+    description: Fix mode. The patch of the changes.
+    value: ${{ steps.run.outputs.patch-file }}
+  pushed:
+    description: Fix mode. true when the fix was pushed.
+    value: ${{ steps.run.outputs.pushed }}
+runs:
+  using: composite
+  steps:
+    - name: Check the runner
+      if: runner.os != 'Linux'
+      shell: bash
+      run: |
+        echo '::error::The Argentum pull request action runs on Linux runners only.'
+        exit 1
+    - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+      if: inputs.argentum-path == ''
+      with:
+        toolchain: 1.98.0
+    - name: Build Argentum
+      id: build
+      shell: bash
+      env:
+        ARGENTUM_PATH: ${{ inputs.argentum-path }}
+        # Only fix mode with allow-write gets the build in which an explicit
+        # disposable-environment marker stands in for the owner when the action
+        # selects the permission profile. Review never uses it.
+        OWNER_BUILD: ${{ inputs.mode == 'fix' && inputs.allow-write == 'true' }}
+      run: |
+        set -euo pipefail
+        if [ -n "$ARGENTUM_PATH" ]; then
+          if [ "$OWNER_BUILD" = true ]; then
+            echo '::error::Fix mode builds its own CLI. Remove argentum-path.'
+            exit 1
+          fi
+          echo "cli=$ARGENTUM_PATH" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        features=()
+        if [ "$OWNER_BUILD" = true ]; then features=(--features benchmark-unattended); fi
+        cargo build --locked --release --manifest-path "$GITHUB_ACTION_PATH/Cargo.toml" \
+          -p argentum-cli --bin argentum --target-dir "$RUNNER_TEMP/argentum-target" "${features[@]}"
+        echo "cli=$RUNNER_TEMP/argentum-target/release/argentum" >> "$GITHUB_OUTPUT"
+    - name: Run Argentum
+      id: run
+      shell: bash
+      env:
+        ARGENTUM_PR_CLI: ${{ steps.build.outputs.cli }}
+        ARGENTUM_PR_API_KEY: ${{ inputs.api-key }}
+        ARGENTUM_PR_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_ENDPOINT: ${{ inputs.endpoint }}
+        INPUT_LIMITS: ${{ inputs.limits }}
+        INPUT_INSTRUCTIONS: ${{ inputs.instructions }}
+        INPUT_CHECK_LOG: ${{ inputs.check-log }}
+        INPUT_PULL_REQUEST: ${{ inputs.pull-request }}
+        INPUT_POST: ${{ inputs.post }}
+        INPUT_ALLOW_WRITE: ${{ inputs.allow-write }}
+        INPUT_ALLOW_PUSH: ${{ inputs.allow-push }}
+        INPUT_FIX_PROFILE: ${{ inputs.fix-profile }}
+        INPUT_COMMIT_AUTHOR: ${{ inputs.commit-author }}
+        INPUT_SIGN_OFF: ${{ inputs.sign-off }}
+        INPUT_ALLOW_PULL_REQUEST_TARGET: ${{ inputs.allow-pull-request-target }}
+      run: python3 "$GITHUB_ACTION_PATH/ci/pull-request/argentum_pr.py"

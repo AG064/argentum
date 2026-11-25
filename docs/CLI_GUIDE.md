@@ -192,6 +192,9 @@ clear grants or copy the database to remove a hold.
 
 ## Headless use and isolation
 
+To run Argentum on GitHub pull requests, use the action described in
+[Argentum on pull requests](CI_PULL_REQUESTS.md).
+
 `serve` speaks JSON Lines on standard input and output. It is not a network service and has
 no sign-in, so treat whatever is connected to it as untrusted, and do not expose it
 remotely. An action that needs a new approval fails with `approval_required`. There is no
