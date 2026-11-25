@@ -79,6 +79,22 @@ Argentum contacts:
 
 There is no telemetry.
 
+### No telemetry rule
+
+Argentum never sends usage data, analytics, crash reports, hardware details or
+any other information about you or your machine on its own. This is a project
+rule, not a setting:
+
+- No analytics, telemetry or crash-reporting library is added, in Rust, npm or
+  Gradle, and no code contacts an analytics or crash-reporting service.
+- Information you choose to share, such as a measured model speed, is shown to
+  you in full first and is sent only by you, from your browser, after you
+  review it. Argentum does not send it.
+- `scripts/check-no-telemetry.py` runs on every push and pull request (the
+  "No telemetry" workflow) and fails if such a dependency or a known analytics
+  host appears in the tracked files. A pull request that weakens this rule or
+  the check is not accepted.
+
 ## Release integrity
 
 - Every release has a `SHA256SUMS.txt` list, a GitHub build provenance attestation, and an SBOM.

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+#
+# Argentum has no telemetry (SECURITY.md). This check fails a push or pull
+# request that adds an analytics, telemetry or crash-reporting dependency, in
+# Cargo, npm or Gradle, or a known analytics host anywhere in the tracked files.
+name: No telemetry
+
+on:
+  push:
+    branches: [development]
+  pull_request:
+    branches: [development]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: No telemetry
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test the check
+        run: python3 scripts/tests/test_check_no_telemetry.py
+      - name: Check for analytics and telemetry dependencies and hosts
+        run: python3 scripts/check-no-telemetry.py

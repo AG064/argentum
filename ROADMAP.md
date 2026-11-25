@@ -78,6 +78,9 @@ The first stable release, for Windows x64 and Android arm64:
   gets close and stops new requests when it is reached.
 - **Dependencies:** argon2 0.6, chacha20poly1305 0.11, getrandom 0.4 and base64
   0.23. Data stored by 0.1.0 stays readable.
+- **No telemetry check:** CI fails if an analytics, telemetry or
+  crash-reporting dependency or host appears, and `SECURITY.md` states the
+  rule.
 
 ## Planned for 0.1.1
 
