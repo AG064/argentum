@@ -1657,6 +1657,18 @@ impl RuntimeService {
                     }
                 }
             }
+            ToolInput::ListDirectory { ref path, .. }
+            | ToolInput::FileMetadata { ref path }
+            | ToolInput::ReadBinaryMetadata { ref path } => {
+                if !self.context_path_allowed(path, &policy) {
+                    observation.retention = Retention::OmittedPolicy;
+                    return Ok(observation);
+                }
+                keep_output(&mut observation, &result.content);
+            }
+            // Process output, Git included, stays private to the turn that
+            // made it: it can hold file contents and secrets the path policy
+            // never saw, so later turns get its receipt only.
             _ => {}
         }
         Ok(observation)
@@ -1871,6 +1883,77 @@ impl RuntimeService {
         }
         Ok(())
     }
+}
+
+/// Tools whose output stays available to the agent after the turn that made
+/// it, as a bounded copy: its start and its end. Only workspace metadata
+/// under the path policy; process output is never kept.
+const KEPT_OUTPUT_TOOLS: [&str; 3] = ["list_directory", "file_metadata", "read_binary_metadata"];
+/// How much of a kept output's start and end is stored.
+const KEPT_HEAD_BYTES: usize = 3 * 1024;
+const KEPT_TAIL_BYTES: usize = 1024;
+
+/// Keeps the start and end of a tool's output for later turns, unless it
+/// looks like it holds credentials.
+fn keep_output(observation: &mut Observation, content: &str) {
+    if sensitive_body(content) {
+        observation.retention = Retention::OmittedPolicy;
+        return;
+    }
+    observation.result = Some(kept_output(content));
+    observation.retention = Retention::Redacted;
+}
+
+fn char_floor(text: &str, mut index: usize) -> usize {
+    while !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+fn char_ceil(text: &str, mut index: usize) -> usize {
+    while !text.is_char_boundary(index) {
+        index += 1;
+    }
+    index
+}
+
+/// `{"kept_output":true,"original_bytes":n,"head":...,"tail":...}`. A short
+/// output is kept whole in `head` with an empty `tail`.
+pub(super) fn kept_output(content: &str) -> String {
+    let (head, tail) = if content.len() <= KEPT_HEAD_BYTES + KEPT_TAIL_BYTES {
+        (content, "")
+    } else {
+        let head_end = char_floor(content, KEPT_HEAD_BYTES);
+        let tail_start = char_ceil(content, content.len() - KEPT_TAIL_BYTES);
+        (&content[..head_end], &content[tail_start..])
+    };
+    json!({
+        "kept_output": true,
+        "original_bytes": content.len(),
+        "head": head,
+        "tail": tail,
+    })
+    .to_string()
+}
+
+/// True for exactly the shape [`kept_output`] writes, within its bounds.
+fn valid_kept_output(result: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(result) else {
+        return false;
+    };
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    let text = |key: &str| object.get(key).and_then(serde_json::Value::as_str);
+    object.len() == 4
+        && object.get("kept_output") == Some(&serde_json::Value::Bool(true))
+        && object
+            .get("original_bytes")
+            .and_then(serde_json::Value::as_u64)
+            .is_some()
+        && text("head").is_some_and(|head| head.len() <= KEPT_HEAD_BYTES + KEPT_TAIL_BYTES)
+        && text("tail").is_some_and(|tail| tail.len() <= KEPT_TAIL_BYTES + 4)
 }
 
 fn text_message(role: ConversationRole, content: String) -> ModelMessage {
@@ -2181,6 +2264,12 @@ fn valid_stored_observation(observation: &Observation) -> bool {
         return false;
     }
     match observation.tool.as_str() {
+        tool if KEPT_OUTPUT_TOOLS.contains(&tool) => {
+            arguments.is_empty()
+                && observation.retention == Retention::Redacted
+                && !sensitive_body(result)
+                && valid_kept_output(result)
+        }
         "read_text" => valid_read_result(result),
         "search_text" | "search_filenames" => {
             arguments.len() == 1
@@ -2369,6 +2458,67 @@ mod privacy_filter_tests {
             .apply_provider_request_validation(&budget, &mut accounting, &validation)
             .is_err());
         runtime.shutdown().await.unwrap();
+    }
+
+    #[test]
+    fn kept_output_keeps_the_start_and_end_of_long_output() {
+        let short = kept_output("a.txt\nb.txt\n");
+        let value: serde_json::Value = serde_json::from_str(&short).unwrap();
+        assert_eq!(value["head"], "a.txt\nb.txt\n");
+        assert_eq!(value["tail"], "");
+        assert!(valid_kept_output(&short));
+
+        let long = format!("{}{}", "é".repeat(4_000), "END");
+        let kept = kept_output(&long);
+        let value: serde_json::Value = serde_json::from_str(&kept).unwrap();
+        assert_eq!(value["original_bytes"], long.len());
+        assert!(value["head"].as_str().unwrap().len() <= KEPT_HEAD_BYTES);
+        assert!(value["tail"].as_str().unwrap().ends_with("END"));
+        assert!(valid_kept_output(&kept));
+
+        assert!(!valid_kept_output(r#"{"kept_output":true}"#));
+        assert!(!valid_kept_output(
+            r#"{"kept_output":true,"original_bytes":1,"head":"x","tail":"","extra":1}"#
+        ));
+        let oversized = serde_json::json!({
+            "kept_output": true, "original_bytes": 1,
+            "head": "x".repeat(KEPT_HEAD_BYTES + KEPT_TAIL_BYTES + 1), "tail": ""
+        });
+        assert!(!valid_kept_output(&oversized.to_string()));
+    }
+
+    #[test]
+    fn output_that_looks_like_credentials_is_not_kept() {
+        let mut observation = Observation {
+            provider_call_id: "call".into(),
+            runtime_call_id: None,
+            tool: "list_directory".into(),
+            state: ObservationState::ResultAvailable,
+            receipt: None,
+            change: None,
+            arguments: "{}".into(),
+            retention: Retention::MetadataOnly,
+            result: None,
+        };
+        keep_output(
+            &mut observation,
+            "{\"entries\":[{\"name\":\"api_key.txt\"}]}",
+        );
+        assert_eq!(observation.retention, Retention::OmittedPolicy);
+        assert!(observation.result.is_none());
+        keep_output(&mut observation, "{\"entries\":[{\"name\":\"src\"}]}");
+        assert_eq!(observation.retention, Retention::Redacted);
+        assert!(observation.result.as_deref().is_some_and(valid_kept_output));
+        // A stored kept output with its receipt is restored on a later turn;
+        // the same shape for a process tool is not.
+        observation.receipt = Some(argentum_domain::working_context::ObservationReceipt {
+            audit_id: uuid::Uuid::new_v4(),
+            outcome: argentum_domain::ExecutionOutcome::Succeeded,
+            exit_code: None,
+        });
+        assert!(valid_stored_observation(&observation));
+        observation.tool = "execute_shell".into();
+        assert!(!valid_stored_observation(&observation));
     }
 
     #[test]
