@@ -2090,3 +2090,100 @@ async fn mutation_trace_uses_verified_creation_modification_and_deletion_paths()
     );
     assert!(!root.path().join("delete.txt").exists());
 }
+
+fn builtin_catalog_bytes(needs: WorkspaceNeeds) -> (usize, usize) {
+    let root = tempfile::tempdir().unwrap();
+    let registry = ToolRegistry::with_builtins(WorkspaceManager::new(
+        CapabilityBroker::new(root.path(), ApprovalPolicy::default()).unwrap(),
+    ));
+    let definitions = registry
+        .descriptors()
+        .iter()
+        .filter(|descriptor| needs.offers(&descriptor.id))
+        .filter_map(model_tool_definition)
+        .collect::<Vec<_>>();
+    let bytes = definitions
+        .iter()
+        .map(|definition| {
+            definition.name.len()
+                + definition.description.len()
+                + definition.parameters.to_string().len()
+        })
+        .sum();
+    (definitions.len(), bytes)
+}
+
+/// The built-in catalog was 17,211 bytes before 0.1.1, for every workspace.
+const CATALOG_BYTES_BEFORE: usize = 17_211;
+
+#[test]
+fn the_builtin_tool_catalog_stays_small() {
+    let (count, bytes) = builtin_catalog_bytes(WorkspaceNeeds {
+        git: true,
+        cargo: true,
+    });
+    eprintln!("builtin catalog in a Rust repository: {count} tools, {bytes} bytes");
+    assert!(count > 10, "{count}");
+    // Shorter descriptions alone cut about a third.
+    assert!(bytes * 3 <= CATALOG_BYTES_BEFORE * 2, "{bytes}");
+    // A workspace with neither Git nor Cargo is offered about half.
+    let (plain_count, plain_bytes) = builtin_catalog_bytes(WorkspaceNeeds {
+        git: false,
+        cargo: false,
+    });
+    eprintln!("builtin catalog in a plain folder: {plain_count} tools, {plain_bytes} bytes");
+    assert!(plain_bytes * 2 <= CATALOG_BYTES_BEFORE, "{plain_bytes}");
+}
+
+#[test]
+fn a_workspace_is_offered_only_the_tools_it_can_use() {
+    let plain = tempfile::tempdir().unwrap();
+    let needs = WorkspaceNeeds::of(plain.path());
+    let in_repository = plain
+        .path()
+        .ancestors()
+        .any(|folder| folder.join(".git").exists());
+    assert_eq!(needs.offers("git_read"), in_repository);
+    assert!(!needs.offers("check_rust"));
+    assert!(!needs.offers("start_verification"));
+    assert!(needs.offers("read_text"));
+    assert!(needs.offers("verify"), "project runners need no Cargo.toml");
+
+    let project = tempfile::tempdir().unwrap();
+    std::fs::create_dir(project.path().join(".git")).unwrap();
+    std::fs::write(
+        project.path().join("Cargo.toml"),
+        "[package]\nname = \"x\"\n",
+    )
+    .unwrap();
+    let needs = WorkspaceNeeds::of(project.path());
+    for tool in [
+        "git_read",
+        "git_write",
+        "check_rust",
+        "poll_process_job",
+        "cancel_process_job",
+    ] {
+        assert!(needs.offers(tool), "{tool}");
+    }
+}
+
+#[test]
+#[ignore = "prints the size of each tool definition"]
+fn print_tool_definition_sizes() {
+    let root = tempfile::tempdir().unwrap();
+    let registry = ToolRegistry::with_builtins(WorkspaceManager::new(
+        CapabilityBroker::new(root.path(), ApprovalPolicy::default()).unwrap(),
+    ));
+    for definition in registry
+        .descriptors()
+        .iter()
+        .filter_map(model_tool_definition)
+    {
+        eprintln!(
+            "{:>6} {}",
+            definition.description.len() + definition.parameters.to_string().len(),
+            definition.name
+        );
+    }
+}

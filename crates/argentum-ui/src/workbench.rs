@@ -511,6 +511,11 @@ pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
                 input: compact_count(row.input_tokens).into(),
                 output: compact_count(row.output_tokens).into(),
                 total: compact_count(row.total_tokens).into(),
+                compaction: if row.compaction_tokens == 0 {
+                    SharedString::default()
+                } else {
+                    format!("{} for compaction", compact_count(row.compaction_tokens)).into()
+                },
                 share: if total == 0 {
                     0.0
                 } else {
@@ -540,6 +545,7 @@ pub fn apply_ui_change(
     window
         .global::<crate::App>()
         .set_thinking_mode(preferences.thinking.id().into());
+    record_ui_change(window, source, summary, undo);
     if source == UiChangeSource::Agent {
         window.set_ui_last_agent_change(summary.into());
         window.set_toast_text(format!("Agent changed: {summary}").into());
@@ -549,6 +555,66 @@ pub fn apply_ui_change(
                 .into(),
         );
     }
+}
+
+/// Changes kept in the history at most.
+const MAX_UI_HISTORY: usize = 20;
+
+thread_local! {
+    /// Set while an undo from the history is on its way, so the change it
+    /// makes is not added to the history as a new one.
+    static UNDO_IN_FLIGHT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The part of a change summary that names what changed, so a slider drag
+/// becomes one entry: "text size 110%" and "text size 115%" are the same kind.
+fn change_kind(summary: &str) -> &str {
+    summary
+        .split(|character: char| character.is_ascii_digit() || character == '#')
+        .next()
+        .unwrap_or(summary)
+        .trim()
+}
+
+/// Adds a change to the newest end of the history. A run of changes to the
+/// same setting by the same source keeps the first undo, so one Undo returns
+/// to where the run of changes began.
+fn record_ui_change(
+    window: &MainWindow,
+    source: UiChangeSource,
+    summary: &str,
+    undo: Option<&UiPatch>,
+) {
+    if UNDO_IN_FLIGHT.with(|flag| flag.replace(false)) {
+        return;
+    }
+    let (Some(undo), false) = (undo, summary.is_empty() || summary == "no change") else {
+        return;
+    };
+    let Ok(token) = serde_json::to_string(undo) else {
+        return;
+    };
+    let by: SharedString = match source {
+        UiChangeSource::Agent => "The agent".into(),
+        UiChangeSource::User => "You".into(),
+    };
+    let app = window.global::<crate::App>();
+    let mut entries = app.get_ui_history().iter().collect::<Vec<_>>();
+    match entries.first_mut() {
+        Some(latest) if latest.by == by && change_kind(&latest.summary) == change_kind(summary) => {
+            latest.summary = summary.into();
+        }
+        _ => entries.insert(
+            0,
+            crate::UiChangeView {
+                summary: summary.into(),
+                by,
+                token: token.into(),
+            },
+        ),
+    }
+    entries.truncate(MAX_UI_HISTORY);
+    app.set_ui_history(ModelRc::new(VecModel::from(entries)));
 }
 
 #[derive(Default)]
@@ -1096,12 +1162,41 @@ where
     {
         let send_patch = send_patch.clone();
         let weak = window.as_weak();
+        let history_patch = send_patch.clone();
+        let history_window = window.as_weak();
+        app.on_undo_ui_change(move |index| {
+            let Some(window) = history_window.upgrade() else {
+                return;
+            };
+            let app = window.global::<crate::App>();
+            let mut entries = app.get_ui_history().iter().collect::<Vec<_>>();
+            let Ok(index) = usize::try_from(index) else {
+                return;
+            };
+            if index >= entries.len() {
+                return;
+            }
+            let entry = entries.remove(index);
+            app.set_ui_history(ModelRc::new(VecModel::from(entries)));
+            if let Ok(patch) = serde_json::from_str::<UiPatch>(entry.token.as_str()) {
+                UNDO_IN_FLIGHT.with(|flag| flag.set(true));
+                history_patch(patch);
+            }
+        });
         app.on_toast_undo(move || {
             let Some(window) = weak.upgrade() else { return };
             let token = window.get_toast_undo_token();
             window.set_toast_undo_token(SharedString::default());
             window.set_toast_text(SharedString::default());
             if let Ok(patch) = serde_json::from_str::<UiPatch>(token.as_str()) {
+                let app = window.global::<crate::App>();
+                let entries = app
+                    .get_ui_history()
+                    .iter()
+                    .filter(|entry| entry.token != token)
+                    .collect::<Vec<_>>();
+                app.set_ui_history(ModelRc::new(VecModel::from(entries)));
+                UNDO_IN_FLIGHT.with(|flag| flag.set(true));
                 send_patch(patch);
             }
         });

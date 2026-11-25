@@ -52,6 +52,7 @@ pub fn allowed_remotely(command: &AppCommand) -> bool {
             | AppCommand::LoadContextSnapshot
             | AppCommand::LoadTrajectory { .. }
             | AppCommand::LoadChangeSet { .. }
+            | AppCommand::LoadSessionChanges { .. }
             | AppCommand::LoadUnifiedDiff { .. }
             | AppCommand::LoadVerificationEvidence { .. }
             | AppCommand::LoadProviderUsage

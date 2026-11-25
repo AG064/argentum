@@ -2,7 +2,7 @@
 // Copyright (C) 2026 AG064
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { UsageDayView, ProjectView, ContextPartView, RequestRowView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, ReplyStepView, SteerNoteView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, WorkspaceEntryView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, ReplyStepView, SteerNoteView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, UiChangeView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
@@ -122,6 +122,21 @@ export global App {
     in-out property <bool> goal_start_pending: false;
     in-out property <string> user_prompt: "";
     in-out property <[ConversationMessageView]> conversation_messages: [];
+    // Files panel: the folder shown, its entries, and an open file.
+    in-out property <string> files_path: "";
+    in-out property <[WorkspaceEntryView]> files_entries: [];
+    in-out property <bool> files_truncated: false;
+    in-out property <bool> files_loading: false;
+    in-out property <string> files_error: "";
+    in-out property <string> files_preview_path: "";
+    in-out property <string> files_preview_text: "";
+    in-out property <string> files_preview_reason: "";
+    callback files_open_dir(string);
+    callback files_preview(string);
+    callback files_up();
+    // A question the agent asked in this session, waiting for an answer.
+    in-out property <string> question_text: "";
+    in-out property <[string]> question_choices: [];
     in-out property <string> plan_summary: "No stages yet";
     in-out property <[PlanStepView]> plan_steps: [];
     in-out property <string> activity_summary: "No activity yet";
@@ -291,6 +306,8 @@ export global App {
     in-out property <string> toast_text: "";
     in-out property <string> toast_undo_token: "";
     callback toast_undo();
+    // Undo one change from the history, by its row. Later changes stay.
+    callback undo_ui_change(int);
     callback set_panel_visible(bool);
     callback open_link(string);
     callback persist_layout(length, length);
@@ -371,6 +388,9 @@ export global App {
     in-out property <int> ui_radius_percent: 100;
     in-out property <string> ui_error: "";
     in-out property <string> ui_last_agent_change: "";
+    in-out property <[UiChangeView]> ui_history: [];
+    // What a shell command can reach on this platform, in plain words.
+    in-out property <string> execution_environment: "";
     callback ui_set_preset(string);
     callback ui_set_density(string);
     callback ui_step_font(int);

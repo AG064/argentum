@@ -192,6 +192,17 @@ impl RuntimeService {
             if profile.is_some_and(|p| p.kind == ProviderKind::LocalLlamaCpp) {
                 text.push_str("For a first file read, call read_text with only path. Use ranges and the returned SHA-256 only when needed; never invent a hash. Finish a task with a normal assistant answer, not a tool call. Process-job controls require a job_id actually returned by start_verification in this run; a file path is never a job ID.\n");
             }
+            // What a command can reach, only when the agent may run one. It
+            // goes before the host guidance, which ends with the repository
+            // instruction documents.
+            if ["execution.shell", "execution.argv"]
+                .iter()
+                .any(|capability| policy.capability_enabled.get(*capability) == Some(&true))
+            {
+                text.push_str("Execution environment: ");
+                text.push_str(argentum_domain::environment::execution_environment());
+                text.push('\n');
+            }
             text.push_str(&instructions::host_guidance(policy, responder));
             if policy
                 .capability_enabled

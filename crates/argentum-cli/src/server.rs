@@ -816,6 +816,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::LoadGitFileDiff { .. }
         | AppCommand::BrowserNavigate { .. }
         | AppCommand::LoadChangeSet { .. }
+        | AppCommand::LoadSessionChanges { .. }
         | AppCommand::LoadUnifiedDiff { .. }
         | AppCommand::RequestRestore { .. }
         | AppCommand::LoadChangeRecovery
@@ -861,7 +862,10 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::ApproveTool { .. }
         | AppCommand::ApproveProjectVerification { .. }
         | AppCommand::SteerRun { .. }
-        | AppCommand::RejectTool { .. } => false,
+        | AppCommand::RejectTool { .. }
+        // Workspace files are shown to the owner in the app only.
+        | AppCommand::ListWorkspaceDirectory { .. }
+        | AppCommand::PreviewWorkspaceFile { .. } => false,
     }
 }
 

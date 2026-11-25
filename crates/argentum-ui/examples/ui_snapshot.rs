@@ -195,18 +195,20 @@ fn base(ui: &UiHandle) {
     ])));
     window.set_session_items(ModelRc::new(VecModel::from(
         [
-            ("Slow session import", true),
-            ("Add retry to the provider probe", false),
-            ("Write release notes for 0.1", false),
-            ("Why does clippy flag this?", false),
+            ("Slow session import", true, "working", 3),
+            ("Add retry to the provider probe", false, "waiting", 1),
+            ("Write release notes for 0.1, with every change since the first preview and the known limits", false, "unread", 12),
+            ("Why does clippy flag this?", false, "", 0),
         ]
-        .map(|(title, active)| argentum_ui::SessionItemView {
+        .map(|(title, active, status, files)| argentum_ui::SessionItemView {
             id: title.into(),
             title: title.into(),
             detail: "".into(),
             active,
             archived: false,
             pinned: false,
+            status: status.into(),
+            files_changed: files,
         })
         .to_vec(),
     )));
@@ -350,6 +352,7 @@ fn usage(ui: &UiHandle) {
                 input_tokens: 1_240_000,
                 output_tokens: 96_000,
                 total_tokens: 1_336_000,
+                compaction_tokens: 0,
             },
             ProviderUsageRow {
                 profile_id: "deepseek".into(),
@@ -357,6 +360,7 @@ fn usage(ui: &UiHandle) {
                 input_tokens: 210_000,
                 output_tokens: 18_400,
                 total_tokens: 228_400,
+                compaction_tokens: 0,
             },
         ],
     });

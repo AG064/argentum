@@ -10,7 +10,7 @@ build = "build.rs"
 
 [dependencies]
 argentum-domain.workspace = true
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+jiff = "1.0.3"
 pulldown-cmark.workspace = true
 serde_json.workspace = true
 slint.workspace = true

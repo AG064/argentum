@@ -1232,18 +1232,11 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
             true,
             "Tokens reported by each provider in this workspace.",
         ),
-        if PREVIEW_MODULES {
-            available_surface(
-                SurfaceId::Plan,
-                true,
-                "The stages of the current task: what is done, running, and next.",
-            )
-        } else {
-            unavailable_surface(
-                SurfaceId::Plan,
-                "Coming soon: the stages of the current task as the agent plans them.",
-            )
-        },
+        available_surface(
+            SurfaceId::Plan,
+            true,
+            "The stages of the current task as the agent plans them: what is done, running, and next.",
+        ),
         available_surface(
             SurfaceId::Activity,
             true,
@@ -1259,9 +1252,10 @@ fn built_in_surfaces() -> Vec<SurfaceRegistration> {
             true,
             "The saved record of one session: tasks, tools, approvals, usage, changes, and checks.",
         ),
-        unavailable_surface(
+        available_surface(
             SurfaceId::Files,
-            "Coming soon: browse the workspace's files.",
+            true,
+            "Browse the workspace's files, open one as text, and see the files this session wrote.",
         ),
         unavailable_surface(
             SurfaceId::Terminal,
@@ -1296,8 +1290,8 @@ fn unavailable_surface(id: SurfaceId, reason: &str) -> SurfaceRegistration {
 
 fn built_in_profiles() -> Vec<ProfileRegistration> {
     use SurfaceId::{
-        Activity, Browser, Changes, CommandPalette, ContextMeter, GitDiff, Goal, Plan, Reasoning,
-        Requests, Sessions, StatusBar, Trajectory, Usage,
+        Activity, Browser, Changes, CommandPalette, ContextMeter, Files, GitDiff, Goal, Plan,
+        Reasoning, Requests, Sessions, StatusBar, Trajectory, Usage,
     };
     const EVERYDAY: [SurfaceId; 4] = [Sessions, ContextMeter, Reasoning, CommandPalette];
     vec![
@@ -1357,6 +1351,7 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
                 StatusBar,
                 Changes,
                 GitDiff,
+                Files,
                 Browser,
                 Usage,
                 Plan,
@@ -1365,7 +1360,7 @@ fn built_in_profiles() -> Vec<ProfileRegistration> {
                 Requests,
             ]
             .into_iter()
-            .filter(|surface| PREVIEW_MODULES || !matches!(surface, Plan | Browser))
+            .filter(|surface| PREVIEW_MODULES || !matches!(surface, Browser))
             .collect::<Vec<_>>(),
         ),
     ]
@@ -1580,29 +1575,40 @@ mod tests {
                 .find(|surface| surface.id == id)
                 .expect("surface")
         };
-        for id in [SurfaceId::Files, SurfaceId::Terminal, SurfaceId::Preview] {
+        assert_eq!(
+            surface(SurfaceId::Files).availability,
+            HarnessAvailability::Available
+        );
+        for id in [SurfaceId::Terminal, SurfaceId::Preview] {
             assert_eq!(surface(id).availability, HarnessAvailability::Unavailable);
             assert!(surface(id).unavailable_reason.starts_with("Coming soon"));
         }
-        // Plan and Browser work in development builds and are coming soon in
-        // releases, and the Everything profile still applies in both.
+        // Browser works in development builds and is coming soon in
+        // releases, and the Everything profile still applies in both. Plan
+        // shows the agent's own stages in every build.
         let full = registry
             .apply_profile(&LayoutProfile::default(), "full")
             .expect("full profile");
-        for id in [SurfaceId::Plan, SurfaceId::Browser] {
-            let preview = surface(id);
-            assert_eq!(
-                preview.availability == HarnessAvailability::Available,
-                PREVIEW_MODULES
-            );
-            if !PREVIEW_MODULES {
-                assert!(preview.unavailable_reason.starts_with("Coming soon"));
-            }
-            assert_eq!(
-                full.visible.get(&id).copied().unwrap_or(false),
-                PREVIEW_MODULES
-            );
+        assert_eq!(
+            surface(SurfaceId::Plan).availability,
+            HarnessAvailability::Available
+        );
+        assert!(full.visible.get(&SurfaceId::Plan).copied().unwrap_or(false));
+        let browser = surface(SurfaceId::Browser);
+        assert_eq!(
+            browser.availability == HarnessAvailability::Available,
+            PREVIEW_MODULES
+        );
+        if !PREVIEW_MODULES {
+            assert!(browser.unavailable_reason.starts_with("Coming soon"));
         }
+        assert_eq!(
+            full.visible
+                .get(&SurfaceId::Browser)
+                .copied()
+                .unwrap_or(false),
+            PREVIEW_MODULES
+        );
         // The Page reader permission only serves the Browser module.
         let reader = snapshot
             .capabilities

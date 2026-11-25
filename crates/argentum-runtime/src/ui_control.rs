@@ -92,29 +92,39 @@ fn hex(color: argentum_domain::UiColor) -> String {
     }
 }
 
+/// The patch that takes `next` back to `previous`. It names only what
+/// changed, so undoing an older change leaves later changes in place. A preset
+/// change restores every custom color, since a preset replaces them.
 fn inverse_patch(previous: &UiPreferences, next: &UiPreferences) -> UiPatch {
+    let preset_changed = previous.preset != next.preset;
     let mut colors: BTreeMap<String, Option<String>> = previous
         .colors
         .iter()
+        .filter(|(token, value)| preset_changed || next.colors.get(*token) != Some(*value))
         .map(|(token, value)| (token.clone(), Some(value.clone())))
         .collect();
     for token in next.colors.keys() {
-        colors.entry(token.clone()).or_insert(None);
+        if !previous.colors.contains_key(token) {
+            colors.insert(token.clone(), None);
+        }
+    }
+    fn changed<T: PartialEq + Clone>(previous: &T, next: &T) -> Option<T> {
+        (previous != next).then(|| previous.clone())
     }
     UiPatch {
-        preset: (previous.preset != next.preset).then(|| previous.preset.clone()),
+        preset: preset_changed.then(|| previous.preset.clone()),
         colors,
-        font_percent: Some(previous.font_percent),
-        radius_percent: Some(previous.radius_percent),
-        density: Some(previous.density),
-        font_ui: Some(previous.font_ui.clone()),
-        font_mono: Some(previous.font_mono.clone()),
-        sidebar_width: Some(previous.sidebar_width),
-        panel_width: Some(previous.panel_width),
-        chat_width: Some(previous.chat_width),
-        panel_side: Some(previous.panel_side),
-        user_bubbles: Some(previous.user_bubbles),
-        reduced_motion: Some(previous.reduced_motion),
+        font_percent: changed(&previous.font_percent, &next.font_percent),
+        radius_percent: changed(&previous.radius_percent, &next.radius_percent),
+        density: changed(&previous.density, &next.density),
+        font_ui: changed(&previous.font_ui, &next.font_ui),
+        font_mono: changed(&previous.font_mono, &next.font_mono),
+        sidebar_width: changed(&previous.sidebar_width, &next.sidebar_width),
+        panel_width: changed(&previous.panel_width, &next.panel_width),
+        chat_width: changed(&previous.chat_width, &next.chat_width),
+        panel_side: changed(&previous.panel_side, &next.panel_side),
+        user_bubbles: changed(&previous.user_bubbles, &next.user_bubbles),
+        reduced_motion: changed(&previous.reduced_motion, &next.reduced_motion),
         ..UiPatch::default()
     }
 }
@@ -412,5 +422,29 @@ impl RuntimeService {
         let page = argentum_browser::fetch(&url).await;
         self.publish_transient(AppEvent::BrowserPageLoaded(page));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod inverse_tests {
+    use super::*;
+
+    #[test]
+    fn an_undo_names_only_what_changed() {
+        let previous = UiPreferences::default();
+        let mut next = previous.clone();
+        next.font_percent = previous.font_percent + 10;
+        let undo = inverse_patch(&previous, &next);
+        assert_eq!(undo.font_percent, Some(previous.font_percent));
+        assert_eq!(undo.radius_percent, None);
+        assert_eq!(undo.density, None);
+        assert!(undo.colors.is_empty());
+        assert_eq!(undo.preset, None);
+        // Undoing it after a later change keeps the later change.
+        let mut later = next.clone();
+        later.radius_percent = previous.radius_percent + 20;
+        let restored = later.with_patch(&undo).unwrap();
+        assert_eq!(restored.font_percent, previous.font_percent);
+        assert_eq!(restored.radius_percent, later.radius_percent);
     }
 }

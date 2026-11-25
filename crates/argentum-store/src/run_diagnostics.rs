@@ -79,6 +79,52 @@ pub struct RunOutcomeDiagnostics {
     pub task_accepted: DiagnosticValue<bool>,
     pub goal_completed: DiagnosticValue<bool>,
     pub run_error_recorded: bool,
+    /// Why the run stopped: completed, waiting_for_approval,
+    /// waiting_for_answer, cancelled, interrupted or failed.
+    #[serde(default = "not_recorded")]
+    pub stop: DiagnosticValue<String>,
+    /// The model the provider reported for its last answer in this run.
+    #[serde(default = "not_recorded")]
+    pub answered_by: DiagnosticValue<String>,
+    /// Tokens the context compactions of this run reported using.
+    #[serde(default = "not_recorded")]
+    pub compaction_tokens: DiagnosticValue<u64>,
+}
+
+fn not_recorded<T>() -> DiagnosticValue<T> {
+    DiagnosticValue::unavailable("not_recorded_by_this_version")
+}
+
+/// A model id as the provider reported it, when it is safe to show: short,
+/// one line, and made of the characters model ids use.
+fn safe_model_id(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()
+        && value.len() <= 128
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ':' | '/' | '@')))
+    .then(|| value.to_owned())
+}
+
+/// Why a run stopped, from its last state and what was left open.
+fn stop_reason(
+    lifecycle: Option<TaskLifecycle>,
+    approval_pending: bool,
+    question_asked: bool,
+) -> DiagnosticValue<String> {
+    let value = match lifecycle {
+        Some(TaskLifecycle::WaitingForApproval) => "waiting_for_approval",
+        Some(TaskLifecycle::Complete) if question_asked => "waiting_for_answer",
+        Some(TaskLifecycle::Complete) => "completed",
+        Some(TaskLifecycle::Cancelled) => "cancelled",
+        Some(TaskLifecycle::Interrupted) => "interrupted",
+        Some(TaskLifecycle::Failed) if approval_pending => "waiting_for_approval",
+        Some(TaskLifecycle::Failed) => "failed",
+        Some(_) if approval_pending => "waiting_for_approval",
+        _ => return DiagnosticValue::unavailable("run_has_not_stopped"),
+    };
+    DiagnosticValue::observed(value.into())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -536,6 +582,9 @@ impl Store {
         let mut approvals: BTreeMap<Uuid, ApprovalDiagnostics> = BTreeMap::new();
         let mut context = Vec::new();
         let mut compaction = Vec::new();
+        let mut answered_by: Option<String> = None;
+        let mut compaction_tokens: u64 = 0;
+        let mut question_asked = false;
         let mut steering = Vec::new();
 
         for (sequence, created_at, event_type, payload_bytes, payload) in raw_rows {
@@ -634,27 +683,43 @@ impl Store {
                         item.stop_reason = Some(value);
                     }
                 }
-                AppEvent::ModelUsageUpdated {
+                AppEvent::QuestionAsked { run_id: stored, .. } if stored == run_id => {
+                    question_asked = true;
+                }
+                AppEvent::CompactionUsageRecorded {
                     run_id: stored,
                     usage: value,
                     ..
-                } if stored == run_id => usage.push(UsageDiagnostics {
-                    sequence: sequence as u64,
-                    input_tokens: value.input_tokens,
-                    output_tokens: value.output_tokens,
-                    total_tokens: value.total_tokens,
-                    reasoning_tokens: value
-                        .reasoning_tokens
-                        .map(DiagnosticValue::observed)
-                        .unwrap_or_else(|| {
-                            DiagnosticValue::unavailable("provider_component_not_reported")
-                        }),
-                    cached_input_tokens: value
-                        .cached_input_tokens
-                        .map(DiagnosticValue::observed)
-                        .unwrap_or_else(|| {
-                            DiagnosticValue::unavailable("provider_component_not_reported")
-                        }),
+                } if stored == run_id => {
+                    compaction_tokens = compaction_tokens.saturating_add(value.total_tokens);
+                }
+                AppEvent::ModelUsageUpdated {
+                    run_id: stored,
+                    usage: value,
+                    model,
+                    ..
+                } if stored == run_id => usage.push({
+                    if let Some(model) = safe_model_id(&model) {
+                        answered_by = Some(model);
+                    }
+                    UsageDiagnostics {
+                        sequence: sequence as u64,
+                        input_tokens: value.input_tokens,
+                        output_tokens: value.output_tokens,
+                        total_tokens: value.total_tokens,
+                        reasoning_tokens: value
+                            .reasoning_tokens
+                            .map(DiagnosticValue::observed)
+                            .unwrap_or_else(|| {
+                                DiagnosticValue::unavailable("provider_component_not_reported")
+                            }),
+                        cached_input_tokens: value
+                            .cached_input_tokens
+                            .map(DiagnosticValue::observed)
+                            .unwrap_or_else(|| {
+                                DiagnosticValue::unavailable("provider_component_not_reported")
+                            }),
+                    }
                 }),
                 AppEvent::GoalRequestAccounting {
                     run_id: stored,
@@ -1099,6 +1164,17 @@ impl Store {
                     "goal_completion_is_not_a_run_outcome",
                 ),
                 run_error_recorded,
+                stop: stop_reason(
+                    lifecycle,
+                    approvals
+                        .values()
+                        .any(|approval| approval.outcome.value.as_deref() == Some("pending")),
+                    question_asked,
+                ),
+                answered_by: answered_by
+                    .map(DiagnosticValue::observed)
+                    .unwrap_or_else(|| DiagnosticValue::unavailable("no_model_reported")),
+                compaction_tokens: DiagnosticValue::derived(compaction_tokens, events_complete),
             },
             provider,
             model_requests: ModelRequestDiagnostics {
@@ -1186,10 +1262,13 @@ fn diagnostic_text(item: &DiagnosticValue<String>) -> &str {
 
 pub fn format_run_diagnostics_human(report: &RunDiagnosticsReport) -> String {
     let mut text = format!(
-        "Run diagnostics snapshot\nRun: {}\nStored outcome: {} ({:?})\nTask accepted: {}\nGoal completion: unavailable; run outcome is kept separate.\nProvider: {} | mode: {}\nLogical model rounds: {} | physical attempts: {} | retries: {} | planned wait: {} ms\nElapsed: {} ms\nUsage records: {} | accounting records: {}\nTools: {} | approvals: {}\nChanges: {} | change operations: {} | verification receipts: {}\nContext accounting records: {} | compaction records: {} | steering records: {}\nCoverage: {} | decoded events: {} | omitted: {} | invalid: {}\nMetadata only: prompt, answer, reasoning, bodies, paths, labels, URLs, credentials, and raw errors are excluded.",
+        "Run diagnostics snapshot\nRun: {}\nStored outcome: {} ({:?})\nStopped: {}\nAnswered by: {}\nCompaction tokens: {}\nTask accepted: {}\nGoal completion: unavailable; run outcome is kept separate.\nProvider: {} | mode: {}\nLogical model rounds: {} | physical attempts: {} | retries: {} | planned wait: {} ms\nElapsed: {} ms\nUsage records: {} | accounting records: {}\nTools: {} | approvals: {}\nChanges: {} | change operations: {} | verification receipts: {}\nContext accounting records: {} | compaction records: {} | steering records: {}\nCoverage: {} | decoded events: {} | omitted: {} | invalid: {}\nMetadata only: prompt, answer, reasoning, bodies, paths, labels, URLs, credentials, and raw errors are excluded.",
         report.run_id,
         diagnostic_text(&report.outcome.stored_state),
         report.outcome.stored_state.quality,
+        diagnostic_text(&report.outcome.stop),
+        diagnostic_text(&report.outcome.answered_by),
+        report.outcome.compaction_tokens.value.map_or_else(|| "unavailable".into(), |v| v.to_string()),
         report.outcome.task_accepted.value.map_or("unavailable", |v| if v { "yes" } else { "no" }),
         diagnostic_text(&report.provider.backend_class),
         diagnostic_text(&report.provider.mode),
@@ -1253,6 +1332,50 @@ mod tests {
         context_budget::RequestAccounting, ApprovalRequest, FileChangeKind, FileChangeOrigin,
         FileSnapshotRef, ModelUsage, SteeringLifecycle, SteeringStatus, Task, ToolTrace,
     };
+
+    #[test]
+    fn a_run_says_why_it_stopped() {
+        let stop = |lifecycle, approval, question| stop_reason(lifecycle, approval, question).value;
+        assert_eq!(
+            stop(Some(TaskLifecycle::Complete), false, false).as_deref(),
+            Some("completed")
+        );
+        assert_eq!(
+            stop(Some(TaskLifecycle::Complete), false, true).as_deref(),
+            Some("waiting_for_answer")
+        );
+        assert_eq!(
+            stop(Some(TaskLifecycle::WaitingForApproval), true, false).as_deref(),
+            Some("waiting_for_approval")
+        );
+        // A run with nobody to approve ends failed, but it stopped for an approval.
+        assert_eq!(
+            stop(Some(TaskLifecycle::Failed), true, false).as_deref(),
+            Some("waiting_for_approval")
+        );
+        assert_eq!(
+            stop(Some(TaskLifecycle::Failed), false, false).as_deref(),
+            Some("failed")
+        );
+        assert_eq!(stop(Some(TaskLifecycle::Running), false, false), None);
+        assert_eq!(stop(None, false, false), None);
+    }
+
+    #[test]
+    fn only_plain_model_ids_are_kept() {
+        assert_eq!(
+            safe_model_id(" deepseek-v4-flash ").as_deref(),
+            Some("deepseek-v4-flash")
+        );
+        assert_eq!(
+            safe_model_id("openai/gpt-5.1:free").as_deref(),
+            Some("openai/gpt-5.1:free")
+        );
+        assert_eq!(safe_model_id("model with spaces"), None);
+        assert_eq!(safe_model_id("https://example.test/?key=x"), None);
+        assert_eq!(safe_model_id(""), None);
+        assert_eq!(safe_model_id(&"m".repeat(129)), None);
+    }
 
     fn scope(store: &Store) -> (tempfile::TempDir, WorkspaceResolution, EventScope) {
         let root = tempfile::tempdir().unwrap();

@@ -855,7 +855,11 @@ pub struct ProviderUsageRow {
     pub turns: u64,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// Every token reported for this profile, compaction included.
     pub total_tokens: u64,
+    /// The part of `total_tokens` that context compaction used.
+    #[serde(default)]
+    pub compaction_tokens: u64,
 }
 
 /// Reported tokens for one UTC day and model in this workspace.

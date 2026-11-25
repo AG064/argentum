@@ -231,10 +231,21 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
                     );
                 },
             );
+            // Back closes what is on top first: a menu, a sheet, Settings,
+            // the drawer or a panel over the chat. It leaves the app only
+            // when nothing is open. The decision is made on the UI thread, so
+            // it always matches what is on screen.
+            let back_window = ui.weak_window();
             *configure_registration.borrow_mut() =
-                Some(register_close_action(activity_generation, || {
-                    slint::invoke_from_event_loop(|| {
-                        let _ = slint::quit_event_loop();
+                Some(register_close_action(activity_generation, move || {
+                    let back_window = back_window.clone();
+                    slint::invoke_from_event_loop(move || {
+                        let closed_a_layer = back_window
+                            .upgrade()
+                            .is_some_and(|window| window.invoke_go_back());
+                        if !closed_a_layer {
+                            let _ = slint::quit_event_loop();
+                        }
                     })
                     .is_ok()
                 }));

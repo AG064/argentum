@@ -100,6 +100,15 @@ struct DeferredCommands {
     after_profile: Vec<(String, AppCommand)>,
 }
 
+/// Sends a command from the projection, such as loading what a newly shown
+/// session needs. Nothing is sent before the commands are connected.
+fn dispatch_now(command: AppCommand) {
+    let dispatch = DEFERRED.with(|deferred| deferred.borrow().dispatch.clone());
+    if let Some(dispatch) = dispatch {
+        dispatch(command);
+    }
+}
+
 pub(crate) fn defer_until_profile_saved(profile_id: String, command: AppCommand) {
     DEFERRED.with(|deferred| {
         deferred
@@ -157,6 +166,33 @@ struct ProjectionState {
     touch_layout_seen: bool,
     /// A redraw of the streaming reply is already scheduled.
     live_redraw_pending: bool,
+    /// What each session is doing, for the session list.
+    session_activity: HashMap<SessionId, SessionActivity>,
+    /// The last search result from the store, shown while a search is typed.
+    listed_sessions: Option<argentum_domain::SessionListSnapshot>,
+}
+
+/// The session list's view of one session: whether a run is working or
+/// waiting for the owner, whether a finished run has not been seen, and the
+/// files its runs changed since the list was last loaded.
+#[derive(Debug, Default, Clone)]
+struct SessionActivity {
+    lifecycle: Option<TaskLifecycle>,
+    question_pending: bool,
+    unread: bool,
+    changed_paths: std::collections::BTreeSet<String>,
+}
+
+impl SessionActivity {
+    fn status(&self, active: bool) -> &'static str {
+        match self.lifecycle {
+            Some(TaskLifecycle::WaitingForApproval) => "waiting",
+            _ if self.question_pending => "waiting",
+            Some(lifecycle) if is_active_lifecycle(lifecycle) => "working",
+            _ if self.unread && !active => "unread",
+            _ => "",
+        }
+    }
 }
 
 /// How often a streaming reply is redrawn at most. Chunks in between only
@@ -246,17 +282,62 @@ impl UiHandle {
         session_id.is_none() || session_id == self.active_session_id()
     }
 
+    /// Follows runs in every session, not only the open one, so the session
+    /// list can show which are working, waiting or unread.
+    fn track_session_activity(&self, event: &AppEvent) {
+        let changed = match event {
+            AppEvent::RunStatusChanged { run_id, lifecycle } => {
+                let Some(session_id) = self.session_for_run(*run_id) else {
+                    return;
+                };
+                let seen = self.active_session_id() == Some(session_id);
+                let mut projection = self.projection();
+                let activity = projection.session_activity.entry(session_id).or_default();
+                activity.lifecycle = Some(*lifecycle);
+                if lifecycle.is_terminal() && !seen {
+                    activity.unread = true;
+                }
+                true
+            }
+            AppEvent::QuestionAsked { run_id, .. } => {
+                let Some(session_id) = self.session_for_run(*run_id) else {
+                    return;
+                };
+                self.projection()
+                    .session_activity
+                    .entry(session_id)
+                    .or_default()
+                    .question_pending = true;
+                true
+            }
+            AppEvent::TaskAccepted(task) => self
+                .projection()
+                .session_activity
+                .get_mut(&task.session_id)
+                .is_some_and(|activity| std::mem::take(&mut activity.question_pending)),
+            AppEvent::FileChangeRecorded(record) => self
+                .projection()
+                .session_activity
+                .entry(record.session_id)
+                .or_default()
+                .changed_paths
+                .insert(record.relative_path.clone()),
+            _ => false,
+        };
+        if changed {
+            self.refresh_session_items();
+        }
+    }
+
     pub fn apply_event(&self, event: &AppEvent) {
+        self.track_session_activity(event);
         match event {
             AppEvent::ContextCompactionProgress {
                 session_id, phase, ..
             } => {
                 if self.active_session_id() == Some(*session_id) {
-                    self.push_activity(
-                        "Context compaction",
-                        format!("Selected-model work may consume usage: {phase}"),
-                        "active",
-                    );
+                    let (title, detail) = compaction_progress_text(phase);
+                    self.push_activity(title, detail, "active");
                 }
             }
             AppEvent::ContextCompactionCompleted {
@@ -416,6 +497,9 @@ impl UiHandle {
                 if self.active_session_id() != Some(snapshot.session_id) {
                     return;
                 }
+                dispatch_now(AppCommand::LoadSessionChanges {
+                    session_id: snapshot.session_id,
+                });
                 {
                     // Steps seen live are richer, so keep them. Runs from before
                     // this launch get their steps back from the stored calls.
@@ -503,14 +587,10 @@ impl UiHandle {
                 self.window.set_current_run_model(SharedString::default());
                 self.reset_usage_projection();
                 // The live numbers end with the run, so the meter shows the
-                // latest stored reply's usage instead of "not reported".
-                if let Some(usage) = snapshot
-                    .messages
-                    .iter()
-                    .rev()
-                    .find(|message| message.role == ConversationRole::Assistant)
-                    .and_then(|message| message.usage.as_ref())
-                {
+                // latest stored usage instead of "not reported". A reply that
+                // was interrupted may have none, so the newest one that does
+                // is used, which also holds after the app restarts.
+                if let Some(usage) = latest_reported_usage(&snapshot.messages) {
                     self.window.set_usage_reported(true);
                     self.window
                         .set_usage_input_tokens(saturating_i32_u64(usage.input_tokens));
@@ -518,7 +598,7 @@ impl UiHandle {
                         .set_usage_output_tokens(saturating_i32_u64(usage.output_tokens));
                     self.window
                         .set_usage_total_tokens(saturating_i32_u64(usage.total_tokens));
-                    self.set_usage_labels(usage);
+                    self.set_usage_labels(&usage);
                     self.window
                         .set_context_window_reported(usage.context_window_tokens.is_some());
                     self.window.set_context_window_tokens(
@@ -758,6 +838,7 @@ impl UiHandle {
                     return;
                 }
                 self.window.set_submission_pending(false);
+                clear_question(&self.window.global::<App>());
                 self.window.set_user_prompt(task.prompt.clone().into());
                 self.window.set_draft(SharedString::default());
                 self.window.set_transcript(SharedString::default());
@@ -775,9 +856,27 @@ impl UiHandle {
                 self.window.set_running(is_active_lifecycle(task.lifecycle));
                 self.window.set_plan_summary("No stages yet".into());
                 self.window.set_plan_steps(empty_plan_model());
-                self.reset_change_and_verification_state();
+                self.reset_verification_state();
                 self.close_approval();
                 self.push_activity("Task submitted", task.prompt.clone(), "active");
+            }
+            AppEvent::QuestionAsked {
+                run_id,
+                question,
+                choices,
+            } => {
+                if !self.run_targets_active_session(*run_id) {
+                    return;
+                }
+                let app = self.window.global::<App>();
+                app.set_question_text(question.clone().into());
+                app.set_question_choices(ModelRc::new(VecModel::from(
+                    choices
+                        .iter()
+                        .map(|choice| SharedString::from(choice.as_str()))
+                        .collect::<Vec<_>>(),
+                )));
+                self.push_activity("Question for you", question.clone(), "attention");
             }
             AppEvent::PlanUpdated { run_id, steps } => {
                 if !self.run_targets_active_session(*run_id) {
@@ -1556,6 +1655,64 @@ impl UiHandle {
                 self.apply_live_activity(&current);
                 self.append_file_change(record);
             }
+            AppEvent::WorkspaceDirectoryLoaded {
+                path,
+                entries,
+                truncated,
+            } => {
+                let app = self.window.global::<App>();
+                app.set_files_loading(false);
+                app.set_files_error(SharedString::default());
+                app.set_files_path(path.clone().into());
+                app.set_files_truncated(*truncated);
+                app.set_files_entries(ModelRc::new(VecModel::from(
+                    entries.iter().map(workspace_entry_view).collect::<Vec<_>>(),
+                )));
+            }
+            AppEvent::WorkspaceFilePreviewLoaded { path, text, reason } => {
+                let app = self.window.global::<App>();
+                if app.get_files_preview_path().as_str() != path {
+                    return;
+                }
+                let (shown, reason) = file_preview_text(text.as_deref(), reason);
+                app.set_files_preview_text(shown.into());
+                app.set_files_preview_reason(reason.into());
+            }
+            AppEvent::SessionChangesLoaded {
+                session_id,
+                files,
+                truncated,
+            } => {
+                let paths = session_change_rows(files);
+                if let Some(workspace) = self.projection().workspace.as_mut() {
+                    if let Some(session) =
+                        workspace.sessions.iter_mut().find(|s| s.id == *session_id)
+                    {
+                        session.files_changed = u32::try_from(paths.len()).unwrap_or(u32::MAX);
+                    }
+                }
+                self.refresh_session_items();
+                if self.active_session_id() != Some(*session_id) {
+                    return;
+                }
+                let additions = files
+                    .iter()
+                    .fold(0_u32, |total, file| total.saturating_add(file.additions));
+                let removals = files
+                    .iter()
+                    .fold(0_u32, |total, file| total.saturating_add(file.removals));
+                let count = u32::try_from(paths.len()).unwrap_or(u32::MAX);
+                self.window
+                    .set_change_files(ModelRc::new(VecModel::from(paths)));
+                self.window.set_changed_files(saturating_i32(count));
+                self.window.set_additions(saturating_i32(additions));
+                self.window.set_removals(saturating_i32(removals));
+                let mut summary = change_summary(count, additions, removals);
+                if *truncated {
+                    summary.push_str(", older changes not shown");
+                }
+                self.window.set_change_summary(summary.into());
+            }
             AppEvent::ChangeSetSnapshotLoaded(snapshot) => {
                 if self.active_session_id() != Some(snapshot.session_id) {
                     return;
@@ -1838,31 +1995,23 @@ impl UiHandle {
                 self.refresh_session_items();
             }
             AppEvent::SessionListLoaded(snapshot) => {
-                let rows = snapshot
-                    .rows
-                    .iter()
-                    .map(|row| {
-                        let detail = if row.selected {
-                            "Current".to_owned()
-                        } else if row.pinned {
-                            "Pinned session".to_owned()
-                        } else if row.archived {
-                            "Archived session".to_owned()
-                        } else {
-                            "Saved session".to_owned()
-                        };
-                        SessionItemView {
-                            id: row.id.to_string().into(),
-                            title: row.title.clone().into(),
-                            detail: detail.into(),
-                            active: row.selected,
-                            pinned: row.pinned,
-                            archived: row.archived,
+                // An empty search goes back to the workspace's own list, which
+                // follows renames, pins and new sessions as they happen.
+                self.projection().listed_sessions =
+                    (!snapshot.query.trim().is_empty()).then(|| snapshot.clone());
+                if snapshot.query.trim().is_empty() {
+                    let mut projection = self.projection();
+                    if let Some(workspace) = projection.workspace.as_mut() {
+                        for row in &snapshot.rows {
+                            if let Some(session) =
+                                workspace.sessions.iter_mut().find(|s| s.id == row.id)
+                            {
+                                session.files_changed = row.files_changed;
+                            }
                         }
-                    })
-                    .collect::<Vec<_>>();
-                self.window
-                    .set_session_items(ModelRc::new(VecModel::from(rows)));
+                    }
+                }
+                self.refresh_session_items();
             }
             AppEvent::PlatformAuthorityChanged(_)
             | AppEvent::AnswerContractAccepted { .. }
@@ -1870,7 +2019,8 @@ impl UiHandle {
             | AppEvent::ExecutionAuditRecorded(_)
             | AppEvent::ExecutionAuditSnapshot { .. }
             | AppEvent::VerificationEvidenceRecorded(_)
-            | AppEvent::OnboardingSnapshotLoaded(_) => {}
+            | AppEvent::OnboardingSnapshotLoaded(_)
+            | AppEvent::CompactionUsageRecorded { .. } => {}
             AppEvent::UiPreferencesLoaded {
                 preferences,
                 source,
@@ -2070,6 +2220,23 @@ impl UiHandle {
             AppCommand::LoadChangeSet { .. } => {
                 self.window
                     .set_change_summary(present_error(message).into());
+            }
+            AppCommand::ListWorkspaceDirectory { .. } => {
+                let app = self.window.global::<App>();
+                app.set_files_loading(false);
+                app.set_files_error(present_error(message).into());
+            }
+            AppCommand::PreviewWorkspaceFile { path }
+                if self
+                    .window
+                    .global::<App>()
+                    .get_files_preview_path()
+                    .as_str()
+                    == path =>
+            {
+                self.window
+                    .global::<App>()
+                    .set_files_preview_reason(present_error(message).into());
             }
             AppCommand::LoadUnifiedDiff { file_change_id }
                 if self.window.get_selected_file_change_id().as_str()
@@ -2687,13 +2854,23 @@ impl UiHandle {
     }
 
     fn refresh_session_items(&self) {
-        let projection = self.projection();
+        let mut projection = self.projection();
+        let active = self.active_session_id();
+        if let Some(activity) = active.and_then(|id| projection.session_activity.get_mut(&id)) {
+            activity.unread = false;
+        }
         let Some(snapshot) = projection.workspace.as_ref() else {
             return;
         };
+        if let Some(listed) = projection.listed_sessions.as_ref() {
+            let model = listed_session_model(listed, &projection.session_activity);
+            drop(projection);
+            self.window.set_session_items(model);
+            return;
+        }
         let query = self.window.get_session_query().to_string();
         let filter = session_filter_from_id(self.window.get_session_filter().as_str());
-        let model = session_item_model(snapshot, &query, filter);
+        let model = session_item_model(snapshot, &query, filter, &projection.session_activity);
         drop(projection);
         self.window.set_session_items(model);
     }
@@ -2731,6 +2908,7 @@ impl UiHandle {
     fn reset_session_view(&self) {
         // Queued follow-ups belong to the session they were typed in.
         let app = self.window.global::<App>();
+        clear_question(&app);
         if let Some(queue) = app
             .get_queued_prompts()
             .as_any()
@@ -3074,6 +3252,12 @@ impl UiHandle {
         self.window.set_additions(0);
         self.window.set_removals(0);
         self.window.set_change_summary("No files changed".into());
+        self.reset_verification_state();
+    }
+
+    /// A new run starts with fresh checks, but the Changes panel keeps every
+    /// file the session changed in earlier runs.
+    fn reset_verification_state(&self) {
         self.window.set_verification_state("pending".into());
         self.window
             .set_verification_summary("No automated checks were run".into());
@@ -3226,34 +3410,24 @@ impl UiHandle {
         app.set_live_changes(message_change_model(activity));
     }
 
+    /// Adds a change to the session's list. A file changed again moves to the
+    /// end with its newest change, so its diff and restore act on that one.
     fn append_file_change(&self, record: &FileChangeRecord) {
-        let same_run = self.window.get_active_run_id().as_str() == record.run_id.to_string();
         let current = self.window.get_change_files();
-        let mut rows = if same_run {
-            (0..current.row_count())
-                .filter_map(|row| current.row_data(row))
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
+        let mut rows = (0..current.row_count())
+            .filter_map(|row| current.row_data(row))
+            .collect::<Vec<_>>();
         let already_present = rows
             .iter()
             .any(|row| row.id.as_str() == record.id.to_string());
         if !already_present {
+            rows.retain(|row| row.path.as_str() != record.relative_path);
             rows.push(file_change_view(record, false));
         }
-        let additions = if same_run {
-            self.window.get_additions().max(0) as u32
-        } else {
-            0
-        }
-        .saturating_add(if already_present { 0 } else { record.additions });
-        let removals = if same_run {
-            self.window.get_removals().max(0) as u32
-        } else {
-            0
-        }
-        .saturating_add(if already_present { 0 } else { record.removals });
+        let additions = (self.window.get_additions().max(0) as u32)
+            .saturating_add(if already_present { 0 } else { record.additions });
+        let removals = (self.window.get_removals().max(0) as u32)
+            .saturating_add(if already_present { 0 } else { record.removals });
         self.window
             .set_active_run_id(record.run_id.to_string().into());
         self.window
@@ -3672,6 +3846,67 @@ fn file_change_model(
     ))
 }
 
+/// The most text the Files panel draws at once. Longer files show their start.
+const MAX_FILE_PREVIEW_CHARS: usize = 64 * 1024;
+
+fn workspace_entry_view(entry: &argentum_domain::WorkspaceEntry) -> WorkspaceEntryView {
+    WorkspaceEntryView {
+        path: entry.path.clone().into(),
+        name: entry.name.clone().into(),
+        directory: entry.directory,
+        detail: if entry.directory {
+            SharedString::default()
+        } else {
+            byte_size_label(entry.size_bytes).into()
+        },
+    }
+}
+
+/// "812 B", "4.2 KB", "1.3 MB".
+fn byte_size_label(bytes: u64) -> String {
+    match bytes {
+        0..=999 => format!("{bytes} B"),
+        1_000..=999_999 => format!("{:.1} KB", bytes as f64 / 1_000.0),
+        _ => format!("{:.1} MB", bytes as f64 / 1_000_000.0),
+    }
+}
+
+/// "src/ui" -> "src", "src" -> "", "" -> "".
+fn parent_folder(path: &str) -> &str {
+    path.trim_end_matches('/')
+        .rsplit_once('/')
+        .map_or("", |(parent, _)| parent)
+}
+
+/// What the preview shows, and the note under it.
+fn file_preview_text(text: Option<&str>, reason: &str) -> (String, String) {
+    let Some(text) = text else {
+        return (String::new(), reason.to_owned());
+    };
+    if text.is_empty() {
+        return (String::new(), "This file is empty.".to_owned());
+    }
+    if text.chars().count() <= MAX_FILE_PREVIEW_CHARS {
+        return (text.to_owned(), String::new());
+    }
+    let mut shown = text
+        .chars()
+        .take(MAX_FILE_PREVIEW_CHARS)
+        .collect::<String>();
+    shown.push_str("\n\n(The rest of this file is not shown.)");
+    (shown, String::new())
+}
+
+/// One row per changed path, oldest first, each with its newest change.
+fn session_change_rows(files: &[FileChangeRecord]) -> Vec<FileChangeView> {
+    let mut rows: Vec<FileChangeView> = Vec::new();
+    for file in files {
+        rows.retain(|row| row.path.as_str() != file.relative_path);
+        rows.push(file_change_view(file, false));
+    }
+    rows
+}
+
 fn file_change_view(change: &FileChangeRecord, selected: bool) -> FileChangeView {
     let restore_available = change
         .before
@@ -4064,6 +4299,26 @@ fn turn_tokens(usage: &argentum_domain::ModelUsage) -> u64 {
     })
 }
 
+/// The usage of the newest reply that reported any, with the context window
+/// taken from the newest reply that reported one.
+fn latest_reported_usage(
+    messages: &[argentum_domain::ConversationMessage],
+) -> Option<argentum_domain::ModelUsage> {
+    let mut usage = messages
+        .iter()
+        .rev()
+        .filter(|message| message.role == ConversationRole::Assistant)
+        .find_map(|message| message.usage.clone())?;
+    if usage.context_window_tokens.is_none() {
+        usage.context_window_tokens = messages
+            .iter()
+            .rev()
+            .filter_map(|message| message.usage.as_ref())
+            .find_map(|usage| usage.context_window_tokens);
+    }
+    Some(usage)
+}
+
 fn session_tokens_used(messages: &[argentum_domain::ConversationMessage]) -> u64 {
     messages
         .iter()
@@ -4077,24 +4332,27 @@ fn reply_meta(
     received: time::OffsetDateTime,
     usage: Option<&argentum_domain::ModelUsage>,
 ) -> String {
-    use chrono::TimeZone;
-    let time = chrono::Local
-        .timestamp_opt(received.unix_timestamp(), 0)
-        .single()
-        .map(|local| {
-            if local.date_naive() == chrono::Local::now().date_naive() {
-                local.format("%H:%M").to_string()
-            } else {
-                local.format("%b %-d, %H:%M").to_string()
-            }
-        })
-        .unwrap_or_default();
+    let time = local_reply_time(received.unix_timestamp(), jiff::Timestamp::now());
     match usage {
         Some(usage) => format!(
             "{time} \u{b7} {} tokens",
             workbench::compact_count(turn_tokens(usage))
         ),
         None => time,
+    }
+}
+
+/// The local clock time of a reply, with the date when it was not today.
+fn local_reply_time(unix_seconds: i64, now: jiff::Timestamp) -> String {
+    let zone = jiff::tz::TimeZone::system();
+    let Ok(received) = jiff::Timestamp::from_second(unix_seconds) else {
+        return String::new();
+    };
+    let local = received.to_zoned_datetime(zone.clone());
+    if local.date() == now.to_zoned_datetime(zone).date() {
+        local.strftime("%H:%M").to_string()
+    } else {
+        local.strftime("%b %-d, %H:%M").to_string()
     }
 }
 
@@ -4127,10 +4385,33 @@ fn without_reasoning_markers(text: &str) -> String {
     text.replace("<think>", "").replace("</think>", "")
 }
 
+/// The activity line for a compaction step. Shortening old tool output
+/// needs no model call, so it is not reported as model work.
+fn compaction_progress_text(phase: &str) -> (&'static str, String) {
+    match phase.strip_prefix("old_tool_output_shortened:") {
+        Some(count) => (
+            "Old tool output shortened",
+            format!(
+                "{count} earlier tool results were cut to their first lines, with no model call."
+            ),
+        ),
+        None => (
+            "Context compaction",
+            format!("Selected-model work may consume usage: {phase}"),
+        ),
+    }
+}
+
+fn clear_question(app: &App<'_>) {
+    app.set_question_text(SharedString::default());
+    app.set_question_choices(ModelRc::default());
+}
+
 fn session_item_model(
     snapshot: &argentum_domain::WorkspaceSnapshot,
     query: &str,
     filter: SessionArchiveFilter,
+    activity: &HashMap<SessionId, SessionActivity>,
 ) -> ModelRc<SessionItemView> {
     let query = query.trim().to_lowercase();
     let mut sessions = snapshot
@@ -4162,17 +4443,79 @@ fn session_item_model(
             } else {
                 "Saved session".to_owned()
             };
-            SessionItemView {
-                id: session.id.to_string().into(),
-                title: session.title.clone().into(),
-                detail: detail.into(),
+            session_row_view(
+                session.id,
+                &session.title,
+                detail,
                 active,
-                pinned: session.pinned,
-                archived: session.archived,
-            }
+                session.pinned,
+                session.archived,
+                session.files_changed,
+                activity.get(&session.id),
+            )
         })
         .collect::<Vec<_>>();
     ModelRc::new(VecModel::from(rows))
+}
+
+/// Rows of a search: sessions whose title or messages matched. A message
+/// match shows the matching words under the title.
+fn listed_session_model(
+    listed: &argentum_domain::SessionListSnapshot,
+    activity: &HashMap<SessionId, SessionActivity>,
+) -> ModelRc<SessionItemView> {
+    let rows = listed
+        .rows
+        .iter()
+        .map(|row| {
+            let detail = match row.matched_text.as_deref() {
+                Some(text) => text.to_owned(),
+                None if row.selected => "Current".to_owned(),
+                None if row.archived => "Archived session".to_owned(),
+                None => "Title matches".to_owned(),
+            };
+            session_row_view(
+                row.id,
+                &row.title,
+                detail,
+                row.selected,
+                row.pinned,
+                row.archived,
+                row.files_changed,
+                activity.get(&row.id),
+            )
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn session_row_view(
+    id: SessionId,
+    title: &str,
+    detail: String,
+    active: bool,
+    pinned: bool,
+    archived: bool,
+    files_changed: u32,
+    activity: Option<&SessionActivity>,
+) -> SessionItemView {
+    // Files changed in a run that finished after the list loaded count too.
+    let files_changed = activity
+        .map_or(0, |activity| activity.changed_paths.len())
+        .max(files_changed as usize);
+    SessionItemView {
+        id: id.to_string().into(),
+        title: title.into(),
+        detail: detail.into(),
+        active,
+        pinned,
+        archived,
+        status: activity
+            .map_or("", |activity| activity.status(active))
+            .into(),
+        files_changed: saturating_i32_u64(files_changed as u64),
+    }
 }
 
 fn session_filter_from_id(value: &str) -> SessionArchiveFilter {
@@ -5304,6 +5647,47 @@ where
     F: Fn(AppCommand) + 'static,
 {
     let dispatch = Rc::new(dispatch);
+    window
+        .global::<App>()
+        .set_execution_environment(argentum_domain::environment::execution_environment().into());
+    {
+        let files_dispatch = dispatch.clone();
+        let files_window = window.as_weak();
+        window.global::<App>().on_files_open_dir(move |path| {
+            if let Some(window) = files_window.upgrade() {
+                let app = window.global::<App>();
+                app.set_files_loading(true);
+                app.set_files_error(SharedString::default());
+            }
+            files_dispatch(AppCommand::ListWorkspaceDirectory {
+                path: path.to_string(),
+            });
+        });
+        let up_dispatch = dispatch.clone();
+        let up_window = window.as_weak();
+        window.global::<App>().on_files_up(move || {
+            let Some(window) = up_window.upgrade() else {
+                return;
+            };
+            let app = window.global::<App>();
+            let parent = parent_folder(app.get_files_path().as_str()).to_owned();
+            app.set_files_loading(true);
+            up_dispatch(AppCommand::ListWorkspaceDirectory { path: parent });
+        });
+        let preview_dispatch = dispatch.clone();
+        let preview_window = window.as_weak();
+        window.global::<App>().on_files_preview(move |path| {
+            if let Some(window) = preview_window.upgrade() {
+                let app = window.global::<App>();
+                app.set_files_preview_path(path.clone());
+                app.set_files_preview_text(SharedString::default());
+                app.set_files_preview_reason("Loading".into());
+            }
+            preview_dispatch(AppCommand::PreviewWorkspaceFile {
+                path: path.to_string(),
+            });
+        });
+    }
     {
         let deferred_dispatch: Rc<dyn Fn(AppCommand)> = dispatch.clone();
         DEFERRED.with(|deferred| deferred.borrow_mut().dispatch = Some(deferred_dispatch));
@@ -7182,6 +7566,17 @@ mod tests {
     }
 
     #[test]
+    fn an_older_reply_shows_its_date_and_a_bad_time_shows_nothing() {
+        let now = jiff::Timestamp::now();
+        let today = local_reply_time(now.as_second(), now);
+        assert_eq!(today.len(), "00:00".len(), "{today}");
+        let older = local_reply_time(now.as_second() - 3 * 86_400, now);
+        assert!(older.contains(", "), "{older}");
+        assert!(older.ends_with(&older[older.len() - 5..]));
+        assert_eq!(local_reply_time(i64::MAX, now), "");
+    }
+
+    #[test]
     fn plan_projection_marks_only_the_first_pending_step_active() {
         let model = plan_step_model(&[
             PlanStep {
@@ -7265,6 +7660,7 @@ mod tests {
                     updated_at: timestamp - time::Duration::seconds(1),
                     pinned: false,
                     archived: false,
+                    files_changed: 0,
                 },
                 SessionSummary {
                     id: newer_id,
@@ -7273,12 +7669,14 @@ mod tests {
                     updated_at: timestamp,
                     pinned: false,
                     archived: false,
+                    files_changed: 0,
                 },
             ],
             active_session_id: Some(older_id),
         };
 
-        let model = session_item_model(&snapshot, "", SessionArchiveFilter::Active);
+        let model =
+            session_item_model(&snapshot, "", SessionArchiveFilter::Active, &HashMap::new());
 
         assert_eq!(model.row_data(0).expect("newest session").title, "Newer");
         assert!(!model.row_data(0).expect("newest session").active);
@@ -7380,6 +7778,7 @@ mod tests {
             updated_at: timestamp - time::Duration::seconds(age),
             pinned,
             archived,
+            files_changed: 0,
         };
         let snapshot = WorkspaceSnapshot {
             project: Project {
@@ -7396,18 +7795,25 @@ mod tests {
             active_session_id: None,
         };
 
-        let active = session_item_model(&snapshot, "", SessionArchiveFilter::Active);
+        let active =
+            session_item_model(&snapshot, "", SessionArchiveFilter::Active, &HashMap::new());
         assert_eq!(active.row_count(), 2);
         assert_eq!(active.row_data(0).expect("pinned").title, "Pinned");
         assert!(active.row_data(0).expect("pinned").pinned);
         assert_eq!(active.row_data(1).expect("newer").title, "Newer");
 
-        let archived = session_item_model(&snapshot, "", SessionArchiveFilter::Archived);
+        let archived = session_item_model(
+            &snapshot,
+            "",
+            SessionArchiveFilter::Archived,
+            &HashMap::new(),
+        );
         assert_eq!(archived.row_count(), 1);
         assert_eq!(archived.row_data(0).expect("archived").title, "Archived");
         assert!(archived.row_data(0).expect("archived").archived);
 
-        let searched = session_item_model(&snapshot, "pin", SessionArchiveFilter::All);
+        let searched =
+            session_item_model(&snapshot, "pin", SessionArchiveFilter::All, &HashMap::new());
         assert_eq!(searched.row_count(), 1);
         assert_eq!(searched.row_data(0).expect("search").title, "Pinned");
     }
@@ -8365,9 +8771,200 @@ Second grows
     }
 
     #[test]
+    fn a_session_row_says_whether_it_is_working_waiting_or_unread() {
+        let working = SessionActivity {
+            lifecycle: Some(TaskLifecycle::Running),
+            ..SessionActivity::default()
+        };
+        assert_eq!(working.status(false), "working");
+        let approval = SessionActivity {
+            lifecycle: Some(TaskLifecycle::WaitingForApproval),
+            ..SessionActivity::default()
+        };
+        assert_eq!(approval.status(true), "waiting");
+        let question = SessionActivity {
+            lifecycle: Some(TaskLifecycle::Complete),
+            question_pending: true,
+            unread: true,
+            ..SessionActivity::default()
+        };
+        assert_eq!(question.status(false), "waiting");
+        let unread = SessionActivity {
+            lifecycle: Some(TaskLifecycle::Complete),
+            unread: true,
+            ..SessionActivity::default()
+        };
+        assert_eq!(unread.status(false), "unread");
+        // The open session is never unread.
+        assert_eq!(unread.status(true), "");
+
+        // Files changed after the list loaded count, but a path is counted once.
+        let mut live = SessionActivity::default();
+        live.changed_paths.insert("a.rs".into());
+        live.changed_paths.insert("b.rs".into());
+        let id = SessionId::new_v4();
+        let row = session_row_view(id, "Long", "".into(), false, false, false, 1, Some(&live));
+        assert_eq!(row.files_changed, 2);
+        let row = session_row_view(id, "Long", "".into(), false, false, false, 5, Some(&live));
+        assert_eq!(row.files_changed, 5);
+        assert_eq!(row.status, "");
+    }
+
+    #[test]
+    fn shortening_old_output_is_not_reported_as_model_work() {
+        let (title, detail) = compaction_progress_text("old_tool_output_shortened:3");
+        assert_eq!(title, "Old tool output shortened");
+        assert!(detail.starts_with("3 earlier") && detail.contains("no model call"));
+        let (title, detail) = compaction_progress_text("summary_started");
+        assert_eq!(title, "Context compaction");
+        assert!(detail.contains("summary_started"));
+    }
+
+    #[test]
+    fn the_files_panel_walks_up_and_bounds_what_it_draws() {
+        assert_eq!(parent_folder("src/ui"), "src");
+        assert_eq!(parent_folder("src"), "");
+        assert_eq!(parent_folder(""), "");
+        assert_eq!(byte_size_label(812), "812 B");
+        assert_eq!(byte_size_label(4_200), "4.2 KB");
+        assert_eq!(byte_size_label(1_300_000), "1.3 MB");
+        assert_eq!(
+            file_preview_text(None, "This file is not UTF-8 text."),
+            (String::new(), "This file is not UTF-8 text.".into())
+        );
+        assert_eq!(file_preview_text(Some(""), "").1, "This file is empty.");
+        let long = "x".repeat(MAX_FILE_PREVIEW_CHARS + 10);
+        let (shown, note) = file_preview_text(Some(&long), "");
+        assert!(note.is_empty());
+        assert!(shown.ends_with("(The rest of this file is not shown.)"));
+        assert!(shown.chars().count() < long.chars().count() + 50);
+    }
+
+    #[test]
+    fn the_meter_uses_the_newest_reply_that_reported_usage() {
+        let session_id = SessionId::new_v4();
+        let message = |text: &str, usage: Option<argentum_domain::ModelUsage>| {
+            argentum_domain::ConversationMessage {
+                id: RunId::new_v4(),
+                project_id: argentum_domain::ProjectId::new_v4(),
+                session_id,
+                run_id: RunId::new_v4(),
+                role: ConversationRole::Assistant,
+                text: text.into(),
+                reasoning: String::new(),
+                usage,
+                profile_id: String::new(),
+                model: String::new(),
+                status: argentum_domain::ConversationMessageStatus::Complete,
+                created_at: now(),
+            }
+        };
+        let usage = |input: u64, window: Option<u64>| argentum_domain::ModelUsage {
+            input_tokens: input,
+            output_tokens: 10,
+            total_tokens: input + 10,
+            reasoning_tokens: None,
+            cached_input_tokens: None,
+            context_window_tokens: window,
+            turn_total: None,
+        };
+        let messages = vec![
+            message("first", Some(usage(100, Some(32_000)))),
+            message("second", Some(usage(500, None))),
+            message("interrupted", None),
+        ];
+        let latest = latest_reported_usage(&messages).expect("usage");
+        assert_eq!(latest.input_tokens, 500);
+        assert_eq!(latest.context_window_tokens, Some(32_000));
+        assert!(latest_reported_usage(&messages[2..]).is_none());
+    }
+
+    fn back_closes_the_top_layer_before_it_leaves(ui: &UiHandle) {
+        let window = ui.window();
+        let app = window.global::<App>();
+        app.set_settings_open(true);
+        app.set_provider_menu_open(true);
+        assert!(window.invoke_back_layer_open());
+        assert!(window.invoke_go_back());
+        assert!(!app.get_provider_menu_open(), "the menu closes first");
+        assert!(app.get_settings_open());
+        assert!(window.invoke_go_back());
+        assert!(!app.get_settings_open());
+        app.set_approval_open(true);
+        assert!(window.invoke_go_back(), "an approval keeps Back in the app");
+        assert!(app.get_approval_open(), "and stays until it is answered");
+        app.set_approval_open(false);
+        assert!(!window.invoke_back_layer_open());
+        assert!(!window.invoke_go_back(), "nothing open: Back may leave");
+    }
+
+    fn interface_changes_can_be_undone_one_at_a_time(ui: &UiHandle) {
+        use argentum_domain::{UiChangeSource, UiPatch, UiPreferences};
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let dispatched = commands.clone();
+        connect_commands(ui.window(), move |command| {
+            dispatched.borrow_mut().push(command)
+        });
+        let app = ui.window().global::<App>();
+        app.set_ui_history(ModelRc::default());
+        let preferences = UiPreferences::default();
+        let font = |percent| UiPatch {
+            font_percent: Some(percent),
+            ..UiPatch::default()
+        };
+        // A slider drag is one entry that keeps the first undo.
+        for (summary, undo) in [("text size 105%", 100), ("text size 110%", 105)] {
+            workbench::apply_ui_change(
+                ui.window(),
+                &preferences,
+                UiChangeSource::User,
+                summary,
+                Some(&font(undo)),
+            );
+        }
+        let preset = UiPatch {
+            preset: Some("argentum".into()),
+            ..UiPatch::default()
+        };
+        workbench::apply_ui_change(
+            ui.window(),
+            &preferences,
+            UiChangeSource::Agent,
+            "preset silver",
+            Some(&preset),
+        );
+        let history = app.get_ui_history();
+        assert_eq!(history.row_count(), 2);
+        assert_eq!(history.row_data(0).unwrap().by, "The agent");
+        assert_eq!(history.row_data(1).unwrap().summary, "text size 110%");
+        commands.borrow_mut().clear();
+        app.invoke_undo_ui_change(1);
+        let sent = std::mem::take(&mut *commands.borrow_mut());
+        assert!(matches!(
+            &sent[..],
+            [AppCommand::UpdateUiPreferences { patch }] if patch.font_percent == Some(100)
+        ));
+        assert_eq!(app.get_ui_history().row_count(), 1);
+        // The change the undo makes is not a new entry.
+        workbench::apply_ui_change(
+            ui.window(),
+            &preferences,
+            UiChangeSource::User,
+            "text size 100%",
+            Some(&font(110)),
+        );
+        assert_eq!(app.get_ui_history().row_count(), 1);
+        app.invoke_undo_ui_change(7);
+        assert!(commands.borrow().is_empty());
+        app.set_ui_history(ModelRc::default());
+    }
+
+    #[test]
     fn event_callback_and_credential_projections_share_one_ui_instance() {
         let ui = UiHandle::new().expect("create UI projection");
         a_prompt_lost_by_a_failed_run_returns_to_the_composer(&ui);
+        back_closes_the_top_layer_before_it_leaves(&ui);
+        interface_changes_can_be_undone_one_at_a_time(&ui);
         model_picker_and_thinking_chip_follow_the_selected_model(&ui);
         workbench_callbacks_send_the_expected_commands(&ui);
         failed_commands_report_their_error_in_the_right_place(&ui);

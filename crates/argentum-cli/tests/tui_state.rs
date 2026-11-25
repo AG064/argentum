@@ -71,6 +71,7 @@ fn initialized_state() -> TuiState {
             updated_at: argentum_domain::now(),
             pinned: false,
             archived: false,
+            files_changed: 0,
         }],
         active_session_id: Some(id),
     }));
@@ -144,6 +145,7 @@ fn domain_events_render_session_stream_tools_and_approvals() {
             updated_at: now,
             pinned: false,
             archived: false,
+            files_changed: 0,
         }],
         active_session_id: Some(session_id),
     }));

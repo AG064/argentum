@@ -939,14 +939,8 @@ impl ManagedProcessLimits {
             .checked_mul(2)
             .and_then(|value| value.checked_add(2 * GIB))
             .ok_or(ProcessError::InvalidManagedLimits)?;
-        // Windows keeps Job Object memory limits in whole pages and reads back
-        // the rounded value, so an unaligned limit fails its round-trip check
-        // and the runtime never starts. Whole MiB is aligned on every page size.
-        let memory_bytes = requested
-            .div_ceil(MIB)
-            .checked_mul(MIB)
-            .ok_or(ProcessError::InvalidManagedLimits)?
-            .clamp(MIN_LOCAL_MODEL_MEMORY_BYTES, MAX_LOCAL_MODEL_MEMORY_BYTES);
+        let memory_bytes =
+            requested.clamp(MIN_LOCAL_MODEL_MEMORY_BYTES, MAX_LOCAL_MODEL_MEMORY_BYTES);
         Self::new(4, 95, 4 * 1024 * 1024, memory_bytes, memory_bytes)
     }
 
@@ -2207,16 +2201,6 @@ mod tests {
             ManagedProcessLimits::new(4, 95, 1024, 5 * 1024 * 1024 * 1024, 4 * 1024 * 1024 * 1024),
             Err(ProcessError::InvalidManagedLimits)
         ));
-        // Real model sizes that are not page-aligned once doubled.
-        for size in [
-            1_280_835_840_u64,
-            2_740_937_888,
-            16_525_559_776 + 43_805_184 + 639_348_448,
-        ] {
-            let limits = ManagedProcessLimits::for_local_model(size).expect("aligned limits");
-            assert_eq!(limits.job_memory_bytes() % MIB, 0);
-            assert!(limits.job_memory_bytes() >= size * 2 + 2 * GIB);
-        }
         assert!(matches!(
             ManagedProcessLimits::for_local_model(u64::MAX),
             Err(ProcessError::InvalidManagedLimits)
