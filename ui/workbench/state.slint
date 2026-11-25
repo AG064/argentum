@@ -134,6 +134,8 @@ export global App {
     callback files_open_dir(string);
     callback files_preview(string);
     callback files_up();
+    // Monthly token limit for a provider profile; "" clears it.
+    callback set_spend_limit(string, string);
     // A question the agent asked in this session, waiting for an answer.
     in-out property <string> question_text: "";
     in-out property <[string]> question_choices: [];

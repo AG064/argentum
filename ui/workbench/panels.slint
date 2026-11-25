@@ -626,6 +626,25 @@ export component UsagePanel inherits Rectangle {
                         Label { text: row.output + " out"; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
                     }
                     if row.compaction != "": Label { text: "Includes " + row.compaction; tone: "muted"; size: "xs"; }
+                    Label {
+                        text: row.spend_state == "stopped" ? row.month + ". Limit reached: new requests stop until next month or a higher limit."
+                            : row.spend_state == "warn" ? row.month + ". Close to the limit."
+                            : row.month;
+                        tone: row.spend_state == "stopped" ? "danger" : row.spend_state == "warn" ? "secondary" : "muted";
+                        size: "xs";
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.sp6;
+                        limit-field := Field {
+                            horizontal-stretch: 1;
+                            numeric: true;
+                            placeholder: "Monthly token limit";
+                            value: row.limit;
+                        }
+                        Btn { y: (parent.height - self.height) / 2; label: "Save"; small: true; clicked => { App.set_spend_limit(row.id, limit-field.value); } }
+                        if row.limit != "": Btn { y: (parent.height - self.height) / 2; label: "Clear"; small: true; kind: "ghost"; clicked => { App.set_spend_limit(row.id, ""); } }
+                    }
                 }
                 if App.usage_days.length > 0: SectionLabel { text: "BY DAY, LAST 30 DAYS (UTC)"; height: 22px; }
                 for day in App.usage_days: HorizontalLayout {

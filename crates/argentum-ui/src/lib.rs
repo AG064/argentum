@@ -5407,6 +5407,9 @@ fn present_error(message: &str) -> String {
     {
         return "Argentum could not reach the model provider. Check that it is running, then try again.".into();
     }
+    if message.starts_with("spend_limit_reached") {
+        return "This provider reached its monthly token limit, so no new request was sent. Raise or clear the limit in the Usage panel.".into();
+    }
     if message.starts_with("context_token_capacity_exceeded") {
         return "This request does not fit the model's context size. Start a new chat, compact this one, or raise the context size in Settings > Providers.".into();
     }

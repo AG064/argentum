@@ -860,6 +860,12 @@ pub struct ProviderUsageRow {
     /// The part of `total_tokens` that context compaction used.
     #[serde(default)]
     pub compaction_tokens: u64,
+    /// Tokens reported since the start of this calendar month (UTC).
+    #[serde(default)]
+    pub month_tokens: u64,
+    /// The owner's monthly token limit for this profile, if one is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monthly_limit: Option<u64>,
 }
 
 /// Reported tokens for one UTC day and model in this workspace.

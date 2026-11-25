@@ -353,6 +353,8 @@ fn usage(ui: &UiHandle) {
                 output_tokens: 96_000,
                 total_tokens: 1_336_000,
                 compaction_tokens: 0,
+                month_tokens: 41_800,
+                monthly_limit: Some(50_000),
             },
             ProviderUsageRow {
                 profile_id: "deepseek".into(),
@@ -361,6 +363,8 @@ fn usage(ui: &UiHandle) {
                 output_tokens: 18_400,
                 total_tokens: 228_400,
                 compaction_tokens: 0,
+                month_tokens: 2_100,
+                monthly_limit: None,
             },
         ],
     });

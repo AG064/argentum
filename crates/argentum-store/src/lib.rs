@@ -49,6 +49,8 @@ mod grant_lookup;
 mod history;
 pub use grant_lookup::MAX_AUTHORIZATION_GRANTS;
 mod message_search;
+mod spend_limits;
+pub use spend_limits::{month_start, SPEND_WARNING_PERCENT};
 mod review;
 mod run_diagnostics;
 mod run_outcomes;
@@ -2495,6 +2497,8 @@ impl Store {
                     output_tokens: 0,
                     total_tokens: 0,
                     compaction_tokens: 0,
+                    month_tokens: 0,
+                    monthly_limit: None,
                 });
             let total_tokens = if usage.turn_total.is_some() {
                 let consumed = usage.consumed();
@@ -2534,6 +2538,8 @@ impl Store {
                     output_tokens: 0,
                     total_tokens: 0,
                     compaction_tokens: 0,
+                    month_tokens: 0,
+                    monthly_limit: None,
                 });
             entry.input_tokens = entry
                 .input_tokens
@@ -2543,6 +2549,37 @@ impl Store {
                 .saturating_add(usage.output_tokens.unwrap_or(0));
             entry.total_tokens = entry.total_tokens.saturating_add(usage.total_tokens);
             entry.compaction_tokens = entry.compaction_tokens.saturating_add(usage.total_tokens);
+        }
+        drop(events);
+        drop(statement);
+        let mut statement = connection.prepare(
+            "SELECT profile_id, monthly_tokens FROM provider_spend_limits WHERE project_id = ?1",
+        )?;
+        let limits = statement
+            .query_map(params![project_id.to_string()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+        drop(connection);
+        for (profile_id, limit) in limits {
+            totals
+                .entry(profile_id.clone())
+                .or_insert_with(|| ProviderUsageRow {
+                    profile_id,
+                    turns: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    total_tokens: 0,
+                    compaction_tokens: 0,
+                    month_tokens: 0,
+                    monthly_limit: None,
+                })
+                .monthly_limit = u64::try_from(limit).ok();
+        }
+        let since = month_start(time::OffsetDateTime::now_utc());
+        for row in totals.values_mut() {
+            row.month_tokens = self.provider_tokens_since(project_id, &row.profile_id, since)?;
         }
         let mut rows = totals.into_values().collect::<Vec<_>>();
         rows.sort_by_key(|row| std::cmp::Reverse(row.total_tokens));
@@ -4129,6 +4166,7 @@ impl Store {
         )?;
         schema.commit()?;
         message_search::migrate(&connection)?;
+        spend_limits::migrate(&connection)?;
         // The legacy bounded-counter rebuild needs foreign keys disabled before
         // its own transaction, so it stays outside the schema transaction.
         working_context::upgrade_run_limit(&connection)?;
@@ -6333,9 +6371,9 @@ mod tests {
                 .expect("store identity");
             (tables, indexes, identity)
         };
-        // The message search index is one FTS5 table with four shadow tables, and
-        // file changes have an index by session.
-        assert_eq!((tables, indexes), (38, 30));
+        // The message search index is one FTS5 table with four shadow tables,
+        // file changes have an index by session, and spend limits a table.
+        assert_eq!((tables, indexes), (39, 30));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection
