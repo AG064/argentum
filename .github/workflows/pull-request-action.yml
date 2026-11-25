@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
+name: Pull request action
+# Tests action.yml against a local fake provider: no provider account, no
+# secrets, nothing posted (results go to the job summary only).
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [development]
+    paths:
+      - 'action.yml'
+      - 'ci/pull-request/**'
+      - 'crates/argentum-cli/**'
+      - 'crates/argentum-runtime/**'
+      - 'crates/argentum-harness/**'
+      - '.github/workflows/pull-request-action.yml'
+permissions:
+  contents: read
+concurrency:
+  group: pull-request-action-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Unit tests
+        run: python3 -m unittest ci/pull-request/test_argentum_pr.py -v
+
+  action:
+    if: github.event_name == 'pull_request'
+    name: ${{ matrix.mode }}
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [review, fix]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Start the fake provider
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/fixture"
+          mkdir -p "$fixture"
+          args=()
+          if [ '${{ matrix.mode }}' = fix ]; then
+            printf 'State: draft.\n' > ci-fixture.txt
+            args=(--edit ci-fixture.txt "$PWD/ci-fixture.txt" 'State: draft.' 'State: reviewed.')
+          fi
+          python3 ci/pull-request/fake_provider.py --port-file "$fixture/port" \
+            --log "$fixture/requests.jsonl" "${args[@]}" > "$fixture/server.log" 2>&1 &
+          for _ in $(seq 50); do [ -s "$fixture/port" ] && break; sleep 0.1; done
+          echo "FIXTURE_ENDPOINT=http://127.0.0.1:$(cat "$fixture/port")/v1/" >> "$GITHUB_ENV"
+      - name: Run the action
+        id: argentum
+        uses: ./
+        with:
+          mode: ${{ matrix.mode }}
+          provider: fixture
+          model: fixture
+          endpoint: ${{ env.FIXTURE_ENDPOINT }}
+          limits: 65536,49152,4096,2048,1024
+          post: summary
+          allow-write: ${{ matrix.mode == 'fix' }}
+      - name: Check the result
+        env:
+          RUN_STATE: ${{ steps.argentum.outputs.run-state }}
+          CHANGED: ${{ steps.argentum.outputs.changed }}
+          PATCH: ${{ steps.argentum.outputs.patch-file }}
+        run: |
+          set -euo pipefail
+          test "$RUN_STATE" = complete
+          requests="$RUNNER_TEMP/fixture/requests.jsonl"
+          python3 - "$requests" '${{ matrix.mode }}' <<'PY'
+          import json, sys
+          bodies = [json.loads(line)["body"] for line in open(sys.argv[1], encoding="utf-8")]
+          tools = {t["function"]["name"] for t in bodies[0].get("tools", [])}
+          print("Tools offered:", sorted(tools))
+          commands = {"execute_argv", "execute_shell", "git_write"}
+          writes = {"edit_text", "write_text", "apply_patch", "delete_file", "move_file",
+                    "copy_file", "create_directory"} | commands
+          if sys.argv[2] == "review":
+              assert not tools & writes, f"review offered write tools: {tools & writes}"
+              assert "Review this pull request" in json.dumps(bodies[0])
+          else:
+              assert "edit_text" in tools, "fix mode did not offer edit_text"
+              assert not commands & tools, f"verification offered commands: {commands & tools}"
+          PY
+          if [ '${{ matrix.mode }}' = fix ]; then
+            test "$CHANGED" = true
+            grep -F '+State: reviewed.' "$PATCH"
+          fi

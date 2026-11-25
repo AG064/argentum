@@ -17,6 +17,7 @@
 ## Using Argentum
 
 - [CLI guide](CLI_GUIDE.md): setup, chat, headless runs, inspection, and recovery
+- [Argentum on pull requests](CI_PULL_REQUESTS.md): the GitHub Action that reviews a pull request or fixes a failing check
 - [Interface modules](UI_MODULES.md): modules, customization, and updates
 - [Goals](GOAL_ACCOUNTING.md)
 - [Staged goal delivery](NATIVE_DELIVERY.md)

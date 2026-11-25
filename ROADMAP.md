@@ -70,6 +70,11 @@ The first stable release, for Windows x64 and Android arm64:
   job limits. Supplemental Rust checks, the local model add-on, desktop control
   and installing updates from the app stay Windows-only for now. See
   [the support matrix](docs/SUPPORT_MATRIX.md#linux-and-macos).
+- **Pull requests:** a GitHub Action (`action.yml`) that runs Argentum headless
+  on a pull request, to review it read-only or to fix a failing check, and posts
+  a comment or review suggestions. Changing files and pushing each need an
+  explicit setting in the workflow file. See
+  [Argentum on pull requests](docs/CI_PULL_REQUESTS.md).
 - **Execution environment:** a plain description of what commands can reach on
   each platform, for the agent and in Settings > Permissions.
 - **Tool output kept:** directory listings and file metadata stay available to

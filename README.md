@@ -323,6 +323,7 @@ builds come with the next release, and iOS is a later target.
 | Read this | For |
 | --- | --- |
 | [Support matrix](docs/SUPPORT_MATRIX.md) | What each platform and provider supports |
+| [Argentum on pull requests](docs/CI_PULL_REQUESTS.md) | The GitHub Action for reviews and fixes |
 | [Roadmap](ROADMAP.md) | What comes next |
 | [Security policy](SECURITY.md) | The trust boundary, and how to report a vulnerability privately |
 | [All documentation](docs/README.md) | Guides and architecture |
