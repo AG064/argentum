@@ -975,7 +975,77 @@ fn scenes() -> Vec<Scene> {
                 },
             );
         }),
+        s("55-files-panel", D, |ui| {
+            modules(ui, "full");
+            conversation(ui);
+            open_panel(ui, SurfaceId::Files);
+            files(ui);
+        }),
+        s("56-question-card", D, |ui| {
+            modules(ui, "standard");
+            conversation(ui);
+            question(ui);
+        }),
+        s("57-phone-question-card", (360, 760), |ui| {
+            ui.window().set_touch_device(true);
+            modules(ui, "standard");
+            conversation(ui);
+            question(ui);
+        }),
     ]
+}
+
+fn files(ui: &UiHandle) {
+    let entry = |path: &str, directory: bool, size_bytes: u64| argentum_domain::WorkspaceEntry {
+        path: path.into(),
+        name: path.rsplit('/').next().unwrap_or(path).into(),
+        directory,
+        size_bytes,
+    };
+    ui.apply_event(&argentum_domain::AppEvent::WorkspaceDirectoryLoaded {
+        path: "src".into(),
+        entries: vec![
+            entry("src/store", true, 0),
+            entry("src/ui", true, 0),
+            entry("src/import.rs", false, 4_212),
+            entry("src/lib.rs", false, 812),
+            entry("src/main.rs", false, 1_390),
+        ],
+        truncated: false,
+    });
+    let app = ui.window().global::<App>();
+    app.set_change_files(ModelRc::new(VecModel::from(vec![
+        argentum_ui::FileChangeView {
+            id: "change".into(),
+            path: "src/import.rs".into(),
+            kind: "Modified".into(),
+            revision: 1,
+            selected: false,
+            restore_available: true,
+            restore_reason: SharedString::default(),
+        },
+    ])));
+    app.set_files_preview_path("src/import.rs".into());
+    ui.apply_event(&argentum_domain::AppEvent::WorkspaceFilePreviewLoaded {
+        path: "src/import.rs".into(),
+        text: Some(
+            "pub fn import_sessions(rows: &[Row]) -> Result<()> {\n    let connection = open()?;\n    let tx = connection.transaction()?;\n    for row in rows {\n        insert_session(&tx, row)?;\n    }\n    tx.commit()?;\n    Ok(())\n}\n"
+                .into(),
+        ),
+        reason: String::new(),
+    });
+}
+
+fn question(ui: &UiHandle) {
+    let app = ui.window().global::<App>();
+    app.set_question_text(
+        "Should the import keep sessions that fail to parse, or skip them and list them at the end?"
+            .into(),
+    );
+    app.set_question_choices(ModelRc::new(VecModel::from(vec![
+        SharedString::from("Keep them"),
+        SharedString::from("Skip and list them"),
+    ])));
 }
 
 fn save(buffer: &slint::SharedPixelBuffer<slint::Rgba8Pixel>, path: &Path) {
