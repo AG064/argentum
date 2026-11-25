@@ -29,7 +29,7 @@ the zips or the APK.
 | Locked fresh build | `cargo build --locked --release` on a clean runner | `Release` workflow, jobs `windows`, `linux-x64`, `macos-arm64`, `macos-x64` and `android` |
 | Complete applicable offline tests | `scripts/test-offline.ps1` | `Native CLI qualification`, job `windows`, step "Credential-free tests" |
 | Store tests on Linux | `cargo test --locked -p argentum-store --lib` | `Android and Linux`, job `linux-store` |
-| Linux and macOS tests | `cargo build`, strict Clippy and `cargo test --workspace` on Ubuntu 24.04, macOS 15 arm64 and macOS 15 Intel, then a desktop app start check with a screenshot | `Linux and macOS` workflow, jobs `linux-x64`, `macos-arm64` and `macos-x64`, artifacts `desktop-start-*` |
+| Linux and macOS tests | `cargo build`, strict Clippy and a desktop app start check with a screenshot on Ubuntu 24.04, macOS 15 arm64 and macOS 15 Intel; `cargo test --workspace` on Ubuntu and macOS arm64 | `Linux and macOS` workflow, jobs `linux-x64`, `macos-arm64` and `macos-x64`, artifacts `desktop-start-*` |
 | Format and strict lint | `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` | `Native CLI qualification`, job `windows`; Android lint in `Android and Linux`, job `android-lint` |
 | Source policy, license and advisory review | `cargo deny check` with `deny.toml` | `Native CLI qualification`, job `windows`, step "Advisory, source and license policy" |
 | Source review | Merged pull requests to `development`; a security review of security-sensitive changes per `SECURITY.md` | Pull request history |

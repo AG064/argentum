@@ -820,6 +820,16 @@ impl Drop for TemporaryPath {
 
 #[cfg(test)]
 mod tests {
+    /// The resolved temp path. On macOS the temp path runs through the /var
+    /// link, which the bundle checks rightly refuse.
+    fn canonical_temp() -> std::path::PathBuf {
+        std::fs::canonicalize(std::env::temp_dir()).expect("temp root")
+    }
+
+    fn canonical_tempdir() -> std::io::Result<tempfile::TempDir> {
+        tempfile::tempdir_in(canonical_temp())
+    }
+
     use std::io::{Cursor, Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::mpsc;
@@ -1172,7 +1182,7 @@ mod tests {
 
     #[test]
     fn valid_archive_extracts_only_inside_owned_session() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let executable = b"verified server";
         let (archive_path, archive) = write_archive(&directory, "valid.zip", |writer| {
             let options = SimpleFileOptions::default();
@@ -1202,7 +1212,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn archive_and_launcher_leases_block_replacement_before_activation() {
-        let directory = tempfile::tempdir().expect("runtime lease fixture");
+        let directory = canonical_tempdir().expect("runtime lease fixture");
         let (offer, archive) = valid_fixture_archive(&directory);
         let archive_path = directory.path().join("fixture.zip");
         protect_runtime_file(&archive_path).expect("protect archive");
@@ -1253,7 +1263,7 @@ mod tests {
 
     #[test]
     fn archive_rejects_traversal_links_and_wrong_launcher() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let options = SimpleFileOptions::default();
 
         let (traversal_path, traversal) = write_archive(&directory, "traversal.zip", |writer| {
@@ -1289,7 +1299,7 @@ mod tests {
 
     #[test]
     fn archive_supported_compression_and_unicode_survive_extraction() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let executable = b"verified server";
         for method in [
             zip::CompressionMethod::Stored,
@@ -1326,7 +1336,7 @@ mod tests {
 
     #[test]
     fn archive_rejects_unsafe_names_and_entry_count_before_extraction() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         for name in [
             "../escape.txt",
             "data/../escape.txt",
@@ -1399,7 +1409,7 @@ mod tests {
 
     #[test]
     fn archive_rejects_crc_malformed_and_oversized_metadata() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let executable = b"verified server";
         let (path, mut bytes) = write_archive(&directory, "crc.zip", |writer| {
             writer
@@ -1477,7 +1487,7 @@ mod tests {
 
     #[test]
     fn bundle_path_is_versioned_and_never_uses_offer_input_as_a_path() {
-        let root = &std::env::temp_dir().join("Argentum").join("runtimes");
+        let root = &canonical_temp().join("Argentum").join("runtimes");
         let offer = local_runtime_offers().first().expect("runtime offer");
 
         assert_eq!(
@@ -1493,7 +1503,7 @@ mod tests {
     async fn download_deadline_runtime_stall_returns_typed_error_and_cleans_part_file() {
         let bytes = b"ok";
         let offer = fixture_offer(bytes, b"server");
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let server = spawn_download_server(
             vec![bytes[..1].to_vec(), bytes[1..].to_vec()],
             Duration::from_millis(400),
@@ -1519,7 +1529,7 @@ mod tests {
     async fn download_deadline_runtime_slow_drip_cannot_outlive_total_deadline() {
         let bytes = b"abc";
         let offer = fixture_offer(bytes, b"server");
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let server = spawn_download_server(
             vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()],
             Duration::from_millis(140),
@@ -1544,7 +1554,7 @@ mod tests {
     #[tokio::test]
     async fn download_runtime_bad_redirect_cleans_part_file() {
         let offer = fixture_offer(b"ok", b"server");
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let server = spawn_raw_response_server(
             "HTTP/1.1 302 Found\r\nLocation: http://example.invalid/fixture.zip\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
         );
@@ -1562,7 +1572,7 @@ mod tests {
     #[tokio::test]
     async fn download_runtime_wrong_size_cleans_part_file() {
         let offer = fixture_offer(b"ab", b"server");
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let target = directory.path().join("bundle.zip");
         let mut server = spawn_paused_chunked_server();
         let endpoint = server.endpoint.clone();
@@ -1593,7 +1603,7 @@ mod tests {
     #[tokio::test]
     async fn download_runtime_wrong_hash_cleans_part_file() {
         let offer = fixture_offer(b"ok", b"server");
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let server = spawn_download_server(vec![b"no".to_vec()], Duration::ZERO);
 
         let result = fixture_download(offer, &directory, &server.endpoint).await;
@@ -1610,7 +1620,7 @@ mod tests {
     async fn download_runtime_target_created_during_download_is_preserved_and_cleans_part_file() {
         let bytes = b"ok";
         let offer = fixture_offer(bytes, b"server");
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let target = directory.path().join("bundle.zip");
         let mut server = spawn_download_server(
             vec![bytes[..1].to_vec(), bytes[1..].to_vec()],
@@ -1648,7 +1658,7 @@ mod tests {
 
     #[tokio::test]
     async fn download_runtime_valid_existing_target_skips_network() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let executable = b"verified server";
         let (_, archive) = write_archive(&directory, "fixture.zip", |writer| {
             writer
@@ -1681,7 +1691,7 @@ mod tests {
 
     #[tokio::test]
     async fn download_runtime_atomic_publication_preserves_target_created_in_final_gap() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let (offer, archive) = valid_fixture_archive(&directory);
         let target = directory.path().join("bundle.zip");
         let gate = PublicationGate::new();
@@ -1725,7 +1735,7 @@ mod tests {
 
     #[tokio::test]
     async fn download_runtime_deadline_before_publication_never_publishes_after_return() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let (offer, archive) = valid_fixture_archive(&directory);
         let target = directory.path().join("bundle.zip");
         let gate = PublicationGate::new();
@@ -1775,7 +1785,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_existing_target_inspection_obeys_deadline_without_blocking_executor() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let (offer, archive) = valid_fixture_archive(&directory);
         let target = directory.path().join("bundle.zip");
         std::fs::write(&target, &archive).expect("existing verified archive");
@@ -1822,7 +1832,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_final_inspection_obeys_deadline_without_later_publication() {
-        let directory = tempfile::tempdir().expect("fixture directory");
+        let directory = canonical_tempdir().expect("fixture directory");
         let (offer, archive) = valid_fixture_archive(&directory);
         let target = directory.path().join("bundle.zip");
         let (gate, inspection) = InspectionGate::new();
