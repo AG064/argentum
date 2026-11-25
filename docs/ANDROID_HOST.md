@@ -48,6 +48,30 @@ Delete `platforms/android/app/build/outputs/apk/debug/app-debug.apk` first.
 Incremental packaging otherwise keeps the old file's dead space, and the APK grows
 to several times its real size.
 
+### Emulator UI tests
+
+The `Android emulator` workflow runs these on every pull request that touches
+the app. To run them yourself, start an x86_64 emulator, then build the debug
+APK for x86_64 with its test APK, and run the script with a free port:
+
+```powershell
+platforms\android\gradlew.bat -p platforms\android --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest -PuiTests=true -PdebugAbis=x86_64
+python ci/pull-request/fake_provider.py --port 18080 --port-file port.txt
+bash platforms/android/test/run-emulator-tests.sh platforms/android/app/build/outputs/apk/debug/app-debug.apk platforms/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk 18080 emulator-results
+```
+
+The instrumentation checks that the app opens, that first run accepts a server
+on `127.0.0.1`, that Ctrl+, opens Settings through the hardware keyboard path,
+that Back closes Settings and then the drawer without leaving the app, and that a
+message reaches the fake provider and its reply is shown. Keys go through
+Android's real input path. The first-run server and the message go through the
+same UI callbacks as the Continue, Start and send buttons, not through taps, so
+the tests do not cover touch input or the on-screen keyboard.
+
+Debug builds contain a small test bridge for this. It does nothing unless the
+test creates `files/ui-test/enabled` in the app's private storage. Release builds
+do not contain it.
+
 ### On-device inference
 
 Off by default. It adds tens of megabytes and needs Vulkan C++ headers

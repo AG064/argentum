@@ -70,6 +70,10 @@ The first stable release, for Windows x64 and Android arm64:
   job limits. Supplemental Rust checks, the local model add-on, desktop control
   and installing updates from the app stay Windows-only for now. See
   [the support matrix](docs/SUPPORT_MATRIX.md#linux-and-macos).
+- **Android checks in CI:** every pull request that touches the app runs it on
+  an Android emulator: it opens, first run accepts a local server, Settings
+  opens, Back closes Settings and the drawer, and a message reaches a local fake
+  provider and its reply is shown.
 - **Pull requests:** a GitHub Action (`action.yml`) that runs Argentum headless
   on a pull request, to review it read-only or to fix a failing check, and posts
   a comment or review suggestions. Changing files and pushing each need an
