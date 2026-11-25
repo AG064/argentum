@@ -822,8 +822,14 @@ impl Drop for TemporaryPath {
 mod tests {
     /// The resolved temp path. On macOS the temp path runs through the /var
     /// link, which the bundle checks rightly refuse.
+    /// Windows keeps its own spelling: canonicalizing there gives a `\\?\`
+    /// path, which is a different, valid test case.
     fn canonical_temp() -> std::path::PathBuf {
-        std::fs::canonicalize(std::env::temp_dir()).expect("temp root")
+        if cfg!(windows) {
+            std::env::temp_dir()
+        } else {
+            std::fs::canonicalize(std::env::temp_dir()).expect("temp root")
+        }
     }
 
     fn canonical_tempdir() -> std::io::Result<tempfile::TempDir> {
