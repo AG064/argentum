@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 # Advisories reviewed for Argentum. OSV-Scanner reads this file for the lockfile
 # in the same folder. Each entry says why it does not affect the shipped apps.
 # Review again before the date in ignoreUntil, or when the dependency changes.

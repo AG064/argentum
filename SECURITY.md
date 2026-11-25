@@ -99,7 +99,9 @@ There is no telemetry.
   the allowed sources, and fails on a violation. An advisory that affects shipped
   code is fixed before the next release, and at the latest within 60 days of
   publication. An advisory that does not affect Argentum may only be ignored with a
-  written reason and a review date, in `deny.toml` or `osv-scanner.toml`. No release
+  written reason and a review date, in `deny.toml` or `osv-scanner.toml`. These
+  decisions are published as an OpenVEX document in `vex/argentum.openvex.json`,
+  which `scripts/vex.py` builds and CI checks against those files. No release
   is made while `cargo deny` fails.
 - **Code scanning (SAST).** CodeQL and Clippy run on every push and pull request.
   A CodeQL security finding of high or critical severity is fixed before the next

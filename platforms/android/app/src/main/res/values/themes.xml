@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- Copyright (C) 2026 AG064 -->
 <resources>
     <!-- The app draws its own dark interface, so the window starts dark to avoid a
          white flash, and the status and navigation bar icons are light. -->

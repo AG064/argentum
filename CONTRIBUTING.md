@@ -19,6 +19,22 @@ this line in your first pull request's description:
 
 > I have read the Argentum Contributor Agreement 1.0 and I agree to it.
 
+## Sign off every commit
+
+Every commit must also carry a sign-off under the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/). It
+states that you wrote the change, or otherwise have the right to submit it under
+the project's license. Add it with `git commit -s`, which appends:
+
+```text
+Signed-off-by: Your Name <you@example.com>
+```
+
+The name and email must match the commit author. The `DCO` check fails a pull
+request that has a commit without one, and a failed check blocks merging. To sign
+off commits you already made, run `git rebase --signoff origin/development` and
+push again.
+
 ## Building and checking
 
 The project is a Rust workspace. Use the toolchain pinned in
@@ -68,6 +84,11 @@ The desktop app is `cargo run -p argentum-app`. The Android app is described in
 - Do not weaken approvals, the workspace boundary or other safety checks.
 - Never commit API keys, signing keys, personal data, downloaded models or build
   output.
+- Every change reaches `development` through a pull request. The branch ruleset
+  blocks direct pushes, for the maintainer too, and requires the CodeQL and DCO
+  checks to pass.
+- New source files start with the SPDX license and copyright lines used in the
+  other files. Files that cannot carry a comment are listed in `REUSE.toml`.
 
 ## Licensing of your contribution
 

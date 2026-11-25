@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 AG064
 name: Release
 # Builds the release files: the Windows installer and portable zips, the
 # release-signed Android arm64 APK, SHA-256 checksums, signed build provenance
