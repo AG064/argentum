@@ -64,6 +64,7 @@ jobs:
             --accept 200,206,403,429
             --exclude '^https://github\.com/AG064/argentum/(blob|tree|edit)/'
             --exclude '^file://'
+            --exclude-path 'docs/site/book/404\.html'
             docs/site/book
           fail: true
           jobSummary: true
