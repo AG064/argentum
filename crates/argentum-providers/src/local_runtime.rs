@@ -1389,7 +1389,11 @@ impl OutputTail {
 
     /// Waits briefly for the last output of a stopped process, then summarizes.
     async fn settled_summary(&self) -> String {
-        let finished = self.state.lock().map(|state| state.finished).unwrap_or(true);
+        let finished = self
+            .state
+            .lock()
+            .map(|state| state.finished)
+            .unwrap_or(true);
         if !finished {
             let _ = tokio::time::timeout(Duration::from_millis(500), self.done.notified()).await;
         }
@@ -1423,9 +1427,17 @@ fn push_line(lines: &mut std::collections::VecDeque<String>, raw: &str) {
 fn summarize_output<'a>(lines: impl DoubleEndedIterator<Item = &'a str> + Clone) -> String {
     let looks_like_error = |line: &&str| {
         let lower = line.to_ascii_lowercase();
-        ["error", "failed", "unable", "out of memory", "cannot", "invalid", "abort"]
-            .iter()
-            .any(|word| lower.contains(word))
+        [
+            "error",
+            "failed",
+            "unable",
+            "out of memory",
+            "cannot",
+            "invalid",
+            "abort",
+        ]
+        .iter()
+        .any(|word| lower.contains(word))
     };
     let mut picked: Vec<&str> = lines
         .clone()
@@ -2002,12 +2014,13 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             let session =
                 extract_runtime_session_leased(&mut archive_lease, &offer, &session_parent)?;
             let launcher_lease = open_runtime_launcher_lease(session.path(), &offer)?;
-            let model_lease = ModelFileLease::open(&model_path, max_model_bytes).map_err(|error| {
-                ProviderError::LocalRuntimeFileRejected {
-                    file: model_path.display().to_string(),
-                    reason: format!("it could not be opened and hashed: {error}"),
-                }
-            })?;
+            let model_lease =
+                ModelFileLease::open(&model_path, max_model_bytes).map_err(|error| {
+                    ProviderError::LocalRuntimeFileRejected {
+                        file: model_path.display().to_string(),
+                        reason: format!("it could not be opened and hashed: {error}"),
+                    }
+                })?;
             let mut auxiliary_model_leases = Vec::with_capacity(auxiliary_model_paths.len());
             for (adapter, path) in auxiliary_model_paths {
                 let lease = ModelFileLease::open(&path, max_model_bytes).map_err(|error| {
@@ -2482,7 +2495,9 @@ fn resolve_selected_model_with_limit(
         })
     })?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(rejected("it must be a plain file, not a link or folder".into()));
+        return Err(rejected(
+            "it must be a plain file, not a link or folder".into(),
+        ));
     }
     if metadata.len() > max_model_bytes {
         return Err(rejected(format!(
@@ -2493,7 +2508,9 @@ fn resolve_selected_model_with_limit(
     let selected = std::fs::canonicalize(selected)
         .map_err(|error| rejected(format!("it cannot be opened: {error}")))?;
     if selected.parent() != Some(root.as_path()) {
-        return Err(rejected("it resolves to a place outside the models folder".into()));
+        return Err(rejected(
+            "it resolves to a place outside the models folder".into(),
+        ));
     }
     Ok(selected)
 }
@@ -2553,7 +2570,10 @@ fn llama_server_arguments_with_context_and_auxiliary(
         "--alias".into(),
         model_path
             .file_name()
-            .map_or_else(|| model_path.to_string_lossy(), |name| name.to_string_lossy())
+            .map_or_else(
+                || model_path.to_string_lossy(),
+                |name| name.to_string_lossy(),
+            )
             .into_owned(),
         "--host".into(),
         LOCAL_RUNTIME_HOST.into(),
@@ -3021,22 +3041,36 @@ mod tests {
     #[test]
     fn a_failed_start_reports_the_error_lines_llama_server_printed() {
         let tail = OutputTail::default();
-        tail.push("build: 12650
+        tail.push(
+            "build: 12650
 load_tensors: loading model
-");
-        tail.push("ggml_vulkan: Device memory allocation of size 13 GB failed.
-");
-        tail.push("llama_init_from_model: failed to initialize the context
-main: exiting");
+",
+        );
+        tail.push(
+            "ggml_vulkan: Device memory allocation of size 13 GB failed.
+",
+        );
+        tail.push(
+            "llama_init_from_model: failed to initialize the context
+main: exiting",
+        );
         let summary = tail.summary();
-        assert!(summary.contains("allocation of size 13 GB failed"), "{summary}");
-        assert!(summary.contains("failed to initialize the context"), "{summary}");
+        assert!(
+            summary.contains("allocation of size 13 GB failed"),
+            "{summary}"
+        );
+        assert!(
+            summary.contains("failed to initialize the context"),
+            "{summary}"
+        );
         assert!(!summary.contains("loading model"), "{summary}");
 
         let quiet = OutputTail::default();
-        quiet.push("one
+        quiet.push(
+            "one
 two
-");
+",
+        );
         assert_eq!(quiet.summary(), "one | two");
         assert_eq!(OutputTail::default().summary(), "nothing");
     }
@@ -3049,7 +3083,9 @@ two
             43123,
             "/fixture",
         );
-        assert!(arguments.iter().any(|argument| argument == "--no-op-offload"));
+        assert!(arguments
+            .iter()
+            .any(|argument| argument == "--no-op-offload"));
     }
 
     #[test]
