@@ -135,6 +135,8 @@ pub enum RuntimeError {
     ContextBudget(&'static str),
     #[error("context_token_capacity_exceeded: estimated input, uncertainty and requested output do not fit the declared model limits; the session or its files need more room than the model allows. Compact the session, start a new one, or raise the limits with 'argentum provider budget' or Settings > Providers")]
     ContextTokenCapacity,
+    #[error("spend_limit_reached: this provider reported {used} tokens this month, and its monthly limit is {limit}. Raise or clear the limit in the Usage panel to send new requests")]
+    SpendLimitReached { used: u64, limit: u64 },
     #[error("context_capacity_exceeded: required context exceeds the byte/message bound; reduce the task or tool result size; completed effects remain recorded")]
     ContextCapacity,
     #[error("context_recording_failed: working context is incomplete; existing effect receipts remain authoritative; do not repeat actions to rebuild history")]
@@ -3028,6 +3030,17 @@ impl RuntimeService {
                 self.publish_ui_preferences()
             }
             AppCommand::LoadProviderUsage => self.publish_provider_usage(),
+            AppCommand::SetProviderSpendLimit {
+                profile_id,
+                monthly_tokens,
+            } => {
+                self.store.set_provider_spend_limit(
+                    self.project_id,
+                    &profile_id,
+                    monthly_tokens,
+                )?;
+                self.publish_provider_usage()
+            }
             AppCommand::RefreshGitStatus => self.refresh_git_status().await,
             AppCommand::LoadGitFileDiff { path } => self.load_git_file_diff(path).await,
             AppCommand::BrowserNavigate { url } => self.browser_navigate(url).await,
@@ -4993,6 +5006,8 @@ impl RuntimeService {
                 }
                 // Validate assembly inside the normal run-error settlement path.
                 argentum_providers::ModelToolContract::validate_catalog(&request.tools)?;
+                // A provider at its monthly limit gets no new request.
+                self.ensure_within_spend_limit(&profile.id)?;
                 let mut prepared = self.prepare_context_request(
                     provider.as_ref(),
                     &profile,
@@ -7878,6 +7893,26 @@ impl RuntimeService {
         } else {
             Ok(())
         }
+    }
+
+    /// Refuses a new model request once the provider's reported tokens this
+    /// month reach the owner's limit for it.
+    fn ensure_within_spend_limit(&self, profile_id: &str) -> Result<(), RuntimeError> {
+        let Some(limit) = self
+            .store
+            .provider_spend_limit(self.project_id, profile_id)?
+        else {
+            return Ok(());
+        };
+        let used = self.store.provider_tokens_since(
+            self.project_id,
+            profile_id,
+            argentum_store::month_start(time::OffsetDateTime::now_utc()),
+        )?;
+        if used >= limit {
+            return Err(RuntimeError::SpendLimitReached { used, limit });
+        }
+        Ok(())
     }
 
     /// One folder for the Files panel. The workspace manager keeps the path
@@ -14691,6 +14726,74 @@ mod tests {
     pub(crate) fn hidden_by_workspace(root: &std::path::Path, tools: &[&str]) -> usize {
         let needs = WorkspaceNeeds::of(root);
         tools.iter().filter(|tool| !needs.offers(tool)).count()
+    }
+
+    #[tokio::test]
+    async fn a_provider_at_its_monthly_limit_gets_no_new_request() {
+        let workspace_dir = tempfile::tempdir().expect("workspace");
+        let store = Store::open_in_memory().expect("store");
+        let broker =
+            CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
+        let workspace = WorkspaceManager::new(broker);
+        let tools = ToolRegistry::with_builtins(workspace.clone());
+        let runtime =
+            RuntimeService::new(store.clone(), ProviderRegistry::default(), tools, workspace)
+                .expect("runtime");
+        assert!(
+            runtime.ensure_within_spend_limit("deepseek").is_ok(),
+            "no limit set"
+        );
+        runtime
+            .dispatch(AppCommand::SetProviderSpendLimit {
+                profile_id: "deepseek".into(),
+                monthly_tokens: Some(100),
+            })
+            .await
+            .expect("set limit");
+        assert!(
+            runtime.ensure_within_spend_limit("deepseek").is_ok(),
+            "nothing used yet"
+        );
+        store
+            .append_conversation_message(&ConversationMessage {
+                id: Uuid::new_v4(),
+                project_id: runtime.project_id(),
+                session_id: runtime.session_id(),
+                run_id: Uuid::new_v4(),
+                role: ConversationRole::Assistant,
+                text: "answer".into(),
+                reasoning: String::new(),
+                usage: Some(argentum_domain::ModelUsage {
+                    input_tokens: 90,
+                    output_tokens: 10,
+                    total_tokens: 100,
+                    reasoning_tokens: None,
+                    cached_input_tokens: None,
+                    context_window_tokens: None,
+                    turn_total: None,
+                }),
+                profile_id: "deepseek".into(),
+                model: "model".into(),
+                status: ConversationMessageStatus::Complete,
+                created_at: now(),
+            })
+            .expect("reply");
+        assert!(matches!(
+            runtime.ensure_within_spend_limit("deepseek"),
+            Err(RuntimeError::SpendLimitReached {
+                used: 100,
+                limit: 100
+            })
+        ));
+        assert!(runtime.ensure_within_spend_limit("other").is_ok());
+        runtime
+            .dispatch(AppCommand::SetProviderSpendLimit {
+                profile_id: "deepseek".into(),
+                monthly_tokens: None,
+            })
+            .await
+            .expect("clear limit");
+        assert!(runtime.ensure_within_spend_limit("deepseek").is_ok());
     }
 
     #[test]

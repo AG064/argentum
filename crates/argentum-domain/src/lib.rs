@@ -2909,6 +2909,13 @@ pub enum AppCommand {
         patch: Box<UiPatch>,
     },
     LoadProviderUsage,
+    /// Sets a provider profile's monthly token limit, or clears it with
+    /// `None`. New requests stop once the month's reported tokens reach it.
+    SetProviderSpendLimit {
+        profile_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        monthly_tokens: Option<u64>,
+    },
     RefreshGitStatus,
     LoadGitFileDiff {
         path: String,

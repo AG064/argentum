@@ -865,7 +865,9 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::RejectTool { .. }
         // Workspace files are shown to the owner in the app only.
         | AppCommand::ListWorkspaceDirectory { .. }
-        | AppCommand::PreviewWorkspaceFile { .. } => false,
+        | AppCommand::PreviewWorkspaceFile { .. }
+        // Spend limits are the owner's setting, in the app or the local CLI.
+        | AppCommand::SetProviderSpendLimit { .. } => false,
     }
 }
 

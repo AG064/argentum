@@ -506,6 +506,12 @@ export struct ProviderUsageView {
     total: string,
     // "1.2k for compaction" when compaction used any, else empty.
     compaction: string,
+    // "12.4k this month of 50k" or "12.4k this month".
+    month: string,
+    // "ok", "warn" (80% or more of the limit) or "stopped".
+    spend_state: string,
+    // The limit as typed, or "" when none is set.
+    limit: string,
     share: float,
     selected: bool,
 }

@@ -480,6 +480,43 @@ pub fn apply_usage_report(
         .set_projects(ModelRc::new(VecModel::from(rows)));
 }
 
+/// "12.4k this month of 50k", or without a limit "12.4k this month".
+fn month_label(used: u64, limit: Option<u64>) -> String {
+    match limit {
+        Some(limit) => format!(
+            "{} this month of {}",
+            compact_count(used),
+            compact_count(limit)
+        ),
+        None => format!("{} this month", compact_count(used)),
+    }
+}
+
+/// "stopped" at the limit, "warn" from 80% of it, else "ok".
+fn spend_state(used: u64, limit: Option<u64>) -> &'static str {
+    match limit {
+        Some(limit) if used >= limit => "stopped",
+        Some(limit) if used.saturating_mul(100) >= limit.saturating_mul(80) => "warn",
+        _ => "ok",
+    }
+}
+
+/// The limit typed in the Usage panel: digits, with optional separators.
+/// Empty clears the limit; anything else is not a limit.
+pub(crate) fn parse_spend_limit(text: &str) -> Result<Option<u64>, ()> {
+    let digits: String = text
+        .chars()
+        .filter(|c| !matches!(c, ' ' | ',' | '_' | '.'))
+        .collect();
+    if digits.is_empty() {
+        return Ok(None);
+    }
+    match digits.parse::<u64>() {
+        Ok(0) | Err(_) => Err(()),
+        Ok(limit) => Ok(Some(limit)),
+    }
+}
+
 pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
     let profiles = window.get_provider_profiles();
     let label_for = |id: &str| {
@@ -511,6 +548,11 @@ pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
                 input: compact_count(row.input_tokens).into(),
                 output: compact_count(row.output_tokens).into(),
                 total: compact_count(row.total_tokens).into(),
+                month: month_label(row.month_tokens, row.monthly_limit).into(),
+                spend_state: spend_state(row.month_tokens, row.monthly_limit).into(),
+                limit: row
+                    .monthly_limit
+                    .map_or_else(SharedString::default, |limit| limit.to_string().into()),
                 compaction: if row.compaction_tokens == 0 {
                     SharedString::default()
                 } else {
@@ -1164,6 +1206,23 @@ where
         let weak = window.as_weak();
         let history_patch = send_patch.clone();
         let history_window = window.as_weak();
+        let spend_dispatch = dispatch.clone();
+        let spend_window = window.as_weak();
+        app.on_set_spend_limit(
+            move |profile_id, text| match parse_spend_limit(text.as_str()) {
+                Ok(monthly_tokens) => spend_dispatch(AppCommand::SetProviderSpendLimit {
+                    profile_id: profile_id.to_string(),
+                    monthly_tokens,
+                }),
+                Err(()) => {
+                    if let Some(window) = spend_window.upgrade() {
+                        window.set_toast_text(
+                            "A monthly limit is a whole number of tokens, such as 500000.".into(),
+                        );
+                    }
+                }
+            },
+        );
         app.on_undo_ui_change(move |index| {
             let Some(window) = history_window.upgrade() else {
                 return;
@@ -1740,4 +1799,22 @@ fn platform_font(name: &str) -> String {
         return "Droid Sans Mono".to_owned();
     }
     name.to_owned()
+}
+
+#[cfg(test)]
+mod spend_tests {
+    use super::*;
+
+    #[test]
+    fn the_usage_panel_warns_near_the_limit_and_stops_at_it() {
+        assert_eq!(spend_state(10, None), "ok");
+        assert_eq!(spend_state(79, Some(100)), "ok");
+        assert_eq!(spend_state(80, Some(100)), "warn");
+        assert_eq!(spend_state(100, Some(100)), "stopped");
+        assert_eq!(month_label(12_400, Some(50_000)), "12.4k this month of 50k");
+        assert_eq!(parse_spend_limit(" 500,000 "), Ok(Some(500_000)));
+        assert_eq!(parse_spend_limit(""), Ok(None));
+        assert_eq!(parse_spend_limit("0"), Err(()));
+        assert_eq!(parse_spend_limit("lots"), Err(()));
+    }
 }
