@@ -131,6 +131,118 @@ export component TrajectoryPanel inherits Rectangle {
 }
 
 // Agent-recorded changes, with restore through the existing approval path.
+// The workspace's files, and the files this session wrote. Read-only: a file
+// opens as text below the list.
+export component FilesPanel inherits Rectangle {
+    private property <bool> file-open: App.files_preview_path != "";
+    init => { App.files_open_dir(App.files_path); }
+    VerticalLayout {
+        HorizontalLayout {
+            height: 38px;
+            padding-left: Theme.sp10;
+            padding-right: Theme.sp8;
+            spacing: Theme.sp4;
+            IconBtn {
+                y: (parent.height - self.height) / 2;
+                icon: "chevron-left";
+                tip: "Up one folder";
+                size: 28px;
+                enabled: App.files_path != "";
+                clicked => { App.files_up(); }
+            }
+            Label {
+                text: App.files_path == "" ? "Workspace" : "Workspace/" + App.files_path;
+                mono: true;
+                size: "sm";
+                tone: "secondary";
+                horizontal-stretch: 1;
+            }
+            IconBtn {
+                y: (parent.height - self.height) / 2;
+                icon: "refresh";
+                tip: "Refresh";
+                size: 28px;
+                clicked => { App.files_open_dir(App.files_path); }
+            }
+        }
+        Divider { }
+        if App.files_error != "": Label { text: App.files_error; tone: "danger"; size: "sm"; wrap: word-wrap; }
+        Scroller {
+            vertical-stretch: root.file-open ? 0 : 1;
+            preferred-height: list.preferred-height + 8px;
+            max-height: root.file-open ? root.height * 0.4 : root.height;
+            content-height: list.preferred-height + 8px;
+            list := VerticalLayout {
+                height: self.preferred-height;
+                y: 4px;
+                x: 6px;
+                width: root.width - 12px;
+                if App.change_files.length > 0: SectionLabel { text: "WRITTEN IN THIS SESSION"; height: 24px; }
+                for file in App.change_files: Row {
+                    title: file.path;
+                    detail: file.kind;
+                    icon: "file";
+                    selected: App.files_preview_path == file.path;
+                    clicked => { App.files_preview(file.path); }
+                }
+                if App.change_files.length > 0: SectionLabel { text: "ALL FILES"; height: 24px; }
+                for entry in App.files_entries: Row {
+                    title: entry.name;
+                    detail: entry.detail;
+                    icon: entry.directory ? "folder" : "file";
+                    selected: App.files_preview_path == entry.path;
+                    clicked => {
+                        if entry.directory { App.files_open_dir(entry.path); } else { App.files_preview(entry.path); }
+                    }
+                }
+                if App.files_entries.length == 0 && !App.files_loading && App.files_error == "": Label {
+                    text: "This folder is empty.";
+                    tone: "muted";
+                    size: "sm";
+                }
+                if App.files_truncated: Label {
+                    text: "Only the first entries of this folder are shown.";
+                    tone: "muted";
+                    size: "xs";
+                }
+            }
+        }
+        if root.file-open: Divider { }
+        if root.file-open: HorizontalLayout {
+            height: 36px;
+            padding-left: Theme.sp14;
+            padding-right: Theme.sp8;
+            spacing: Theme.sp8;
+            Label { text: App.files_preview_path; size: "sm"; mono: true; horizontal-stretch: 1; }
+            IconBtn {
+                y: (parent.height - self.height) / 2;
+                icon: "close";
+                tip: "Close file";
+                size: 26px;
+                clicked => {
+                    App.files_preview_path = "";
+                    App.files_preview_text = "";
+                    App.files_preview_reason = "";
+                }
+            }
+        }
+        if root.file-open: Scroller {
+            vertical-stretch: 1;
+            content-height: preview.preferred-height + 16px;
+            preview := Text {
+                x: 12px;
+                y: 8px;
+                width: root.width - 24px;
+                text: App.files_preview_reason != "" ? App.files_preview_reason : App.files_preview_text;
+                color: App.files_preview_reason != "" ? Theme.text-3 : Theme.text;
+                font-family: Theme.font-mono;
+                font-size: Theme.fs-xs + 0.5px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
 export component ChangesPanel inherits Rectangle {
     private property <bool> file-open: App.selected_file_change_id != "";
     VerticalLayout {
@@ -388,6 +500,7 @@ export component BrowserPanel inherits Rectangle {
                     vertical-alignment: center;
                 }
                 address := TextInput {
+                    input-method-hints: { capitalization: CapitalizationMode.none, auto-correct: false, auto-complete: false };
                     x: 10px;
                     width: parent.width - 20px;
                     height: parent.height;
@@ -512,6 +625,7 @@ export component UsagePanel inherits Rectangle {
                         Label { text: row.input + " in"; tone: "muted"; size: "xs"; }
                         Label { text: row.output + " out"; tone: "muted"; size: "xs"; horizontal-stretch: 1; }
                     }
+                    if row.compaction != "": Label { text: "Includes " + row.compaction; tone: "muted"; size: "xs"; }
                 }
                 if App.usage_days.length > 0: SectionLabel { text: "BY DAY, LAST 30 DAYS (UTC)"; height: 22px; }
                 for day in App.usage_days: HorizontalLayout {

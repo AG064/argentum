@@ -163,7 +163,8 @@ component ReasoningDisclosure inherits VerticalLayout {
         alignment: start;
         spacing: Theme.sp2;
         Rectangle {
-            height: 24px;
+            // Full touch height on a phone, so a quick tap opens it.
+            height: Theme.coarse ? 40px : 24px;
             preferred-width: head.preferred-width;
             border-radius: Theme.r-xs;
             background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
@@ -263,7 +264,7 @@ component ChangedFiles inherits VerticalLayout {
         private property <bool> opened: App.open_message_diff == change.id;
         spacing: Theme.sp2;
         Rectangle {
-            height: 26px;
+            height: Theme.coarse ? 40px : 26px;
             border-radius: Theme.r-xs;
             background: file-touch.pressed ? Theme.pressed : file-touch.has-hover ? Theme.hover : transparent;
             animate background { duration: Theme.quick; }
@@ -390,7 +391,8 @@ component WorkBlock inherits VerticalLayout {
     HorizontalLayout {
         alignment: start;
         Rectangle {
-            height: 24px;
+            // Full touch height on a phone, so a quick tap opens it.
+            height: Theme.coarse ? 40px : 24px;
             preferred-width: head.preferred-width;
             border-radius: Theme.r-xs;
             background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
@@ -816,6 +818,24 @@ export component Composer inherits Rectangle {
             Btn { small: true; kind: "ghost"; label: "Clear"; clicked => { App.clear_queue(); } }
         }
         if App.steer_notice != "": Label { text: App.steer_notice; tone: "secondary"; size: "sm"; wrap: word-wrap; overflow: clip; }
+        // The agent asked a question and is waiting. A choice answers it at
+        // once; any other answer is typed below.
+        if App.question_text != "" && !App.running: VerticalLayout {
+            spacing: Theme.sp6;
+            accessible-role: groupbox;
+            accessible-label: "Question from the agent";
+            Label { text: "The agent is waiting for your answer"; tone: "secondary"; size: "xs"; }
+            Label { text: App.question_text; size: "sm"; wrap: word-wrap; }
+            if App.question_choices.length > 0: HorizontalLayout {
+                spacing: Theme.sp4;
+                alignment: start;
+                for choice in App.question_choices: Btn {
+                    small: true;
+                    label: choice;
+                    clicked => { App.submit_task(choice); }
+                }
+            }
+        }
         Rectangle {
             height: root.shown-height;
             clip: true;
@@ -899,7 +919,10 @@ export component Composer inherits Rectangle {
                 clicked => { root.steer(); }
             }
             if Mods.context-meter: ctx-meter := Rectangle {
-                width: Theme.control;
+                // A phone shows the share as a number beside the ring, since
+                // nothing can hover there and the ring alone is small.
+                private property <bool> with-number: Theme.coarse && root.context-fraction >= 0;
+                width: self.with-number ? Theme.control + 34px : Theme.control;
                 y: 0;
                 // Only the ring by default. A tap or click shows the numbers,
                 // which also works on a phone, where nothing can hover.
@@ -914,6 +937,18 @@ export component Composer inherits Rectangle {
                     x: parent.width - self.width - 7px;
                     y: (parent.height - self.height) / 2;
                     fraction: root.context-fraction;
+                    size: Theme.coarse ? 22px : 18px;
+                }
+                if ctx-meter.with-number: Text {
+                    x: 2px;
+                    width: parent.width - 36px;
+                    height: parent.height;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                    text: round(root.context-fraction * 100) + "%";
+                    color: root.context-fraction >= 0.9 ? Theme.meter-full : root.context-fraction >= 0.7 ? Theme.meter-warn : Theme.text-2;
+                    font-size: Theme.fs-sm;
+                    accessible-role: none;
                 }
                 if ctx-meter.show-numbers: Tooltip {
                     x: parent.width - self.width;

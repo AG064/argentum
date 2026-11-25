@@ -54,7 +54,7 @@ component Segmented inherits Rectangle {
     in property <[string]> options;
     in property <string> selected;
     callback chose(string);
-    height: 28px;
+    height: Theme.coarse ? Theme.chip : 28px;
     width: lay.preferred-width;
     border-radius: Theme.r-sm;
     background: Theme.code-bg;
@@ -131,7 +131,7 @@ component ProvidersPage inherits VerticalLayout {
         ProviderCatalog { }
         Row {
             title: "Custom endpoint";
-            detail: "Any OpenAI-compatible server, such as llama-server. API keys can't be saved for these yet.";
+            detail: "Any server that speaks the OpenAI API, such as llama-server. A key cannot be saved for it yet.";
             icon: "plus";
             clicked => {
                 // A draft only. The provider in use stays as it is until this is saved.
@@ -216,7 +216,7 @@ component DevicesPage inherits VerticalLayout {
     init => { App.device_refresh(); }
     Heading {
         title: "Devices";
-        detail: "Pair this device with your PC or phone on the same network. Pairing grants nothing by itself; permissions stay with each device.";
+        detail: "Pair this device with your PC or phone on the same network. Pairing alone allows nothing: each device keeps its own permissions.";
     }
     HorizontalLayout {
         spacing: Theme.sp8;
@@ -298,7 +298,7 @@ component ModulesPage inherits VerticalLayout {
     spacing: Theme.sp14;
     Heading {
         title: "Modules";
-        detail: "Everything beyond the conversation and provider chooser is optional. Modules change what you see. They never grant permissions.";
+        detail: "Everything besides the chat and the provider chooser is optional. Modules change what you see, never what the agent may do.";
     }
     PresetChips { }
     if App.harness_error != "": Label { text: App.harness_error; tone: "danger"; size: "sm"; wrap: word-wrap; overflow: clip; }
@@ -326,7 +326,7 @@ component ModulesPage inherits VerticalLayout {
 
 component AppearancePage inherits VerticalLayout {
     spacing: Theme.sp14;
-    Heading { title: "Appearance"; detail: "You can change all of this here, or ask the agent to change it for you."; }
+    Heading { title: "Appearance"; detail: "Change it here, or ask the agent to. Every change can be undone below."; }
     if App.ui_last_agent_change != "": Rectangle {
         border-radius: Theme.r-md;
         background: Theme.hover;
@@ -413,7 +413,7 @@ component AppearancePage inherits VerticalLayout {
         Divider { }
         SettingRow {
             title: "Filled message bubbles";
-            detail: "Outlines your messages instead when off.";
+            detail: "When off, your messages get an outline instead.";
             Switch { y: (parent.height - self.height) / 2; label: "Filled message bubbles"; on: Theme.user-bubbles; toggled(v) => { App.ui_set_user_bubbles(v); } }
         }
         Divider { }
@@ -422,13 +422,28 @@ component AppearancePage inherits VerticalLayout {
         alignment: start;
         Btn { label: "Reset appearance"; clicked => { App.ui_reset(); } }
     }
+    if App.ui_history.length > 0: VerticalLayout {
+        spacing: Theme.sp4;
+        SectionLabel { text: "RECENT CHANGES"; }
+        for change[index] in App.ui_history: HorizontalLayout {
+            spacing: Theme.sp8;
+            min-height: Theme.row;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Label { text: change.summary; size: "sm"; wrap: word-wrap; }
+                Label { text: change.by; size: "xs"; tone: "muted"; }
+            }
+            Btn { y: (parent.height - self.height) / 2; label: "Undo"; small: true; kind: "ghost"; clicked => { App.undo_ui_change(index); } }
+        }
+    }
 }
 
 component PermissionsPage inherits VerticalLayout {
     spacing: Theme.sp16;
     Heading {
         title: "Permissions";
-        detail: "Saved for this project and enforced by the runtime. Nothing the model writes can change these, and no module can grant them.";
+        detail: "Saved for this project and checked on every action. Nothing the agent writes can change them, and no module can add to them.";
     }
     VerticalLayout {
         spacing: Theme.sp2;
@@ -448,6 +463,11 @@ component PermissionsPage inherits VerticalLayout {
         }
     }
     GrantsSection { }
+    if App.execution_environment != "": VerticalLayout {
+        spacing: Theme.sp4;
+        SectionLabel { text: "WHAT COMMANDS CAN REACH"; height: 22px; }
+        Label { text: App.execution_environment; size: "sm"; tone: "secondary"; wrap: word-wrap; }
+    }
     VerticalLayout {
         SectionLabel { text: "AGENT TOOLS"; height: 22px; }
         for capability in App.harness_capabilities: VerticalLayout {

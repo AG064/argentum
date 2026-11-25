@@ -31,6 +31,7 @@ fn select(state: &mut TuiState, target: &SubmissionTarget) {
             updated_at: argentum_domain::now(),
             pinned: false,
             archived: false,
+            files_changed: 0,
         }],
         active_session_id: Some(target.session_id),
     }));

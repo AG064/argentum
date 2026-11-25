@@ -551,6 +551,26 @@ impl TuiState {
                 {
                     return;
                 }
+                // After a restart the context meter has no request yet, so it
+                // starts from the usage the newest stored reply reported.
+                if !self
+                    .context_use
+                    .is_some_and(|(session, _, _)| session == snapshot.session_id)
+                {
+                    if let Some((used, window)) = snapshot
+                        .messages
+                        .iter()
+                        .rev()
+                        .filter_map(|message| message.usage.as_ref())
+                        .find_map(|usage| {
+                            usage
+                                .context_window_tokens
+                                .map(|window| (usage.input_tokens, window))
+                        })
+                    {
+                        self.context_use = Some((snapshot.session_id, used, window));
+                    }
+                }
                 let incoming: Vec<_> = snapshot
                     .messages
                     .into_iter()
@@ -773,6 +793,16 @@ impl TuiState {
                         state: tool_result_label(ToolResultState::Succeeded).into(),
                     });
                     self.truncate_timeline();
+                }
+            }
+            AppEvent::PlanUpdated { run_id, steps } => {
+                if self.run_is_current(run_id) {
+                    self.show_plan(run_id, &steps);
+                }
+            }
+            AppEvent::QuestionAsked { run_id, .. } => {
+                if self.run_is_current(run_id) {
+                    self.status = "The agent is waiting for your answer".into();
                 }
             }
             AppEvent::ToolStarted(trace) => {
@@ -1693,6 +1723,31 @@ impl TuiState {
         }
     }
 
+    /// The agent's stages for a run, as one entry that each update replaces.
+    fn show_plan(&mut self, run_id: RunId, steps: &[argentum_domain::PlanStep]) {
+        let text = bounded_text(&plan_text(steps));
+        self.transcript_changed();
+        if let Some(entry) = self.timeline.iter_mut().rev().find(|entry| {
+            entry.kind == TimelineKind::System
+                && entry.run_id == Some(run_id)
+                && entry.state == PLAN_ENTRY_STATE
+        }) {
+            entry.text = text;
+            return;
+        }
+        self.timeline.push(TimelineEntry {
+            view_id: RunId::new_v4(),
+            message_id: None,
+            kind: TimelineKind::System,
+            run_id: Some(run_id),
+            tool_call_id: None,
+            text,
+            detail: String::new(),
+            state: PLAN_ENTRY_STATE.into(),
+        });
+        self.truncate_timeline();
+    }
+
     fn append_system(&mut self, text: &str) {
         self.transcript_changed();
         self.timeline.push(TimelineEntry {
@@ -1950,6 +2005,33 @@ fn tool_result_label(result: ToolResultState) -> &'static str {
         ToolResultState::Cancelled => "cancelled",
         ToolResultState::NotExecuted => "not executed",
     }
+}
+
+const PLAN_ENTRY_STATE: &str = "plan";
+
+/// "Plan" with one line per stage: done, current, blocked or still to do.
+/// The current stage is the first one that is neither done nor blocked.
+fn plan_text(steps: &[argentum_domain::PlanStep]) -> String {
+    let current = steps
+        .iter()
+        .position(|step| !step.complete && !step.blocked);
+    let mut text = String::from("Plan");
+    for (index, step) in steps.iter().enumerate() {
+        let mark = if step.complete {
+            "[x]"
+        } else if step.blocked {
+            "[!]"
+        } else if Some(index) == current {
+            "[>]"
+        } else {
+            "[ ]"
+        };
+        text.push_str(&format!("\n  {mark} {}", step.title));
+        if !step.detail.is_empty() && (step.blocked || Some(index) == current) {
+            text.push_str(&format!(" ({})", step.detail));
+        }
+    }
+    text
 }
 
 fn bounded_text(text: &str) -> String {
@@ -3622,5 +3704,45 @@ mod tests {
         assert_eq!(submission.text, "unsent draft");
         assert_eq!(draft, "unsent draft");
         assert_eq!(state.composer(), "unsent draft");
+    }
+
+    #[test]
+    fn the_agents_plan_is_one_entry_that_each_update_replaces() {
+        let mut state = TuiState::new(PathBuf::from("workspace"), true);
+        let run = RunId::new_v4();
+        state.active_run_id = Some(run);
+        let step = |title: &str, complete: bool, blocked: bool| argentum_domain::PlanStep {
+            id: title.into(),
+            title: title.into(),
+            detail: if blocked {
+                "needs a key".into()
+            } else {
+                String::new()
+            },
+            complete,
+            blocked,
+        };
+        state.apply_event(AppEvent::PlanUpdated {
+            run_id: run,
+            steps: vec![step("Read", false, false), step("Fix", false, false)],
+        });
+        state.apply_event(AppEvent::PlanUpdated {
+            run_id: run,
+            steps: vec![
+                step("Read", true, false),
+                step("Fix", false, false),
+                step("Ship", false, true),
+            ],
+        });
+        let plans = state
+            .timeline
+            .iter()
+            .filter(|entry| entry.state == PLAN_ENTRY_STATE)
+            .collect::<Vec<_>>();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(
+            plans[0].text,
+            "Plan\n  [x] Read\n  [>] Fix\n  [!] Ship (needs a key)"
+        );
     }
 }

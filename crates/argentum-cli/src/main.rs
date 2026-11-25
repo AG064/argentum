@@ -11464,6 +11464,7 @@ mod tests {
                 updated_at: timestamp,
                 pinned: false,
                 archived: false,
+                files_changed: 0,
             }],
             active_session_id: Some(session_id),
         };

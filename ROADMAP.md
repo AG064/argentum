@@ -25,46 +25,57 @@ The first stable release, for Windows x64 and Android arm64:
 - starting normally after a crash or a forced close, with no recovery command;
 - opening another workspace in the same window, without restarting the app.
 
+## In 0.1.1 (on the development branch, not released)
+
+- **Lighter requests:** shorter tool descriptions, and Git and Rust check tools
+  offered only in a Git repository or a Cargo project. The built-in tool list
+  is about a third smaller, and about half the size in a plain folder.
+- **Faster compaction:** when a request fills 85% of the context window, older
+  tool output is cut to its first lines with no model call, before the window
+  is full. A request that no longer fits still gets the model summary.
+- **Clearer diagnostics:** run details say why a run stopped, including for an
+  approval or a question, and the tokens its compactions used. Usage totals
+  include compaction.
+- **Interface polish:** notices sit under the header instead of over the
+  composer, Settings reads more plainly, Appearance keeps a history of
+  interface changes with an Undo for each, and long session titles stop before
+  their menu button.
+- **Session list:** each session shows whether it is working, waiting for you
+  or unread, and how many files it changed.
+- **Android Back button:** Back closes menus, sheets, Settings, the drawer and a
+  panel over the chat before it leaves the app.
+- **Phone text fields:** server addresses, model names, paths and ids are not
+  capitalized or corrected by the keyboard.
+- **Dependencies:** jiff replaces the unmaintained chrono crate for local reply
+  times.
+- **Plan:** the stages of the current task as the agent plans them, in the
+  app's Plan module and in `argentum chat`.
+- **Files panel:** browse the workspace's files, open one as text, and see the
+  files this session wrote, from the side panel. Paired devices cannot use it.
+- **Questions from the agent:** the agent can ask you a question, with choices,
+  and the run waits: your answer is your next message.
+- **Search in sessions:** find a sentence in past sessions, from a full-text
+  index, with the matching words shown under the session.
+- **Changes panel:** every file a session changed, across all of its runs.
+- **Phone touch:** taller tap targets, the context share shown beside its ring,
+  and fast swipes that always scroll a long session.
+- **Run details for the agent:** the model that answered and why the run
+  stopped.
+- **Usage across restarts:** the context meter shows the latest reported use
+  after the app opens again, in the app and in `argentum chat`.
+- **Execution environment:** a plain description of what commands can reach on
+  each platform, for the agent and in Settings > Permissions.
+
 ## Planned for 0.1.1
 
-- **Lighter requests:** shorter tool descriptions and only the tools a session
-  needs, to roughly halve the fixed cost of each request.
-- **Faster compaction:** old tool output is trimmed first, with no model call,
-  and compaction starts before the context is full.
 - **Exact token counts:** counting with each provider's own tokenizer where one
   is available, and learning from the usage each provider reports.
-- **Clearer diagnostics:** runs that stop for an approval, and the tokens a
-  compaction used, show up in run details and usage totals.
-- **Interface polish:** notices that no longer cover the composer, clearer
-  wording in Settings, a history of interface changes you can undo, and long
-  session titles that no longer run into their menu button.
-- **Session list:** each session shows whether it is working, waiting for you,
-  unread, and how many files it changed.
-- **Android Back button:** Back closes panels, settings and menus before it
-  leaves the app.
-- **Phone text fields:** server addresses and model names are not
-  auto-capitalized by the keyboard.
-- **Dependencies:** replace the unmaintained chrono crate, used for local reply
-  times, with jiff, and take the major updates of the crypto and encoding crates
+- **Dependencies:** the major updates of the crypto and encoding crates
   (argon2, chacha20poly1305, sha2, getrandom, base64) after their own review,
   and Android Gradle plugin 9.5 with Gradle 9.9, once their checksums are added
   to the Android build's dependency verification.
-- **Plan:** the real stages of the current task as the agent plans them, in the
-  app's Plan module and in `argentum chat`. Until then the Plan module is listed
-  as coming soon.
-- **Files panel:** browse the workspace's files and the files a session wrote,
-  from the side panel.
-- **Questions from the agent:** the agent asks you when something is unclear and
-  waits for your answer before it goes on.
-- **Search in sessions:** find a sentence or a message in past sessions, from an
-  index that stays fast as history grows.
-- **Changes panel:** every file a session changed, not only the latest run's.
-- **Phone touch:** larger touch targets, a clearer context meter, and fast
-  swipes that always scroll a long session.
-- **Run details for the agent:** the model that actually answered, why a run
-  stopped, and tool output that stays available after the turn that made it.
-- **Usage across restarts:** a session's context use and token totals kept when
-  the app closes and opens again.
+- **Run details for the agent:** tool output that stays available after the
+  turn that made it.
 - **Context breakdown:** what fills the context window, by part: messages,
   system prompt, tool descriptions, skills, project instructions and free
   space, with how much is left before compaction starts.
@@ -74,8 +85,6 @@ The first stable release, for Windows x64 and Android arm64:
   for providers that report one, such as DeepSeek and OpenRouter; and a spend
   limit you set for each provider, which warns as it gets close and stops new
   requests when it is reached.
-- **Execution environment:** a plain description, for the agent and for you, of
-  what the shell can reach on each platform.
 
 ## Planned for 0.1.5
 

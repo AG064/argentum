@@ -71,8 +71,10 @@ mod goal_accounting;
 mod goal_report;
 mod goal_supervision;
 pub mod instructions;
+mod plan;
 mod retry;
 mod submission;
+mod trim;
 pub mod working_context;
 pub use answer_contract::{
     AcceptedAnswerContract, AnswerContractError, ANSWER_CONTRACT_VALIDATOR_VERSION,
@@ -355,6 +357,34 @@ pub(crate) fn process_tool_supported(capability_id: &str) -> bool {
     }
 }
 
+/// What a workspace can use, so a request carries only those tools. Git
+/// tools need a Git repository, and the Rust check tools need a Cargo
+/// project. The policy still decides whether an offered tool may run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WorkspaceNeeds {
+    git: bool,
+    cargo: bool,
+}
+
+impl WorkspaceNeeds {
+    pub(crate) fn of(root: &std::path::Path) -> Self {
+        Self {
+            git: root.ancestors().any(|folder| folder.join(".git").exists()),
+            cargo: root.join("Cargo.toml").is_file(),
+        }
+    }
+
+    pub(crate) fn offers(self, tool_id: &str) -> bool {
+        match tool_id {
+            "git_read" | "git_write" => self.git,
+            "start_verification" | "poll_process_job" | "cancel_process_job" | "check_rust" => {
+                self.cargo
+            }
+            _ => true,
+        }
+    }
+}
+
 fn compaction_label(state: &str) -> &str {
     match state {
         "no_active_summary" => "no summary in use",
@@ -365,6 +395,25 @@ fn compaction_label(state: &str) -> &str {
         other => other,
     }
 }
+
+/// Entries the Files panel lists in one folder at most.
+const MAX_FILES_PANEL_ENTRIES: usize = 1_000;
+/// The largest file the Files panel shows.
+const MAX_FILES_PANEL_PREVIEW_BYTES: usize = 256 * 1024;
+
+/// A Files panel path as the workspace manager takes it: relative, "." for
+/// the root. The manager still refuses anything outside the workspace.
+fn workspace_panel_path(path: &str) -> String {
+    let trimmed = path.trim().trim_start_matches("./").trim_end_matches('/');
+    if trimmed.is_empty() {
+        ".".into()
+    } else {
+        trimmed.into()
+    }
+}
+
+/// File changes the Changes panel shows for one session at most.
+const MAX_SESSION_CHANGES_SHOWN: usize = 500;
 
 const MAX_MODEL_ROUNDS: usize = argentum_domain::working_context::MAX_RUN_GROUPS as usize - 1;
 const MAX_REPEATED_ROUNDS: usize = 4;
@@ -2987,6 +3036,9 @@ impl RuntimeService {
                 Ok(())
             }
             AppCommand::LoadChangeSet { run_id } => self.load_change_set(run_id),
+            AppCommand::LoadSessionChanges { session_id } => self.load_session_changes(session_id),
+            AppCommand::ListWorkspaceDirectory { path } => self.list_workspace_directory(&path),
+            AppCommand::PreviewWorkspaceFile { path } => self.preview_workspace_file(&path),
             AppCommand::LoadUnifiedDiff { file_change_id } => self.load_change_diff(file_change_id),
             AppCommand::RequestRestore { file_change_id } => self.request_restore(file_change_id),
             AppCommand::LoadChangeRecovery => self.load_change_recovery(),
@@ -4983,6 +5035,41 @@ impl RuntimeService {
                         self.apply_provider_request_validation(&budget,&mut accounting,&request_validation)?;
                     }
                 }
+                // Compaction starts before the window is full, with the free
+                // step: near the limit, older tool output is shortened with no
+                // model call. A request that no longer fits keeps the model
+                // summary below, unchanged.
+                if accounting.fits && trim::near_full(&accounting) {
+                    if let Some((shorter, shortened)) =
+                        trim::trim_old_tool_output(prepared.request())
+                    {
+                        let shorter_prepared = self.prepare_context_request(
+                            provider.as_ref(),
+                            &profile,
+                            &budget,
+                            shorter,
+                        )?;
+                        let mut shorter_accounting = shorter_prepared.accounting().clone();
+                        let shorter_validation =
+                            provider.validate_prepared_request(&shorter_prepared).await?;
+                        Self::ensure_request_runtime_evidence(&context, &shorter_validation)?;
+                        self.apply_provider_request_validation(
+                            &budget,
+                            &mut shorter_accounting,
+                            &shorter_validation,
+                        )?;
+                        if shorter_accounting.fits {
+                            prepared = shorter_prepared;
+                            accounting = shorter_accounting;
+                            request_validation = shorter_validation;
+                            self.publish_transient(AppEvent::ContextCompactionProgress {
+                                session_id: context.session_id,
+                                operation_id: context.run_id,
+                                phase: format!("old_tool_output_shortened:{shortened}"),
+                            });
+                        }
+                    }
+                }
                 if !accounting.fits {
                     let mut required = prepared.request().clone();
                     required.history = promoted_run_history.clone();
@@ -5541,9 +5628,27 @@ impl RuntimeService {
                 let mut observations = Vec::with_capacity(tool_calls.len());
                 let mut settlement = None;
                 let mut steering_deferred = false;
+                let mut question = None;
                 for call in &tool_calls {
                     use argentum_domain::working_context::ObservationState;
-                    if settlement.is_some() {
+                    if call.name == plan::ASK_TOOL_ID && settlement.is_none() && question.is_none() {
+                        let (result, asked) = self.record_agent_question(context.run_id, call)?;
+                        observations.push(
+                            self.capture_observation(
+                                context.session_id,
+                                context.run_id,
+                                call,
+                                None,
+                                Some(&result),
+                                ObservationState::ResultAvailable,
+                            )
+                            .map_err(|_| RuntimeError::ContextRecording)?,
+                        );
+                        results.push(result);
+                        question = asked;
+                        continue;
+                    }
+                    if settlement.is_some() || question.is_some() {
                         observations.push(self.capture_observation(
                             context.session_id,
                             context.run_id,
@@ -5723,6 +5828,20 @@ impl RuntimeService {
                     return settlement;
                 }
                 earlier_rounds_text.push(round_text.clone());
+                // A question ends the run: the reply is the question, and the
+                // owner's answer starts the next run.
+                if let Some(question) = question {
+                    let text = question.reply_text();
+                    self.record_context_final(
+                        context.session_id,
+                        context.task_id,
+                        context.run_id,
+                        next_context_ordinal,
+                        text.clone(),
+                    )?;
+                    terminal_answer = Some(text);
+                    return Ok(RunCompletion::Complete);
+                }
                 exchanges.push(ModelToolExchange {
                     chatgpt_continuation,
                     assistant_continuation: round_continuation,
@@ -6177,6 +6296,7 @@ impl RuntimeService {
         policy: &HarnessExecutionPolicy,
         profile: Option<&ProviderProfile>,
     ) -> Vec<ModelToolDefinition> {
+        let needs = WorkspaceNeeds::of(self.workspace.root());
         self.with_harness(|harness| {
             let mut definitions = self
                 .tools
@@ -6192,6 +6312,7 @@ impl RuntimeService {
                 // those tools could only fail there. Offering them made the
                 // model promise work it could never do.
                 .filter(|descriptor| process_tool_supported(&descriptor.capability_id))
+                .filter(|descriptor| needs.offers(&descriptor.id))
                 .filter(|descriptor| {
                     let fixed_verification_scope = policy.profile_id == "verification"
                         || policy.source_profile_id.as_deref() == Some("verification");
@@ -6203,6 +6324,12 @@ impl RuntimeService {
                 && harness.capability_is_enabled(policy, delegation::CAPABILITY_ID)
             {
                 definitions.push(delegation::tool_definition());
+            }
+            // The plan and question tools only inform the owner, so every run
+            // that has tools gets them, and the context preview counts them.
+            if !definitions.is_empty() {
+                definitions.push(plan::plan_tool_definition());
+                definitions.push(plan::ask_tool_definition());
             }
             definitions
         })
@@ -6311,6 +6438,11 @@ impl RuntimeService {
         if call.name == goal_report::TOOL_ID {
             return Ok(ModelToolStep::Ready(
                 self.record_goal_completion_report(invocation.run_id, &call)?,
+            ));
+        }
+        if call.name == plan::PLAN_TOOL_ID {
+            return Ok(ModelToolStep::Ready(
+                self.record_agent_plan(invocation.run_id, &call)?,
             ));
         }
         if call.name == delegation::TOOL_ID {
@@ -7746,6 +7878,92 @@ impl RuntimeService {
         } else {
             Ok(())
         }
+    }
+
+    /// One folder for the Files panel. The workspace manager keeps the path
+    /// inside the workspace and skips links; the `.git` folder is left out.
+    fn list_workspace_directory(&self, path: &str) -> Result<(), RuntimeError> {
+        let folder = workspace_panel_path(path);
+        let listing = self
+            .workspace
+            .list_directory_bounded(&folder, MAX_FILES_PANEL_ENTRIES)?;
+        let truncated = listing.truncated();
+        let mut entries = listing
+            .entries
+            .into_iter()
+            .filter(|entry| entry.name != ".git")
+            .map(|entry| argentum_domain::WorkspaceEntry {
+                directory: entry.kind == argentum_workspaces::WorkspaceEntryKind::Directory,
+                path: entry.path.replace('\\', "/"),
+                name: entry.name,
+                size_bytes: entry.size_bytes,
+            })
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| {
+            right
+                .directory
+                .cmp(&left.directory)
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+        });
+        self.publish_transient(AppEvent::WorkspaceDirectoryLoaded {
+            path: if folder == "." { String::new() } else { folder },
+            entries,
+            truncated,
+        });
+        Ok(())
+    }
+
+    /// The text of one workspace file for the Files panel, or why it is not
+    /// shown: too large, not text, or not readable.
+    fn preview_workspace_file(&self, path: &str) -> Result<(), RuntimeError> {
+        let file = workspace_panel_path(path);
+        let (text, reason) = match self
+            .workspace
+            .read_text_bounded(&file, MAX_FILES_PANEL_PREVIEW_BYTES)
+        {
+            Ok(text) => (Some(text), String::new()),
+            Err(argentum_workspaces::WorkspaceError::FileTooLarge { .. }) => (
+                None,
+                "This file is larger than 256 KiB, so it is not shown here.".into(),
+            ),
+            Err(argentum_workspaces::WorkspaceError::Io { source, .. })
+                if source.kind() == std::io::ErrorKind::InvalidData =>
+            {
+                (None, "This file is not UTF-8 text.".into())
+            }
+            Err(error) => return Err(error.into()),
+        };
+        self.publish_transient(AppEvent::WorkspaceFilePreviewLoaded {
+            path: file,
+            text,
+            reason,
+        });
+        Ok(())
+    }
+
+    /// Every file a session changed, for the Changes panel. A session from
+    /// another project is refused, like every other session command.
+    fn load_session_changes(&self, session_id: SessionId) -> Result<(), RuntimeError> {
+        if !self
+            .store
+            .session_belongs_to_project(self.project_id, session_id)?
+        {
+            return Err(StoreError::InvalidRecord(
+                "session does not belong to the current project".into(),
+            )
+            .into());
+        }
+        let (files, truncated) = self.store.session_file_changes(
+            self.project_id,
+            session_id,
+            MAX_SESSION_CHANGES_SHOWN,
+        )?;
+        self.publish_transient(AppEvent::SessionChangesLoaded {
+            session_id,
+            files,
+            truncated,
+        });
+        Ok(())
     }
 
     fn load_change_set(&self, run_id: RunId) -> Result<(), RuntimeError> {
@@ -10080,7 +10298,7 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
     });
     let desktop_window = serde_json::json!({
         "type": "object",
-        "description": "Copy the complete window identity from the current desktop_list_windows result. Omit, rename or reformat no field.",
+        "description": "Copy the whole window from the latest desktop_list_windows result.",
         "properties": {
             "hwnd": { "type": "string", "pattern": "^0x[0-9a-f]{1,16}$" },
             "process_id": { "type": "integer", "minimum": 1 },
@@ -10093,7 +10311,7 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
     });
     let desktop_element = serde_json::json!({
         "type": "object",
-        "description": "Copy the complete element identity from the current desktop_inspect result. A changed tree path or property is rejected before input.",
+        "description": "Copy the whole element from the latest desktop_inspect result.",
         "properties": {
             "tree_path": { "type": "array", "maxItems": 8, "items": { "type": "integer", "minimum": 0, "maximum": 255 } },
             "automation_id": { "type": "string", "maxLength": 256 },
@@ -10109,14 +10327,12 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
         "extension" => extension_parameters(),
         "desktop_list_windows" => serde_json::json!({
             "type": "object",
-            "description": "Enumerate top-level windows. Read-only. Every desktop call still requires a current owner grant.",
             "properties": { "max_windows": { "type": "integer", "minimum": 1, "maximum": 64 } },
             "required": ["max_windows"],
             "additionalProperties": false
         }),
         "desktop_inspect" => serde_json::json!({
             "type": "object",
-            "description": "Read a bounded UI Automation control view for one current window identity. Read-only.",
             "properties": {
                 "window": desktop_window,
                 "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
@@ -10127,7 +10343,6 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
         }),
         "desktop_invoke" => serde_json::json!({
             "type": "object",
-            "description": "Semantic UI Automation activation of one observed element. No pointer click or focus stealing.",
             "properties": { "window": desktop_window, "element": desktop_element },
             "required": ["window", "element"],
             "additionalProperties": false
@@ -10163,7 +10378,6 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
         "ui_update" => ui_control::ui_update_schema(),
         "desktop_screenshot" => serde_json::json!({
             "type": "object",
-            "description": "PrintWindow capture of one current visible window into a bounded PNG. No screen-region grab.",
             "properties": { "window": desktop_window },
             "required": ["window"],
             "additionalProperties": false
@@ -10180,7 +10394,7 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
                 "end_byte": { "type": "integer", "minimum": 0, "maximum": argentum_domain::text_contract::MAX_TEXT_SNAPSHOT_BYTES },
                 "start_line": { "type": "integer", "minimum": 1, "maximum": argentum_domain::text_contract::MAX_TEXT_SNAPSHOT_BYTES + 1 },
                 "line_count": { "type": "integer", "minimum": 1, "maximum": argentum_domain::text_contract::MAX_TEXT_LINE_COUNT },
-                "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Same-revision guard for a continuation/search selection. Omit it for a fresh observation after stale feedback. Nonzero byte continuations require the digest returned by a new byte-zero or line read." }
+                "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
             },
             "required": ["path"],
             "oneOf": [
@@ -10191,16 +10405,15 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
         }),
         "edit_text" => serde_json::json!({
             "type": "object",
-            "description": "Two exclusive shapes share path and expected_sha256 from a CURRENT read: (1) old_text + new_text, optionally newline_mode; (2) start_line + line_count + replacement_lines, with NO old_text, new_text or newline_mode. Omit unused fields, never send null. Prefer one unique observed old_text for a narrow change. A read's edit_selection is its observed window, not an inferred replacement span; narrow the span when needed. line_count counts OLD lines. Decode JSON once and preserve source-language backslashes. Host byte, stale, exact-match, containment and approval checks remain authoritative.",
             "properties": {
                 "path": path,
-                "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Copy the raw-file sha256 from the current read. A syntax example or earlier revision digest is not usable authority." },
-                "old_text": { "type": "string", "minLength": 1, "maxLength": argentum_domain::text_contract::MAX_TARGETED_EDIT_BYTES, "description": "Exactly observed source text, encoded as a normal JSON string. Exact mode matches physical LF/CRLF bytes; explicit preserve mode accepts either separator convention without changing other source bytes." },
-                "new_text": { "type": "string", "maxLength": argentum_domain::text_contract::MAX_TARGETED_EDIT_BYTES, "description": "Decoded replacement source, not a JSON-encoded source document. Source-language escape backslashes must survive the single JSON decoding step. Use normal JSON string escaping exactly once." },
-                "newline_mode": { "type": "string", "enum": ["exact", "preserve"], "default": "exact", "description": "String-edit form ONLY. exact is the existing default; preserve explicitly retains uniform LF/CRLF. Omit this field entirely for structural line edits." },
-                "start_line": { "type": "integer", "minimum": 1, "description": "Structural form ONLY: one-based first OLD line to replace, not a byte offset. Pair with line_count and replacement_lines; omit string-edit fields." },
-                "line_count": { "type": "integer", "minimum": 1, "maximum": argentum_domain::text_contract::MAX_TEXT_LINE_COUNT, "description": "Number of OLD source lines replaced. Copy from a complete read of exactly the intended edit span; replacement may have a different length." },
-                "replacement_lines": { "type": "array", "minItems": 1, "maxItems": argentum_domain::text_contract::MAX_TEXT_LINE_COUNT, "items": { "type": "string", "description": "One decoded source line without physical CR/LF. Preserve literal source backslashes using normal JSON string escaping exactly once." }, "description": "New logical line bodies, without physical CR/LF. Do not change surrounding lines merely because they appeared in read context." }
+                "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "old_text": { "type": "string", "minLength": 1, "maxLength": argentum_domain::text_contract::MAX_TARGETED_EDIT_BYTES },
+                "new_text": { "type": "string", "maxLength": argentum_domain::text_contract::MAX_TARGETED_EDIT_BYTES },
+                "newline_mode": { "type": "string", "enum": ["exact", "preserve"], "default": "exact" },
+                "start_line": { "type": "integer", "minimum": 1 },
+                "line_count": { "type": "integer", "minimum": 1, "maximum": argentum_domain::text_contract::MAX_TEXT_LINE_COUNT },
+                "replacement_lines": { "type": "array", "minItems": 1, "maxItems": argentum_domain::text_contract::MAX_TEXT_LINE_COUNT, "items": { "type": "string" } }
             },
             "required": ["path", "expected_sha256"],
             "oneOf": [
@@ -10216,20 +10429,20 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
         }
         "search_text" => serde_json::json!({
             "type": "object",
-            "description": "Search CONTENT in a workspace file or directory. Literal matching is the default; regex requires mode=regex. Example: {\"path\":\".\",\"query\":\"status\",\"max_results\":20}. Use search_filenames for names. A match's read_selection is for same-revision read_text, not an edit. Bounds are host enforced in UTF-8 bytes.",
+            "description": "Example: {\"path\":\".\",\"query\":\"status\",\"max_results\":20}",
             "properties": {
-                "path": { "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES, "description": "Existing workspace file or directory; use . for the workspace root. Not a glob or regex." },
-                "query": { "type": "string", "minLength": 1, "maxLength": 4096, "description": "Nonempty content query, at most 4096 UTF-8 bytes. Literal punctuation stays literal unless mode=regex is explicit." },
+                "path": { "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES },
+                "query": { "type": "string", "minLength": 1, "maxLength": 4096 },
                 "max_results": { "type": "integer", "minimum": 1, "maximum": 1000 },
-                "mode": { "type": "string", "enum": ["literal", "regex"], "default": "literal", "description": "Optional exact enum. Regex uses bounded Rust-regex syntax; filenames use the separate filename-search tool." },
+                "mode": { "type": "string", "enum": ["literal", "regex"], "default": "literal" },
                 "before_context": { "type": "integer", "minimum": 0, "maximum": 8, "default": 0 },
                 "after_context": { "type": "integer", "minimum": 0, "maximum": 8, "default": 0 }
             }, "required": ["path", "query", "max_results"], "additionalProperties": false
         }),
         "search_filenames" => serde_json::json!({
-            "type": "object", "description": "Search NAMES, not file contents. Simple * and ? wildcards are not regex. Example: {\"path\":\".\",\"pattern\":\"*.rs\",\"max_results\":20}. Use search_text for content. Traversal, ignore, authority and completeness bounds remain unchanged.", "properties": {
-                "path": { "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES, "description": "Existing workspace file or directory; . is the workspace root. Put the filename wildcard in pattern, not path." },
-                "pattern": { "type": "string", "minLength": 1, "maxLength": 512, "description": "Nonempty simple wildcard pattern, at most 512 UTF-8 bytes. No regex or extra flags field." },
+            "type": "object", "description": "Example: {\"path\":\".\",\"pattern\":\"*.rs\",\"max_results\":20}", "properties": {
+                "path": { "type": "string", "maxLength": MAX_MODEL_TOOL_PATH_BYTES },
+                "pattern": { "type": "string", "minLength": 1, "maxLength": 512 },
                 "max_results": { "type": "integer", "minimum": 1, "maximum": 1000 }
             }, "required": ["path", "pattern", "max_results"], "additionalProperties": false
         }),
@@ -10285,36 +10498,44 @@ fn model_tool_definition(descriptor: &ToolDescriptor) -> Option<ModelToolDefinit
                     "restore"
                 ])
             };
+            // Each tool lists only the fields its own operations use.
+            let name = serde_json::json!({ "type": "string", "maxLength": 256 });
+            let fields = if descriptor.id == "git_read" {
+                serde_json::json!({
+                    "kind": { "type": "string", "enum": kinds }, "short": { "type": "boolean" },
+                    "cached": { "type": "boolean" }, "path": path,
+                    "max_count": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                    "revision": name
+                })
+            } else {
+                serde_json::json!({
+                    "kind": { "type": "string", "enum": kinds }, "path": path, "name": name,
+                    "start_point": name, "branch": name, "create_branch": { "type": "boolean" },
+                    "paths": { "type": "array", "maxItems": 128, "items": path },
+                    "message": { "type": "string", "maxLength": 4096 }, "source": name
+                })
+            };
             serde_json::json!({
                 "type": "object", "properties": { "operation": {
-                    "type": "object", "properties": {
-                        "kind": { "type": "string", "enum": kinds }, "short": { "type": "boolean" },
-                        "cached": { "type": "boolean" }, "path": path, "max_count": { "type": "integer", "minimum": 1, "maximum": 1000 },
-                        "revision": { "type": "string", "maxLength": 256 }, "name": { "type": "string", "maxLength": 256 },
-                        "start_point": { "type": "string", "maxLength": 256 }, "branch": { "type": "string", "maxLength": 256 },
-                        "create_branch": { "type": "boolean" }, "paths": { "type": "array", "maxItems": 128, "items": path },
-                        "message": { "type": "string", "maxLength": 4096 }, "source": { "type": "string", "maxLength": 256 }
-                    }, "required": ["kind"], "additionalProperties": false
+                    "type": "object", "properties": fields,
+                    "required": ["kind"], "additionalProperties": false
                 } }, "required": ["operation"], "additionalProperties": false
             })
         }
         "verify" => serde_json::json!({
             "type": "object",
-            "description": "Run only registered fixed verification runners. Use exact runner IDs from the catalog. Do not substitute execute_argv or invent verifier fields.",
             "properties": { "runners": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true,
                 "items": { "type": "string", "pattern": "^(cargo-fmt-check|cargo-check-locked|cargo-test-locked|cargo-clippy-strict|project:[A-Za-z0-9._-]{1,64})$" }
             } }, "required": ["runners"], "additionalProperties": false
         }),
         "start_verification" => serde_json::json!({
             "type": "object",
-            "description": "Start one exact fixed registered verifier. Poll the returned owned job and report typed verification evidence. This is not generic process execution.",
             "properties": { "runner": { "type": "string", "enum": MODEL_ASYNC_VERIFIER_RUNNERS } },
             "required": ["runner"], "additionalProperties": false
         }),
         "check_rust" => serde_json::json!({
             "type":"object",
-            "description":"Optional model-authored public-contract assertions for the exact root Cargo library package. Rust integration tests must use its actual public API, not a reimplementation. Runs in a readonly source copy under Windows LPAC with no network, not shell or generic argv. A reported probe pass is not independent proof of every requirement and does not run the requested project suite. One active batch, six per run, 60 seconds clipped to the parent deadline.",
-            "properties":{"package":{"type":"string","minLength":1,"maxLength":128,"description":"Exact [package].name from Cargo.toml."},"profile":{"type":"string","enum":["debug","release"],"default":"debug"},"test_source":{"type":"string","minLength":1,"maxLength":32768,"description":"Rust integration test source with #[test] assertions derived from public requirements. At most 32 KiB UTF-8 bytes. Do not access private files or change project tests."},"replaces_check_id":{"type":"string","format":"uuid","description":"Only an earlier check from this run whose expectation you explicitly explain correcting; its original failure stays retained."}},
+            "properties":{"package":{"type":"string","minLength":1,"maxLength":128,"description":"[package].name from Cargo.toml."},"profile":{"type":"string","enum":["debug","release"],"default":"debug"},"test_source":{"type":"string","minLength":1,"maxLength":32768,"description":"An integration test with #[test] functions that use the public API, at most 32 KiB."},"replaces_check_id":{"type":"string","format":"uuid","description":"An earlier check of this run that this one corrects."}},
             "required":["package","test_source"],"additionalProperties":false
         }),
         "poll_process_job" => serde_json::json!({
@@ -11935,6 +12156,12 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
             "Task accepted".to_owned(),
             "Prompt accepted and stored for this session.".to_owned(),
         ),
+        AppEvent::QuestionAsked { question, .. } => (
+            TrajectoryKind::Task,
+            TrajectoryState::Attention,
+            "Question for you".to_owned(),
+            question.chars().take(240).collect(),
+        ),
         AppEvent::PlanUpdated { steps, .. } => {
             let complete = steps.iter().filter(|step| step.complete).count();
             let blocked = steps.iter().filter(|step| step.blocked).count();
@@ -12213,6 +12440,10 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::TrajectoryEntryRecorded { .. }
         | AppEvent::TrajectorySnapshotLoaded(_)
         | AppEvent::ChangeSetSnapshotLoaded(_)
+        | AppEvent::SessionChangesLoaded { .. }
+        | AppEvent::CompactionUsageRecorded { .. }
+        | AppEvent::WorkspaceDirectoryLoaded { .. }
+        | AppEvent::WorkspaceFilePreviewLoaded { .. }
         | AppEvent::UnifiedDiffLoaded(_)
         | AppEvent::ChangeRecoverySnapshotLoaded(_)
         | AppEvent::HarnessSnapshotLoaded(_)
@@ -12300,6 +12531,8 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::GoalRequestAccounting { run_id, .. } => Some(*run_id),
         AppEvent::SteeringChanged(status) => Some(status.run_id),
         AppEvent::PlanUpdated { run_id, .. }
+        | AppEvent::QuestionAsked { run_id, .. }
+        | AppEvent::CompactionUsageRecorded { run_id, .. }
         | AppEvent::RunStatusChanged { run_id, .. }
         | AppEvent::AssistantDelta { run_id, .. }
         | AppEvent::AssistantReasoningDelta { run_id, .. }
@@ -12316,6 +12549,9 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         AppEvent::SupplementalCheckRecorded(check) => Some(check.run_id),
         AppEvent::ChangeRecoveryResolved { .. }
         | AppEvent::ChangeSetSnapshotLoaded(_)
+        | AppEvent::SessionChangesLoaded { .. }
+        | AppEvent::WorkspaceDirectoryLoaded { .. }
+        | AppEvent::WorkspaceFilePreviewLoaded { .. }
         | AppEvent::UnifiedDiffLoaded(_)
         | AppEvent::ChangeRecoverySnapshotLoaded(_) => None,
         AppEvent::PlatformAuthorityChanged(_)
@@ -13937,7 +14173,10 @@ mod tests {
         ));
 
         let definitions = runtime.model_tool_definitions().expect("tool definitions");
-        assert_eq!(definitions.len(), 8);
+        assert_eq!(
+            definitions.len(),
+            10 - hidden_by_workspace(runtime.workspace.root(), &["git_read"])
+        );
         assert!(definitions.iter().any(|tool| tool.name == "ui_inspect"));
         assert!(!definitions.iter().any(|tool| tool.name == "ui_update"));
         assert!(definitions.iter().any(|tool| tool.name == "read_text"));
@@ -14445,6 +14684,99 @@ mod tests {
         assert!(runtime.store.events().expect("stored events").iter().any(
             |event| matches!(event, AppEvent::SessionCreated(session) if session.id == created.id)
         ));
+    }
+
+    /// How many of these tools the workspace does not offer, because it is
+    /// not a Git repository or a Cargo project.
+    pub(crate) fn hidden_by_workspace(root: &std::path::Path, tools: &[&str]) -> usize {
+        let needs = WorkspaceNeeds::of(root);
+        tools.iter().filter(|tool| !needs.offers(tool)).count()
+    }
+
+    #[test]
+    fn files_panel_paths_are_relative_with_a_root_dot() {
+        assert_eq!(workspace_panel_path(""), ".");
+        assert_eq!(workspace_panel_path("  ./ "), ".");
+        assert_eq!(workspace_panel_path("./src/"), "src");
+        assert_eq!(workspace_panel_path("src/ui"), "src/ui");
+    }
+
+    #[tokio::test]
+    async fn the_files_panel_lists_folders_first_and_stays_in_the_workspace() {
+        let workspace_dir = tempfile::tempdir().expect("workspace");
+        std::fs::create_dir(workspace_dir.path().join("src")).expect("src");
+        std::fs::create_dir(workspace_dir.path().join(".git")).expect("git");
+        std::fs::write(workspace_dir.path().join("README.md"), "hello").expect("readme");
+        std::fs::write(workspace_dir.path().join("src/main.rs"), "fn main() {}").expect("main");
+        std::fs::write(workspace_dir.path().join("blob.bin"), [0xff, 0xfe, 0x00]).expect("blob");
+        let store = Store::open_in_memory().expect("store");
+        let broker =
+            CapabilityBroker::new(workspace_dir.path(), ApprovalPolicy::default()).expect("broker");
+        let workspace = WorkspaceManager::new(broker);
+        let tools = ToolRegistry::with_builtins(workspace.clone());
+        let runtime =
+            RuntimeService::new(store.clone(), ProviderRegistry::default(), tools, workspace)
+                .expect("runtime");
+        let mut events = runtime.subscribe();
+        runtime
+            .dispatch(AppCommand::ListWorkspaceDirectory {
+                path: String::new(),
+            })
+            .await
+            .expect("list root");
+        let listed = loop {
+            if let AppEvent::WorkspaceDirectoryLoaded { path, entries, .. } =
+                events.recv().await.expect("event")
+            {
+                break (path, entries);
+            }
+        };
+        assert_eq!(listed.0, "");
+        let names = listed.1.iter().map(|e| e.name.as_str()).collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            ["src", "blob.bin", "README.md"],
+            "folders first, no .git"
+        );
+        runtime
+            .dispatch(AppCommand::PreviewWorkspaceFile {
+                path: "src/main.rs".into(),
+            })
+            .await
+            .expect("preview");
+        let preview = loop {
+            if let AppEvent::WorkspaceFilePreviewLoaded { text, .. } =
+                events.recv().await.expect("event")
+            {
+                break text;
+            }
+        };
+        assert_eq!(preview.as_deref(), Some("fn main() {}"));
+        runtime
+            .dispatch(AppCommand::PreviewWorkspaceFile {
+                path: "blob.bin".into(),
+            })
+            .await
+            .expect("binary preview");
+        let reason = loop {
+            if let AppEvent::WorkspaceFilePreviewLoaded { reason, text, .. } =
+                events.recv().await.expect("event")
+            {
+                assert!(text.is_none());
+                break reason;
+            }
+        };
+        assert!(reason.contains("not UTF-8"), "{reason}");
+        assert!(runtime
+            .dispatch(AppCommand::ListWorkspaceDirectory { path: "..".into() })
+            .await
+            .is_err());
+        assert!(runtime
+            .dispatch(AppCommand::PreviewWorkspaceFile {
+                path: "../outside.txt".into()
+            })
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -16215,12 +16547,24 @@ mod tests {
         assert_eq!(requests.len(), 2);
         // Optional supplemental execution is registered but not owner-enabled
         // by this default policy; it must not enter the advertised model set.
+        // The plan and question tools join every run with tools; Git and
+        // Rust job tools need a Git repository or a Cargo project.
         assert_eq!(
             requests[0].tools.len(),
-            runtime.tools.descriptors().len()
+            runtime.tools.descriptors().len() + 2
                 - 1
                 - usize::from(cfg!(feature = "extensions"))
                 - 6 * usize::from(cfg!(feature = "desktop-control"))
+                - hidden_by_workspace(
+                    runtime.workspace.root(),
+                    &[
+                        "git_read",
+                        "git_write",
+                        "start_verification",
+                        "poll_process_job",
+                        "cancel_process_job",
+                    ],
+                )
         );
         assert!(!requests[0]
             .tools

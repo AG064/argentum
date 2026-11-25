@@ -395,6 +395,9 @@ export component MainWindow inherits Window {
     in-out property <[PaletteItemView]> palette_items <=> App.palette_items;
 
     public function focus_composer() { shell.focus-composer(); }
+    // Android Back: close the top layer. False means nothing was open.
+    public function go_back() -> bool { shell.go-back() }
+    public pure function back_layer_open() -> bool { shell.back-layer-open() }
 
     shell := Workbench {
         x: 0px;

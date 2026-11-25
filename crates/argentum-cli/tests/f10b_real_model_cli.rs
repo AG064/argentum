@@ -5984,6 +5984,7 @@ fn assert_model_tool_catalog(request: &Value, verification_profile: bool) {
         .filter_map(|tool| tool["function"]["name"].as_str())
         .collect::<Vec<_>>();
     tools.sort_unstable();
+    strip_status_tools(&mut tools);
     let expected = if verification_profile {
         vec![
             "cancel_process_job",
@@ -6051,6 +6052,7 @@ fn assert_search_tool_catalog(request: &Value) {
         .filter_map(|tool| tool["function"]["name"].as_str())
         .collect::<Vec<_>>();
     tools.sort_unstable();
+    strip_status_tools(&mut tools);
     assert_eq!(tools, vec!["read_text", "search_filenames", "search_text"]);
     let search = request["tools"]
         .as_array()
@@ -6072,6 +6074,7 @@ fn assert_regex_repair_tool_catalog(request: &Value) {
         .filter_map(|tool| tool["function"]["name"].as_str())
         .collect::<Vec<_>>();
     tools.sort_unstable();
+    strip_status_tools(&mut tools);
     assert_eq!(
         tools,
         vec![
@@ -6850,4 +6853,17 @@ fn collect_files(root: &Path, current: &Path, files: &mut Vec<String>) {
             );
         }
     }
+}
+
+/// Every run with tools also gets the plan and question tools. The catalog
+/// checks here are about the coding tools, so those two are checked and set
+/// aside.
+fn strip_status_tools(tools: &mut Vec<&str>) {
+    if tools.is_empty() {
+        return;
+    }
+    for status_tool in ["ask_user", "update_plan"] {
+        assert!(tools.contains(&status_tool), "{status_tool} offered");
+    }
+    tools.retain(|tool| !matches!(*tool, "ask_user" | "update_plan"));
 }

@@ -709,8 +709,54 @@ impl RuntimeService {
         result
     }
 
+    /// Compacts, then records the tokens the summary request reported, so
+    /// usage totals and run details count compaction too.
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn compact_projection(
+        &self,
+        session: SessionId,
+        operation: RunId,
+        exclude_run: Option<RunId>,
+        profile: &ProviderProfile,
+        budget: &ModelBudget,
+        provider: Arc<dyn ModelProvider>,
+        base: &ModelRequest,
+        instruction_run: &mut instructions::InstructionRun,
+        cancellation: &CancellationToken,
+        host_fallback: bool,
+    ) -> Result<CompactionResult, RuntimeError> {
+        let result = Box::pin(self.compact_projection_once(
+            session,
+            operation,
+            exclude_run,
+            profile,
+            budget,
+            provider,
+            base,
+            instruction_run,
+            cancellation,
+            host_fallback,
+        ))
+        .await?;
+        if let (Some(usage), Some(accounting)) = (
+            result.observed_usage.as_ref(),
+            result.summarizer_accounting.as_ref(),
+        ) {
+            self.emit_for_run(
+                AppEvent::CompactionUsageRecorded {
+                    session_id: session,
+                    run_id: operation,
+                    profile_id: accounting.profile_id.clone(),
+                    usage: usage.clone(),
+                },
+                operation,
+            )?;
+        }
+        Ok(result)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn compact_projection_once(
         &self,
         session: SessionId,
         operation: RunId,

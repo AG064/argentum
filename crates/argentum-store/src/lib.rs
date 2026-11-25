@@ -48,6 +48,7 @@ mod extensions;
 mod grant_lookup;
 mod history;
 pub use grant_lookup::MAX_AUTHORIZATION_GRANTS;
+mod message_search;
 mod review;
 mod run_diagnostics;
 mod run_outcomes;
@@ -1429,7 +1430,9 @@ impl Store {
             .map(|value| decode_session_cursor(value, project_id, query, filter, limit))
             .transpose()?;
         let mut sql = String::from(
-            "SELECT id, title, created_at, last_activity_at, pinned_at, archived_at
+            "SELECT id, title, created_at, last_activity_at, pinned_at, archived_at,
+                    (SELECT COUNT(DISTINCT f.relative_path) FROM file_changes f
+                     WHERE f.session_id = sessions.id)
              FROM sessions WHERE project_id = ?1",
         );
         let mut values = vec![Value::Text(project_id.to_string())];
@@ -1439,11 +1442,20 @@ impl Store {
             SessionArchiveFilter::All => {}
         }
         let escaped_query = escape_like_prefix(query);
+        let message_match = message_search::match_expression(query);
         if !query.is_empty() {
-            sql.push_str(" AND (title LIKE ? ESCAPE '\\' COLLATE NOCASE OR id LIKE ? ESCAPE '\\')");
+            sql.push_str(" AND (title LIKE ? ESCAPE '\\' COLLATE NOCASE OR id LIKE ? ESCAPE '\\'");
             let pattern = format!("{escaped_query}%");
             values.push(Value::Text(pattern.clone()));
             values.push(Value::Text(pattern));
+            if let Some(expression) = message_match.as_ref() {
+                sql.push_str(" OR id IN (");
+                sql.push_str(message_search::MATCHING_SESSIONS_SQL);
+                sql.push(')');
+                values.push(Value::Text(expression.clone()));
+                values.push(Value::Text(project_id.to_string()));
+            }
+            sql.push(')');
         }
         if let Some(cursor) = cursor {
             sql.push_str(
@@ -1476,11 +1488,13 @@ impl Store {
                 row.get::<_, i64>(3)?,
                 row.get::<_, Option<i64>>(4)?,
                 row.get::<_, Option<i64>>(5)?,
+                row.get::<_, i64>(6)?,
             ))
         })?;
         let mut loaded = Vec::with_capacity(limit + 1);
         for row in rows {
-            let (id, title, created_at, last_activity_at, pinned_at, archived_at) = row?;
+            let (id, title, created_at, last_activity_at, pinned_at, archived_at, files_changed) =
+                row?;
             let id = parse_uuid(&id, "session id")?;
             loaded.push(SessionListRow {
                 id,
@@ -1490,10 +1504,23 @@ impl Store {
                 pinned: pinned_at.is_some(),
                 archived: archived_at.is_some(),
                 selected: active_session_id == Some(id),
+                files_changed: u32::try_from(files_changed).unwrap_or(u32::MAX),
+                matched_text: None,
             });
         }
         let has_more = loaded.len() > limit;
         loaded.truncate(limit);
+        if let Some(expression) = message_match.as_ref() {
+            let lowered = query.to_lowercase();
+            for row in &mut loaded {
+                let title_matched = row.title.to_lowercase().starts_with(&lowered)
+                    || row.id.to_string().starts_with(query);
+                if !title_matched {
+                    row.matched_text =
+                        message_search::snippet(&connection, expression, project_id, row.id)?;
+                }
+            }
+        }
         let next_cursor = has_more
             .then(|| {
                 loaded
@@ -2467,6 +2494,7 @@ impl Store {
                     input_tokens: 0,
                     output_tokens: 0,
                     total_tokens: 0,
+                    compaction_tokens: 0,
                 });
             let total_tokens = if usage.turn_total.is_some() {
                 let consumed = usage.consumed();
@@ -2479,6 +2507,42 @@ impl Store {
             entry.input_tokens = entry.input_tokens.saturating_add(usage.input_tokens);
             entry.output_tokens = entry.output_tokens.saturating_add(usage.output_tokens);
             entry.total_tokens = entry.total_tokens.saturating_add(total_tokens);
+        }
+        drop(rows);
+        drop(statement);
+        // Compaction asks the model for a summary outside any reply, so its
+        // reported usage is read from the compaction records.
+        let mut statement = connection.prepare(
+            "SELECT payload FROM event_log
+             WHERE project_id = ?1 AND event_type = 'compaction_usage_recorded'",
+        )?;
+        let mut events = statement.query(params![project_id.to_string()])?;
+        while let Some(row) = events.next()? {
+            let payload: String = row.get(0)?;
+            let Ok(AppEvent::CompactionUsageRecorded {
+                profile_id, usage, ..
+            }) = serde_json::from_str::<AppEvent>(&payload)
+            else {
+                continue;
+            };
+            let entry = totals
+                .entry(profile_id.clone())
+                .or_insert_with(|| ProviderUsageRow {
+                    profile_id,
+                    turns: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    total_tokens: 0,
+                    compaction_tokens: 0,
+                });
+            entry.input_tokens = entry
+                .input_tokens
+                .saturating_add(usage.input_tokens.unwrap_or(0));
+            entry.output_tokens = entry
+                .output_tokens
+                .saturating_add(usage.output_tokens.unwrap_or(0));
+            entry.total_tokens = entry.total_tokens.saturating_add(usage.total_tokens);
+            entry.compaction_tokens = entry.compaction_tokens.saturating_add(usage.total_tokens);
         }
         let mut rows = totals.into_values().collect::<Vec<_>>();
         rows.sort_by_key(|row| std::cmp::Reverse(row.total_tokens));
@@ -3397,6 +3461,48 @@ impl Store {
         Ok((record, restore_result))
     }
 
+    /// The newest `limit` file changes of a session across all of its runs,
+    /// returned oldest first, and whether older ones were left out.
+    pub fn session_file_changes(
+        &self,
+        project_id: ProjectId,
+        session_id: SessionId,
+        limit: usize,
+    ) -> Result<(Vec<FileChangeRecord>, bool), StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT payload FROM file_changes
+             WHERE project_id = ?1 AND session_id = ?2
+             ORDER BY created_at DESC, rowid DESC
+             LIMIT ?3",
+        )?;
+        let rows = statement.query_map(
+            params![
+                project_id.to_string(),
+                session_id.to_string(),
+                (limit as i64).saturating_add(1)
+            ],
+            |row| row.get::<_, String>(0),
+        )?;
+        let mut files = Vec::new();
+        for row in rows {
+            let record = serde_json::from_str::<FileChangeRecord>(&row?)?;
+            if record.project_id != project_id || record.session_id != session_id {
+                return Err(StoreError::InvalidRecord(
+                    "stored file change has inconsistent scope".into(),
+                ));
+            }
+            files.push(record);
+        }
+        let truncated = files.len() > limit;
+        files.truncate(limit);
+        files.reverse();
+        Ok((files, truncated))
+    }
+
     pub fn change_set(
         &self,
         project_id: ProjectId,
@@ -3885,6 +3991,8 @@ impl Store {
                  ON change_sets(project_id, run_id);
              CREATE INDEX IF NOT EXISTS idx_file_changes_set_revision
                  ON file_changes(change_set_id, revision);
+             CREATE INDEX IF NOT EXISTS idx_file_changes_session_path
+                 ON file_changes(session_id, relative_path);
              CREATE INDEX IF NOT EXISTS idx_change_operations_recovery
                  ON change_operations(project_id, state, created_at);
              CREATE INDEX IF NOT EXISTS idx_approval_grants_project_scope
@@ -4020,6 +4128,7 @@ impl Store {
               ",
         )?;
         schema.commit()?;
+        message_search::migrate(&connection)?;
         // The legacy bounded-counter rebuild needs foreign keys disabled before
         // its own transaction, so it stays outside the schema transaction.
         working_context::upgrade_run_limit(&connection)?;
@@ -5404,7 +5513,10 @@ fn load_sessions(
     project_id: ProjectId,
 ) -> Result<Vec<SessionSummary>, StoreError> {
     let mut statement = connection.prepare(
-        "SELECT payload, pinned_at, archived_at FROM sessions
+        "SELECT payload, pinned_at, archived_at,
+                (SELECT COUNT(DISTINCT f.relative_path) FROM file_changes f
+                 WHERE f.session_id = sessions.id)
+         FROM sessions
          WHERE project_id = ?1
          ORDER BY created_at ASC, id ASC",
     )?;
@@ -5413,15 +5525,17 @@ fn load_sessions(
             row.get::<_, String>(0)?,
             row.get::<_, Option<i64>>(1)?,
             row.get::<_, Option<i64>>(2)?,
+            row.get::<_, i64>(3)?,
         ))
     })?;
     let mut sessions = Vec::new();
     for row in rows {
-        let (payload, pinned_at, archived_at) = row?;
+        let (payload, pinned_at, archived_at, files_changed) = row?;
         let session = serde_json::from_str::<Session>(&payload)?;
         let mut summary = SessionSummary::from(&session);
         summary.pinned = pinned_at.is_some();
         summary.archived = archived_at.is_some();
+        summary.files_changed = u32::try_from(files_changed).unwrap_or(u32::MAX);
         sessions.push(summary);
     }
     Ok(sessions)
@@ -5550,9 +5664,11 @@ fn load_session_row_on(
     session_id: SessionId,
     active_session_id: Option<SessionId>,
 ) -> Result<SessionListRow, StoreError> {
-    let (title, created_at, last_activity_at, pinned_at, archived_at) = connection
+    let (title, created_at, last_activity_at, pinned_at, archived_at, files_changed) = connection
         .query_row(
-            "SELECT title, created_at, last_activity_at, pinned_at, archived_at
+            "SELECT title, created_at, last_activity_at, pinned_at, archived_at,
+                    (SELECT COUNT(DISTINCT f.relative_path) FROM file_changes f
+                     WHERE f.session_id = sessions.id)
              FROM sessions WHERE id = ?1 AND project_id = ?2",
             params![session_id.to_string(), project_id.to_string()],
             |row| {
@@ -5562,6 +5678,7 @@ fn load_session_row_on(
                     row.get::<_, i64>(2)?,
                     row.get::<_, Option<i64>>(3)?,
                     row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, i64>(5)?,
                 ))
             },
         )
@@ -5577,6 +5694,8 @@ fn load_session_row_on(
         pinned: pinned_at.is_some(),
         archived: archived_at.is_some(),
         selected: active_session_id == Some(session_id),
+        files_changed: u32::try_from(files_changed).unwrap_or(u32::MAX),
+        matched_text: None,
     })
 }
 
@@ -5907,6 +6026,157 @@ mod tests {
     }
 
     #[test]
+    fn a_search_finds_a_session_by_a_sentence_in_its_messages() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let database = workspace.path().join("store.db");
+        let store = Store::open(&database).expect("store");
+        let resolution = store
+            .resolve_workspace(workspace.path())
+            .expect("resolution");
+        let project_id = resolution.snapshot.project.id;
+        let quiet = store.create_session(project_id, "Quiet").expect("quiet");
+        let talking = store
+            .create_session(project_id, "Talking")
+            .expect("talking");
+        let message = |session_id, text: &str| ConversationMessage {
+            id: RunId::new_v4(),
+            project_id,
+            session_id,
+            run_id: RunId::new_v4(),
+            role: ConversationRole::Assistant,
+            text: text.into(),
+            reasoning: String::new(),
+            usage: None,
+            profile_id: String::new(),
+            model: String::new(),
+            status: ConversationMessageStatus::Complete,
+            created_at: OffsetDateTime::now_utc(),
+        };
+        store
+            .append_conversation_message(&message(quiet.id, "Nothing to see."))
+            .expect("quiet message");
+        store
+            .append_conversation_message(&message(
+                talking.id,
+                "The compaction budget was raised to forty thousand tokens.",
+            ))
+            .expect("talking message");
+        let found = store
+            .list_sessions(
+                project_id,
+                "compaction budg",
+                SessionArchiveFilter::Active,
+                20,
+                None,
+            )
+            .expect("search");
+        assert_eq!(found.rows.len(), 1, "{found:?}");
+        assert_eq!(found.rows[0].id, talking.id);
+        let snippet = found.rows[0].matched_text.as_deref().expect("snippet");
+        assert!(snippet.contains("compaction budget"), "{snippet}");
+        // A title match shows no snippet, and syntax in the query is literal.
+        let titled = store
+            .list_sessions(project_id, "Quiet", SessionArchiveFilter::Active, 20, None)
+            .expect("title search");
+        assert_eq!(titled.rows.len(), 1);
+        assert_eq!(titled.rows[0].matched_text, None);
+        assert!(store
+            .list_sessions(
+                project_id,
+                "\"NEAR( OR",
+                SessionArchiveFilter::Active,
+                20,
+                None
+            )
+            .expect("syntax is literal")
+            .rows
+            .is_empty());
+        drop(store);
+        // The index survives a restart, and a deleted session leaves it.
+        let store = Store::open(&database).expect("reopen");
+        assert_eq!(
+            store
+                .list_sessions(
+                    project_id,
+                    "forty thousand",
+                    SessionArchiveFilter::Active,
+                    20,
+                    None
+                )
+                .expect("search after restart")
+                .rows
+                .len(),
+            1
+        );
+        let connection = store.connection.lock().expect("connection");
+        connection
+            .execute(
+                "DELETE FROM sessions WHERE id = ?1",
+                [talking.id.to_string()],
+            )
+            .expect("delete session");
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM message_search WHERE message_search MATCH 'compaction'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn messages_written_before_the_index_existed_are_indexed_once() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let database = workspace.path().join("store.db");
+        let store = Store::open(&database).expect("store");
+        let project_id = store
+            .resolve_workspace(workspace.path())
+            .expect("resolution")
+            .snapshot
+            .project
+            .id;
+        let session = store.create_session(project_id, "Old").expect("session");
+        {
+            let connection = store.connection.lock().expect("connection");
+            connection
+                .execute_batch(
+                    "DROP TRIGGER message_search_insert;
+                     DROP TABLE message_search;",
+                )
+                .expect("drop index");
+        }
+        store
+            .append_conversation_message(&ConversationMessage {
+                id: RunId::new_v4(),
+                project_id,
+                session_id: session.id,
+                run_id: RunId::new_v4(),
+                role: ConversationRole::User,
+                text: "An unindexed request about lighthouses.".into(),
+                reasoning: String::new(),
+                usage: None,
+                profile_id: String::new(),
+                model: String::new(),
+                status: ConversationMessageStatus::Complete,
+                created_at: OffsetDateTime::now_utc(),
+            })
+            .expect("message");
+        drop(store);
+        let store = Store::open(&database).expect("reopen");
+        let found = store
+            .list_sessions(
+                project_id,
+                "lighthouses",
+                SessionArchiveFilter::Active,
+                20,
+                None,
+            )
+            .expect("search");
+        assert_eq!(found.rows.len(), 1);
+    }
+
+    #[test]
     fn session_listing_and_organization_are_bounded_project_scoped_and_restart_safe() {
         let workspace = tempfile::tempdir().expect("workspace");
         let store = Store::open_in_memory().expect("store");
@@ -6063,7 +6333,9 @@ mod tests {
                 .expect("store identity");
             (tables, indexes, identity)
         };
-        assert_eq!((tables, indexes), (33, 29));
+        // The message search index is one FTS5 table with four shadow tables, and
+        // file changes have an index by session.
+        assert_eq!((tables, indexes), (38, 30));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection
@@ -6229,6 +6501,82 @@ mod tests {
                 .expect("preserved command identity"),
             "interrupted"
         );
+    }
+
+    #[test]
+    fn a_session_lists_every_file_its_runs_changed() {
+        let directory = tempfile::tempdir().expect("directory");
+        let workspace = directory.path().join("workspace");
+        std::fs::create_dir(&workspace).expect("workspace");
+        let store = Store::open(directory.path().join("argentum.db")).expect("store");
+        let resolution = store.resolve_workspace(&workspace).expect("resolution");
+        let project_id = resolution.snapshot.project.id;
+        let session_id = resolution.snapshot.active_session_id.expect("session");
+        let mut recorded = Vec::new();
+        for (path, before) in [
+            ("note.txt", b"one" as &[u8]),
+            ("other.txt", b"two"),
+            ("note.txt", b"three"),
+        ] {
+            let run_id = RunId::new_v4();
+            let mut operation = test_change_operation(
+                &resolution.workspace_key,
+                project_id,
+                session_id,
+                run_id,
+                before,
+                b"after",
+            );
+            operation.relative_path = path.into();
+            store
+                .prepare_change_operation(&operation)
+                .expect("prepared");
+            store
+                .mark_change_operation_applied(operation.operation_id)
+                .expect("applied");
+            recorded.push(
+                store
+                    .finalize_change_operation(operation.operation_id)
+                    .expect("finalized"),
+            );
+        }
+        let (files, truncated) = store
+            .session_file_changes(project_id, session_id, 10)
+            .expect("session changes");
+        assert!(!truncated);
+        assert_eq!(files, recorded, "every run's changes, oldest first");
+        let (newest, truncated) = store
+            .session_file_changes(project_id, session_id, 2)
+            .expect("bounded changes");
+        assert!(truncated);
+        assert_eq!(newest, recorded[1..].to_vec());
+        // Two distinct paths, though one changed twice.
+        let row = store
+            .list_sessions(project_id, "", SessionArchiveFilter::All, 20, None)
+            .expect("list")
+            .rows
+            .into_iter()
+            .find(|row| row.id == session_id)
+            .expect("row");
+        assert_eq!(row.files_changed, 2);
+        assert_eq!(
+            store
+                .resolve_workspace(&workspace)
+                .expect("resolution")
+                .snapshot
+                .sessions
+                .iter()
+                .find(|session| session.id == session_id)
+                .expect("summary")
+                .files_changed,
+            2
+        );
+        let other = store.create_session(project_id, "Other").expect("other");
+        assert!(store
+            .session_file_changes(project_id, other.id, 10)
+            .expect("empty")
+            .0
+            .is_empty());
     }
 
     #[test]

@@ -511,6 +511,9 @@ export component Field inherits VerticalLayout {
     in property <string> error;
     in property <bool> enabled: true;
     in property <bool> mono: false;
+    // Addresses, model names, paths and ids: the phone keyboard must not
+    // capitalize, correct or complete them. Monospaced fields are verbatim.
+    in property <bool> verbatim: mono;
     in-out property <string> value <=> input.text;
     callback edited(string);
     callback accepted(string);
@@ -547,6 +550,9 @@ export component Field inherits VerticalLayout {
         }
         input := TextInput {
             input-type: root.secret ? InputType.password : root.numeric ? InputType.number : InputType.text;
+            input-method-hints: root.verbatim
+                ? { capitalization: CapitalizationMode.none, auto-correct: false, auto-complete: false }
+                : { capitalization: CapitalizationMode.sentences, auto-correct: true, auto-complete: true };
             x: 10px;
             width: parent.width - 20px;
             height: parent.height;
@@ -592,8 +598,13 @@ export component Scroller inherits Rectangle {
     // streams; waiting for the drag to end let new text pull the view back.
     private property <length> placed: 0px;
     private property <length> seen: fl.content-y;
+    // A move toward the top always stops following, however small: a fast
+    // swipe covers only a few pixels before its next frame, and new streamed
+    // text must not pull it back to the end. A move toward the end follows
+    // again once it reaches the end.
     changed seen => {
-        if abs(root.seen - root.placed) > 0.5px { root.tailing = root.at-tail; }
+        if root.seen > root.placed + 0.5px { root.tailing = false; }
+        else if root.seen < root.placed - 0.5px { root.tailing = root.at-tail; }
     }
 
     // Follows new content while at the end. Otherwise keeps the view inside the

@@ -16,6 +16,7 @@ mod authority;
 pub mod context_budget;
 pub mod context_summary;
 pub mod desktop;
+pub mod environment;
 pub mod extensions;
 pub mod final_result;
 pub mod goal_accounting;
@@ -1076,6 +1077,9 @@ pub struct SessionSummary {
     pub pinned: bool,
     #[serde(default)]
     pub archived: bool,
+    /// Distinct files this session changed, across all of its runs.
+    #[serde(default)]
+    pub files_changed: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1096,6 +1100,13 @@ pub struct SessionListRow {
     pub pinned: bool,
     pub archived: bool,
     pub selected: bool,
+    /// Distinct files this session changed, across all of its runs.
+    #[serde(default)]
+    pub files_changed: u32,
+    /// A short piece of a message that matched the search, when the session
+    /// matched by its messages rather than by its title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1337,6 +1348,7 @@ impl From<&Session> for SessionSummary {
             updated_at: session.updated_at,
             pinned: false,
             archived: false,
+            files_changed: 0,
         }
     }
 }
@@ -2230,6 +2242,16 @@ pub struct FileChangeRecord {
     pub created_at: OffsetDateTime,
 }
 
+/// One entry of a workspace folder, for the Files panel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceEntry {
+    /// Relative to the workspace root, with forward slashes.
+    pub path: String,
+    pub name: String,
+    pub directory: bool,
+    pub size_bytes: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangeSetSnapshot {
     pub id: ChangeSetId,
@@ -2802,6 +2824,19 @@ pub enum AppCommand {
     LoadChangeSet {
         run_id: RunId,
     },
+    /// Every file change of a session, across all of its runs.
+    LoadSessionChanges {
+        session_id: SessionId,
+    },
+    /// One folder of the workspace, for the Files panel. `path` is relative
+    /// to the workspace root; "" or "." is the root.
+    ListWorkspaceDirectory {
+        path: String,
+    },
+    /// The start of one text file of the workspace, for the Files panel.
+    PreviewWorkspaceFile {
+        path: String,
+    },
     LoadUnifiedDiff {
         file_change_id: FileChangeId,
     },
@@ -2906,6 +2941,14 @@ pub enum AppEvent {
         session_id: SessionId,
         operation_id: RunId,
         result: Box<context_summary::CompactionResult>,
+    },
+    /// The tokens one compaction's summary request reported, kept so usage
+    /// totals and run details include compaction.
+    CompactionUsageRecorded {
+        session_id: SessionId,
+        run_id: RunId,
+        profile_id: String,
+        usage: goal_accounting::ObservedUsage,
     },
     ContextCompactionProgress {
         session_id: SessionId,
@@ -3030,6 +3073,14 @@ pub enum AppEvent {
         run_id: RunId,
         steps: Vec<PlanStep>,
     },
+    /// The agent asked the owner a question, and the run ends to wait for
+    /// the answer, which arrives as the owner's next message.
+    QuestionAsked {
+        run_id: RunId,
+        question: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        choices: Vec<String>,
+    },
     RunStatusChanged {
         run_id: RunId,
         lifecycle: TaskLifecycle,
@@ -3080,6 +3131,27 @@ pub enum AppEvent {
     },
     FileChangeRecorded(FileChangeRecord),
     ChangeSetSnapshotLoaded(ChangeSetSnapshot),
+    /// One folder of the workspace: folders first, then files, by name.
+    WorkspaceDirectoryLoaded {
+        path: String,
+        entries: Vec<WorkspaceEntry>,
+        truncated: bool,
+    },
+    /// A file's text, or why it cannot be shown.
+    WorkspaceFilePreviewLoaded {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    /// Every file change of a session, oldest first. `truncated` is true when
+    /// older changes were left out to stay within the limit.
+    SessionChangesLoaded {
+        session_id: SessionId,
+        files: Vec<FileChangeRecord>,
+        truncated: bool,
+    },
     UnifiedDiffLoaded(UnifiedDiffSnapshot),
     RestoreCompleted(RestoreResult),
     ChangeRecoverySnapshotLoaded(ChangeRecoverySnapshot),
@@ -3199,6 +3271,7 @@ impl AppEvent {
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::ContextCompactionCompleted { .. } => "context_compaction_completed",
+            Self::CompactionUsageRecorded { .. } => "compaction_usage_recorded",
             Self::SummaryTransportObserved { .. } => "summary_transport_observed",
             Self::ContextCompactionProgress { .. } => "context_compaction_progress",
             Self::GoalRequestAccounting { .. } => "goal_request_accounting",
@@ -3230,6 +3303,7 @@ impl AppEvent {
             Self::AnswerContractAccepted { .. } => "answer_contract_accepted",
             Self::AnswerContractEvaluated { .. } => "answer_contract_evaluated",
             Self::PlanUpdated { .. } => "plan_updated",
+            Self::QuestionAsked { .. } => "question_asked",
             Self::RunStatusChanged { .. } => "run_status_changed",
             Self::AssistantDelta { .. } => "assistant_delta",
             Self::AssistantReasoningDelta { .. } => "assistant_reasoning_delta",
@@ -3253,6 +3327,9 @@ impl AppEvent {
             Self::ToolActivity { .. } => "tool_activity",
             Self::FileChangeRecorded(_) => "file_change_recorded",
             Self::ChangeSetSnapshotLoaded(_) => "change_set_snapshot_loaded",
+            Self::SessionChangesLoaded { .. } => "session_changes_loaded",
+            Self::WorkspaceDirectoryLoaded { .. } => "workspace_directory_loaded",
+            Self::WorkspaceFilePreviewLoaded { .. } => "workspace_file_preview_loaded",
             Self::UnifiedDiffLoaded(_) => "unified_diff_loaded",
             Self::RestoreCompleted(_) => "restore_completed",
             Self::ChangeRecoverySnapshotLoaded(_) => "change_recovery_snapshot_loaded",

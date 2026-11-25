@@ -46,6 +46,15 @@ export struct FileChangeView {
     restore-reason: string,
 }
 
+// One entry of a workspace folder in the Files panel.
+export struct WorkspaceEntryView {
+    path: string,
+    name: string,
+    directory: bool,
+    // The size for a file, empty for a folder.
+    detail: string,
+}
+
 export struct TrajectoryItemView {
     sequence: string,
     title: string,
@@ -128,6 +137,9 @@ export struct SessionItemView {
     active: bool,
     pinned: bool,
     archived: bool,
+    // "working", "waiting" (for an approval or an answer), "unread", or "".
+    status: string,
+    files_changed: int,
 }
 
 export struct RecordLineView {
@@ -492,8 +504,19 @@ export struct ProviderUsageView {
     input: string,
     output: string,
     total: string,
+    // "1.2k for compaction" when compaction used any, else empty.
+    compaction: string,
     share: float,
     selected: bool,
+}
+
+// One interface change that can still be undone, newest first.
+export struct UiChangeView {
+    summary: string,
+    // "You" or "The agent".
+    by: string,
+    // The patch that undoes it, as JSON. Not shown.
+    token: string,
 }
 
 export struct ThemePresetView {

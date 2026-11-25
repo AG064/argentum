@@ -4,13 +4,84 @@
 // Only the conversation, the provider chooser, and approvals are always present.
 import { Theme, TrustTheme } from "theme.slint";
 import { App, Mods } from "state.slint";
-import { Badge, Btn, Chip, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, ResizeHandle, Row, Scrim, Scroller, SectionLabel, Sheet, Tooltip } from "kit.slint";
+import { Badge, Btn, Chip, Divider, EmptyState, Field, Focus, Icon, IconBtn, Label, LiveDot, ResizeHandle, Ripple, Row, Scrim, Scroller, SectionLabel, Sheet, Tooltip } from "kit.slint";
+import { SessionItemView } from "../view-models.slint";
 import { BrandMark } from "../components/brand.slint";
 import { Composer, Conversation, EmptyHero } from "chat.slint";
 import { FirstRun, ProviderMenu } from "provider.slint";
-import { ActivityPanel, BrowserPanel, ChangesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel, RequestsPanel } from "panels.slint";
+import { ActivityPanel, BrowserPanel, ChangesPanel, FilesPanel, GitPanel, GoalCard, PlanPanel, TrajectoryPanel, UsagePanel, RequestsPanel } from "panels.slint";
 import { Settings } from "settings.slint";
 import { GoalPanel, SessionActionsSheet, VerificationReviewSheet } from "ops.slint";
+
+// One session in the list. The title ends before the menu button, and a mark
+// says whether the session is working, waiting for you, or has an unseen
+// reply. The number of files its runs changed sits beside the title.
+component SessionRow inherits Rectangle {
+    in property <SessionItemView> session;
+    in property <bool> searching: false;
+    // Room kept free at the right for the row's menu button.
+    in property <length> trailing: 32px;
+    callback clicked();
+    private property <string> status-label: session.status == "working" ? "Working"
+        : session.status == "waiting" ? "Waiting for you"
+        : session.status == "unread" ? "Unread" : "";
+    private property <bool> show-detail: root.searching && session.detail != "";
+    min-height: show-detail ? Theme.row + 14px : Theme.row;
+    border-radius: Theme.r-sm;
+    background: touch.pressed ? Theme.pressed : session.active || touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.quick; }
+    accessible-role: button;
+    accessible-label: session.title
+        + (root.status-label != "" ? ", " + root.status-label : "")
+        + (session.files_changed > 0 ? ", " + session.files_changed + (session.files_changed == 1 ? " file changed" : " files changed") : "");
+    accessible-item-selected: session.active;
+    accessible-action-default => { root.clicked(); }
+    ink := Ripple { border-radius: root.border-radius; }
+    HorizontalLayout {
+        padding-left: Theme.sp10;
+        padding-right: root.trailing;
+        spacing: Theme.sp6;
+        Rectangle {
+            width: 8px;
+            if session.status == "working": LiveDot { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; size: 7px; tint: Theme.accent; }
+            if session.status == "waiting": Rectangle { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; width: 7px; height: 7px; border-radius: 3.5px; background: Theme.warn; }
+            if session.status == "unread": Rectangle { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; width: 6px; height: 6px; border-radius: 3px; background: Theme.accent; }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.sp1;
+            horizontal-stretch: 1;
+            Text {
+                text: (session.pinned ? "Pinned: " : "") + session.title;
+                color: session.active || session.status == "unread" ? Theme.text : Theme.text-2;
+                font-size: Theme.fs-sm + 0.5px;
+                font-weight: session.active || session.status == "unread" ? Theme.w-medium : Theme.w-normal;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if root.show-detail: Text {
+                text: session.detail;
+                color: Theme.text-3;
+                font-size: Theme.fs-xs;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+        if session.files_changed > 0: Text {
+            text: session.files_changed;
+            color: Theme.text-3;
+            font-size: Theme.fs-xs;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+    Focus { activated => { root.clicked(); } }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        pointer-event(event) => { ink.react(event, self.mouse-x, self.mouse-y); }
+    }
+}
 
 component Sidebar inherits Rectangle {
     in property <bool> overlay: false;
@@ -110,10 +181,10 @@ component Sidebar inherits Rectangle {
                 spacing: Theme.sp1;
                 for session in App.session_items: Rectangle {
                     height: session-row.min-height;
-                    session-row := Row {
+                    session-row := SessionRow {
                         width: parent.width;
-                        title: (session.pinned ? "Pinned: " : "") + session.title;
-                        selected: session.active;
+                        session: session;
+                        searching: App.session_query != "";
                         clicked => {
                             if !session.active { App.select_session(session.id); }
                             root.close-if-overlay();
@@ -224,6 +295,7 @@ component SidePanel inherits Rectangle {
             vertical-stretch: 1;
             if App.active_inspector == "goal": GoalPanel { }
             if App.active_inspector == "changes": ChangesPanel { }
+            if App.active_inspector == "files": FilesPanel { }
             if App.active_inspector == "git": GitPanel { }
             if App.active_inspector == "browser": BrowserPanel { }
             if App.active_inspector == "usage": UsagePanel { }
@@ -546,6 +618,39 @@ export component Workbench inherits Rectangle {
         root.drawer-pos = open && root.narrow ? 1 : 0;
     }
 
+    // True while Back has something to close before it may leave the app.
+    // An approval counts: it must be answered, so Back never skips it.
+    public pure function back-layer-open() -> bool {
+        App.approval_open || App.about_open || App.verification_review_open
+            || App.run_diagnostics_open || App.diagnostics_open
+            || App.session_rename_open || App.session_fork_open || App.session_actions_open
+            || App.context_menu_open || App.model_menu_open || App.provider_menu_open
+            || App.command_palette_open || App.settings_open || App.drawer_open
+            || (root.panel-wanted && !root.wide-enough-for-panel)
+    }
+
+    // Closes the top layer, menus first, then sheets, settings, the drawer
+    // and a panel that covers the chat. Returns false when nothing was open,
+    // so Back may leave the app.
+    public function go-back() -> bool {
+        if App.approval_open { return true; }
+        if App.about_open { App.about_open = false; return true; }
+        if App.verification_review_open { App.verification_review_open = false; return true; }
+        if App.run_diagnostics_open { App.run_diagnostics_open = false; return true; }
+        if App.diagnostics_open { App.diagnostics_open = false; return true; }
+        if App.session_rename_open { App.session_rename_open = false; return true; }
+        if App.session_fork_open { App.session_fork_open = false; return true; }
+        if App.session_actions_open { App.session_actions_open = false; return true; }
+        if App.context_menu_open { App.context_menu_open = false; return true; }
+        if App.model_menu_open { App.model_menu_open = false; return true; }
+        if App.provider_menu_open { App.provider_menu_open = false; return true; }
+        if App.command_palette_open { App.command_palette_open = false; return true; }
+        if App.settings_open { App.settings_open = false; return true; }
+        if App.drawer_open { App.drawer_open = false; return true; }
+        if root.panel-wanted && !root.wide-enough-for-panel { App.set_panel_visible(false); return true; }
+        false
+    }
+
     function toggle-sidebar() {
         if root.narrow { App.drawer_open = !App.drawer_open; } else { App.sidebar_open = !App.sidebar_open; }
     }
@@ -560,13 +665,7 @@ export component Workbench inherits Rectangle {
             // Android's Back button works like Escape: it closes what is on top,
             // and leaves the app only when nothing is open.
             if event.text == Key.Escape || event.text == Key.Back {
-                if App.approval_open { return accept; }
-                if App.settings_open { App.settings_open = false; return accept; }
-                if App.command_palette_open { App.command_palette_open = false; return accept; }
-                if App.provider_menu_open { App.provider_menu_open = false; return accept; }
-                if App.drawer_open { App.drawer_open = false; return accept; }
-                if root.panel-wanted && !root.wide-enough-for-panel { App.set_panel_visible(false); return accept; }
-                return reject;
+                return root.go-back() ? accept : reject;
             }
             if event.modifiers.control && !App.approval_open && !App.first_run_open {
                 if event.text == "k" && Mods.palette {
@@ -843,7 +942,9 @@ export component Workbench inherits Rectangle {
             animate shown { duration: Theme.glide; easing: ease-out; }
             opacity: self.shown;
             x: (parent.width - self.width) / 2;
-            y: parent.height - self.height - 24px + 2 * Theme.rise * (1 - self.shown);
+            // Notices sit under the header, so they never cover the composer
+            // or the message being typed.
+            y: Theme.header + Theme.sp8 - 2 * Theme.rise * (1 - self.shown);
             width: min(toast.preferred-width, parent.width - 24px);
             height: 38px;
             border-radius: Theme.r-lg;
