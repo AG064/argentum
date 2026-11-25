@@ -99,6 +99,11 @@ The first stable release, for Windows x64 and Android arm64:
 - **Dependencies:** sha2 0.11, and Android Gradle plugin 9.5 with Gradle 9.9,
   once their checksums are added to the Android build's dependency
   verification.
+- **Model marketplace:** search GGUF models on Hugging Face from Settings, see
+  each repository's quantizations with size, license and context length, and
+  download one into the local model folder with resume, a disk space check
+  and the SHA-256 Hugging Face publishes. An optional token for gated models
+  stays in the system credential store. See `docs/LOCAL_MODEL_MARKETPLACE.md`.
 
 ## Planned for 0.1.5
 

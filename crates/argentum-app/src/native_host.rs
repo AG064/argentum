@@ -874,6 +874,13 @@ fn wire_host_to_ui(
             runtime: runtime.handle().clone(),
         },
     );
+    // Settings > Providers > Model marketplace, for GGUF models from Hugging Face.
+    crate::market::connect(
+        ui,
+        crate::market::Context {
+            secrets: config.secret_store(),
+        },
+    );
 
     let events = host.subscribe();
     let observer = host.lifecycle_observer();

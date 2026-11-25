@@ -455,6 +455,64 @@ fn provider_catalog(ui: &UiHandle) {
     window.set_provider_presets_unsupported(ModelRc::new(VecModel::from(unsupported)));
 }
 
+/// The model marketplace in Settings > Providers, with fixture search results.
+fn marketplace(ui: &UiHandle, state: &str) {
+    let app = ui.window().global::<App>();
+    app.set_addon_supported(true);
+    app.set_addon_state("installed".into());
+    app.set_addon_detail("Installed: llama.cpp runtime with Qwen3.5 4B Q4_K_M.".into());
+    app.set_market_supported(true);
+    app.set_market_query("qwen coder".into());
+    app.set_market_state(state.into());
+    app.set_market_detail(
+        "3 GGUF repositories, most downloaded first. Open one to see its files.".into(),
+    );
+    app.set_market_results(ModelRc::new(VecModel::from(
+        [
+            ("unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF", "412.3k downloads, 1.1k likes, apache-2.0 license"),
+            ("bartowski/Qwen2.5-Coder-7B-Instruct-GGUF", "98.4k downloads, 310 likes, apache-2.0 license"),
+            ("tester/Gated-Coder-GGUF", "1.2k downloads, 12 likes, license not stated, gated: needs a token and accepted terms"),
+        ]
+        .iter()
+        .map(|(id, detail)| argentum_ui::MarketRepoView {
+            id: (*id).into(),
+            detail: (*detail).into(),
+        })
+        .collect::<Vec<_>>(),
+    )));
+    app.set_market_repo_title("bartowski/Qwen2.5-Coder-7B-Instruct-GGUF".into());
+    app.set_market_repo_detail(
+        "apache-2.0 license, context length 32768 tokens, 7.6B parameters, qwen2 architecture, commit 0123456789ab".into(),
+    );
+    app.set_market_files(ModelRc::new(VecModel::from(
+        [
+            ("Q4_K_M", "4.68 GB, Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"),
+            ("Q8_0", "8.10 GB, Qwen2.5-Coder-7B-Instruct-Q8_0.gguf"),
+            ("F16, 2 parts", "15.24 GB, Qwen2.5-Coder-7B-Instruct-F16-00001-of-00002.gguf, Qwen2.5-Coder-7B-Instruct-F16-00002-of-00002.gguf"),
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, (label, detail))| argentum_ui::MarketFileView {
+            index: index as i32,
+            label: (*label).into(),
+            detail: (*detail).into(),
+        })
+        .collect::<Vec<_>>(),
+    )));
+    if state != "results" {
+        app.set_market_detail("".into());
+    }
+    app.set_market_can_download(true);
+    app.set_market_confirm_text(
+        "Q4_K_M from huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF at commit 0123456789ab.
+Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf: 4.68 GB, checked against the SHA-256 Hugging Face publishes (65b8fcd92af6b4fe...).
+License: apache-2.0. Read it on the model page before you use the model.
+Needs 4.68 GB on disk, 92.10 GB is free.
+The files go to the model folder in your Argentum data folder. A file that fails its check is deleted. Nothing runs until you start the local model, which asks for approval."
+            .into(),
+    );
+}
+
 /// The desktop first start before any project exists.
 fn first_run_project(ui: &UiHandle) {
     ui.window().set_first_run_open(true);
@@ -654,6 +712,21 @@ fn scenes() -> Vec<Scene> {
         }),
         s("10-settings-providers", D, |ui| {
             modules(ui, "standard");
+            ui.window().set_settings_open(true);
+        }),
+        s("10b-settings-marketplace-results", D, |ui| {
+            modules(ui, "standard");
+            marketplace(ui, "results");
+            ui.window().set_settings_open(true);
+        }),
+        s("10c-settings-marketplace-repo", D, |ui| {
+            modules(ui, "standard");
+            marketplace(ui, "repo");
+            ui.window().set_settings_open(true);
+        }),
+        s("10d-settings-marketplace-confirm", D, |ui| {
+            modules(ui, "standard");
+            marketplace(ui, "confirm");
             ui.window().set_settings_open(true);
         }),
         s("11-settings-modules", D, |ui| {
@@ -1088,6 +1161,22 @@ fn main() {
         for _ in 0..4 {
             slint::platform::update_timers_and_animations();
             let _ = ui.window().window().take_snapshot();
+        }
+        // The marketplace sits at the bottom of Settings > Providers, so these
+        // scenes scroll the page with the mouse wheel before capturing.
+        if scene.name.contains("marketplace") {
+            let (width, height) = (scene.size.0 as f32, scene.size.1 as f32);
+            for _ in 0..12 {
+                ui.window().window().dispatch_event(
+                    slint::platform::WindowEvent::PointerScrolled {
+                        position: slint::LogicalPosition::new(width * 0.6, height * 0.5),
+                        delta_x: 0.0,
+                        delta_y: -400.0,
+                    },
+                );
+                slint::platform::update_timers_and_animations();
+                let _ = ui.window().window().take_snapshot();
+            }
         }
         let image = ui.window().window().take_snapshot().expect("snapshot");
         let path = Path::new(&out).join(format!("{}.png", scene.name));

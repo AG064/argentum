@@ -690,6 +690,7 @@ name = "argentum-update"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "libc",
  "reqwest",
  "ring",
  "rustls-pki-types",
@@ -699,6 +700,7 @@ dependencies = [
  "sha2 0.10.9",
  "tokio",
  "url",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

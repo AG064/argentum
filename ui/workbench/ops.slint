@@ -828,6 +828,85 @@ export component LocalModelSection inherits VerticalLayout {
             clicked => { App.addon_remove(); }
         }
     }
+    if App.market_supported: SectionLabel { text: "MODEL MARKETPLACE (HUGGING FACE)"; height: 22px; }
+    if App.market_supported && App.market_detail != "": Notice {
+        text: App.market_detail;
+        tone: App.market_error ? "danger" : "secondary";
+    }
+    if App.market_supported && (App.market_state == "idle" || App.market_state == "results" || App.market_state == "searching"): HorizontalLayout {
+        spacing: Theme.sp8;
+        alignment: stretch;
+        Field {
+            horizontal-stretch: 1;
+            placeholder: "Search GGUF models, such as qwen coder";
+            value: App.market_query;
+            edited(text) => { App.market_query = text; }
+            accepted(text) => { App.market_search(text); }
+        }
+        Btn {
+            label: "Search";
+            small: true;
+            busy: App.market_state == "searching";
+            clicked => { App.market_search(App.market_query); }
+        }
+    }
+    if App.market_supported && App.market_state == "results": VerticalLayout {
+        spacing: Theme.sp4;
+        for result in App.market_results: HorizontalLayout {
+            spacing: Theme.sp8;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                Label { text: result.id; }
+                Label { text: result.detail; size: "sm"; tone: "muted"; wrap: word-wrap; }
+            }
+            Btn { label: "Open"; small: true; clicked => { App.market_open(result.id); } }
+        }
+    }
+    if App.market_supported && (App.market_state == "repo" || App.market_state == "confirm" || App.market_state == "downloading"): VerticalLayout {
+        spacing: Theme.sp4;
+        HorizontalLayout {
+            spacing: Theme.sp8;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                Label { text: App.market_repo_title; }
+                Label { text: App.market_repo_detail; size: "sm"; tone: "muted"; wrap: word-wrap; }
+            }
+            if App.market_state == "repo": Btn { label: "Back"; small: true; clicked => { App.market_back(); } }
+        }
+        if App.market_state == "repo": VerticalLayout {
+            spacing: Theme.sp4;
+            for file in App.market_files: HorizontalLayout {
+                spacing: Theme.sp8;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    Label { text: file.label; }
+                    Label { text: file.detail; size: "sm"; tone: "muted"; wrap: word-wrap; }
+                }
+                Btn { label: "Review"; small: true; clicked => { App.market_choose(file.index); } }
+            }
+        }
+    }
+    if App.market_supported && App.market_state == "confirm": VerticalLayout {
+        spacing: Theme.sp6;
+        Notice { text: App.market_confirm_text; tone: App.market_can_download ? "secondary" : "danger"; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.sp8;
+            Btn { label: "Discard partial download"; small: true; clicked => { App.market_discard(); } }
+            Btn { label: "Cancel"; small: true; clicked => { App.market_cancel(); } }
+            Btn { label: "Download"; kind: "primary"; small: true; enabled: App.market_can_download; clicked => { App.market_download(); } }
+        }
+    }
+    if App.market_supported && App.market_state == "downloading": HorizontalLayout {
+        alignment: end;
+        Btn { label: "Cancel download"; small: true; clicked => { App.market_cancel(); } }
+    }
+    if App.market_supported && App.market_state != "downloading": HorizontalLayout {
+        alignment: end;
+        spacing: Theme.sp8;
+        if !App.market_token_set: Btn { label: "Set Hugging Face token"; small: true; clicked => { App.market_set_token(); } }
+        if App.market_token_set: Btn { label: "Remove Hugging Face token"; small: true; clicked => { App.market_clear_token(); } }
+    }
     if App.local_inference_available: SectionLabel { text: "ON-DEVICE MODEL"; height: 22px; }
     if App.local_inference_available: Notice { text: App.local_inference_detail; tone: "secondary"; }
     if App.local_inference_available: HorizontalLayout {

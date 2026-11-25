@@ -76,6 +76,7 @@ Argentum contacts:
 - the model provider you set up, at the address in its settings
 - GitHub, only when you check for updates
 - the download addresses of the local model add-on, only when you install it
+- huggingface.co, only when you search, open or download in the model marketplace
 - a web page, only when you open it in the page reader
 
 There is no telemetry.

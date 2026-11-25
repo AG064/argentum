@@ -2,7 +2,7 @@
 // Copyright (C) 2026 AG064
 // Generated once from the previous MainWindow. Shared application state and
 // command callbacks. Rust reaches these through the aliases on MainWindow.
-import { UsageDayView, ProjectView, ContextPartView, RequestRowView, WorkspaceEntryView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, ReplyStepView, SteerNoteView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, UiChangeView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
+import { UsageDayView, ProjectView, ContextPartView, RequestRowView, WorkspaceEntryView, MessageChangeView, PlanStepView, ActivityItemView, FileChangeView, TrajectoryItemView, InspectorModeView, ConversationMessageView, ReplyStepView, SteerNoteView, SessionItemView, RecordLineView, ApprovalGrantView, ToolCatalogView, SkillCatalogView, ApprovalScopeChoiceView, VerificationRunnerView, VerificationEvidenceView, ProviderProfileView, ProviderModelView, ProviderPresetView, DesktopToolView, ProviderContextChoiceView, HarnessProfileView, HarnessExecutionProfileView, HarnessSurfaceView, HarnessCapabilityView, HarnessModuleView, DiagnosticRecordView, AddonModelView, MarketRepoView, MarketFileView, RichBlockView, DiffLineView, GitFileView, ProviderUsageView, UiChangeView, ThemePresetView, PaletteItemView, DeviceView } from "../view-models.slint";
 
 export global App {
     in-out property <string> draft: "";
@@ -509,6 +509,20 @@ export global App {
     in-out property <string> addon_detail: "";
     in-out property <string> addon_confirm_text: "";
     in-out property <[AddonModelView]> addon_models: [];
+    // The model marketplace: GGUF models from Hugging Face. Each request starts
+    // from a button, and a download only after the owner has seen its files.
+    in-out property <bool> market_supported: false;
+    in-out property <string> market_state: "idle"; // idle | searching | results | loading | repo | confirm | downloading
+    in-out property <bool> market_error: false;
+    in-out property <string> market_detail: "";
+    in-out property <string> market_query: "";
+    in-out property <[MarketRepoView]> market_results: [];
+    in-out property <string> market_repo_title: "";
+    in-out property <string> market_repo_detail: "";
+    in-out property <[MarketFileView]> market_files: [];
+    in-out property <string> market_confirm_text: "";
+    in-out property <bool> market_can_download: false;
+    in-out property <bool> market_token_set: false;
     in-out property <bool> diagnostics_enabled: false;
     in-out property <bool> diagnostics_open: false;
     in-out property <string> diagnostics_detail: "";
@@ -662,6 +676,15 @@ export global App {
     callback addon_install();
     callback addon_cancel();
     callback addon_remove();
+    callback market_search(string);
+    callback market_open(string);
+    callback market_back();
+    callback market_choose(int);
+    callback market_download();
+    callback market_cancel();
+    callback market_discard();
+    callback market_set_token();
+    callback market_clear_token();
     callback refresh_provider_presets();
     callback add_provider_preset(string);
     callback select_provider_preset(string);
