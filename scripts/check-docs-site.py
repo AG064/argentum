@@ -108,7 +108,11 @@ def main() -> int:
         for match in re.finditer(r"<style[^>]*>(.*?)</style>", text, re.S | re.I):
             if CSS_REMOTE.search(match.group(1)):
                 errors.append(f"{rel}: <style> loads from another host")
-        for match in ADDRESS.finditer(text):
+        # XML namespace names and comments (such as the icon license notes) are
+        # never fetched, so they are left out of the address check.
+        scanned = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+        scanned = re.sub(r"""\sxmlns(?::\w+)?=("[^"]*"|'[^']*')""", "", scanned)
+        for match in ADDRESS.finditer(scanned):
             host = match.group(1).lower().rstrip(".")
             if host not in ALLOWED_HOSTS and not host.endswith(".ag064.eu"):
                 errors.append(f"{rel}: address on a host that is not allowed: {host}")
