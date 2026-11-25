@@ -104,6 +104,12 @@ The first stable release, for Windows x64 and Android arm64:
   import only what you tick. Servers are saved turned off without their secret
   values, skills keep no allowed tools, and nothing is overwritten. Importing
   grants no permission.
+- **Project memory:** short notes kept for each project, added by the agent
+  with its `remember` tool or by you, and shown, edited and deleted in
+  Settings > Workspace and with `/memory` in `argentum chat`. They are stored
+  with the project's data, not in the repository, and `/memory export` prints
+  them for you to keep. The newest 4 KB go into each request as data that
+  grants nothing, and a note that looks like it holds a secret is refused.
 
 ## Planned for 0.1.1
 

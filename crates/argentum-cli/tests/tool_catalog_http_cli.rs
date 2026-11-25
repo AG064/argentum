@@ -501,10 +501,10 @@ fn assert_catalog(request: &Value) {
     );
     names.retain(|name| *name != "report_goal_status");
     // Every run with tools gets the plan and question tools.
-    for status_tool in ["ask_user", "update_plan"] {
+    for status_tool in ["ask_user", "remember", "update_plan"] {
         assert!(names.contains(&status_tool), "{status_tool} offered");
     }
-    names.retain(|name| !matches!(*name, "ask_user" | "update_plan"));
+    names.retain(|name| !matches!(*name, "ask_user" | "remember" | "update_plan"));
     // Git tools need a Git repository and the Rust job tools a Cargo project,
     // so each group is offered whole or not at all, as the workspace allows.
     let mut expected = EXPECTED_TOOLS.to_vec();
@@ -1581,7 +1581,7 @@ fn packaged_large_file_read_jump_edit_verify_preserves_unseen_and_index_bytes() 
             .unwrap()
             .iter()
             .map(|t| t["function"]["name"].as_str().unwrap())
-            .filter(|name| !matches!(*name, "ask_user" | "update_plan"))
+            .filter(|name| !matches!(*name, "ask_user" | "remember" | "update_plan"))
             .collect::<Vec<_>>();
         assert_eq!(names, ["edit_text", "read_text"]);
         let system = request["messages"][0]["content"].as_str().unwrap();

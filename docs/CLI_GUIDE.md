@@ -114,6 +114,10 @@ In chat:
 - `/compact` summarizes the session context to free space. It uses the selected model and
   can consume usage. `/compact deactivate` turns the summary off without calling a model.
 - `/steer TEXT` applies your text to the active run at its next request.
+- `/memory` lists the project's memory notes. `/memory add TEXT`, `/memory edit N TEXT` and
+  `/memory delete N` change them, and `/memory export` prints them as Markdown. Notes are
+  stored with the project's data, not in the repository, and a note that looks like it holds
+  a secret is refused.
 - `/queue` shows prompts waiting behind the active run. `/queue continue` and
   `/queue discard` resume or drop them. A failed or cancelled run pauses the queue.
 - Esc closes a panel without sending your draft. During a run, Esc or `/stop` cancels the

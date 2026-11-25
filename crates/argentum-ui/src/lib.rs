@@ -652,6 +652,21 @@ impl UiHandle {
                 problems,
                 results,
             } => self.apply_import_scan(items, problems, results),
+            AppEvent::MemorySnapshot {
+                notes,
+                notice,
+                refused,
+            } => {
+                let app = self.window.global::<App>();
+                app.set_memory_notes(memory_rows(notes));
+                if *refused {
+                    app.set_memory_notice(notice.clone().unwrap_or_default().into());
+                } else if notice.is_some() {
+                    app.set_memory_notice(SharedString::default());
+                    app.set_memory_draft(SharedString::default());
+                    app.set_memory_editing(0);
+                }
+            }
             AppEvent::SkillInspectionSnapshot { inspection } => {
                 self.window
                     .set_skill_selected(inspection.name.clone().into());
@@ -4726,6 +4741,20 @@ fn tool_catalog_model(tools: &[ToolDescriptor]) -> ModelRc<ToolCatalogView> {
     ModelRc::new(VecModel::from(rows))
 }
 
+fn memory_rows(notes: &[argentum_domain::memory::MemoryNote]) -> ModelRc<MemoryNoteView> {
+    let rows = notes
+        .iter()
+        .filter_map(|note| {
+            Some(MemoryNoteView {
+                id: i32::try_from(note.id).ok().filter(|id| *id != 0)?,
+                text: note.text.clone().into(),
+                author: note.author.as_str().into(),
+            })
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
 fn import_rows(items: &[argentum_domain::imports::ImportItemView]) -> ModelRc<ImportRowView> {
     let rows = items
         .iter()
@@ -6500,6 +6529,37 @@ where
             window.set_skill_catalog_error(SharedString::default());
         }
         skill_catalog_dispatch(AppCommand::ListSkillCatalog);
+    });
+
+    let memory_dispatch = dispatch.clone();
+    window
+        .global::<App>()
+        .on_memory_refresh(move || memory_dispatch(AppCommand::ListMemory));
+    let memory_dispatch = dispatch.clone();
+    window.global::<App>().on_memory_delete(move |id| {
+        memory_dispatch(AppCommand::DeleteMemoryNote { id: id.into() })
+    });
+    let memory_dispatch = dispatch.clone();
+    let memory_window = window.as_weak();
+    window.global::<App>().on_memory_save(move || {
+        let Some(window) = memory_window.upgrade() else {
+            return;
+        };
+        let app = window.global::<App>();
+        let text = app.get_memory_draft().to_string();
+        if text.trim().is_empty() {
+            app.set_memory_notice("Write the note first.".into());
+            return;
+        }
+        let editing = app.get_memory_editing();
+        memory_dispatch(if editing != 0 {
+            AppCommand::UpdateMemoryNote {
+                id: editing.into(),
+                text,
+            }
+        } else {
+            AppCommand::AddMemoryNote { text }
+        });
     });
 
     let import_dispatch = dispatch.clone();
