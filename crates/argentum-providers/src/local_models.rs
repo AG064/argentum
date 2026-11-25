@@ -135,35 +135,108 @@ pub enum LocalModelComponentKind {
     Mmproj,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LocalModelComponent {
+/// One adapter file loaded with a local model: a LoRA, or the multimodal
+/// projector (mmproj) that lets the model read images.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalModelAdapter {
     pub kind: LocalModelComponentKind,
-    pub filename: &'static str,
-    pub size_bytes: u64,
-    pub sha256: &'static str,
+    pub filename: String,
 }
 
-const INKLING_UNCENSORED_COMPONENTS: [LocalModelComponent; 2] = [
-    LocalModelComponent {
-        kind: LocalModelComponentKind::Lora,
-        filename: "Inkling-2-Mini-Uncensored-LoRA.gguf",
-        size_bytes: 43_805_184,
-        sha256: "42914b85c874e7fe249e93f0ac6e8abf08dc0bdf32aa1ec46c72714e64808f12",
-    },
-    LocalModelComponent {
-        kind: LocalModelComponentKind::Mmproj,
-        filename: "mmproj-Inkling-2-Mini-F16.gguf",
-        size_bytes: 639_348_448,
-        sha256: "5a72e0b6e2bef13c3f455f4edb85df0c752b92ff76ab46af879eae088163efe6",
-    },
-];
+/// The owner lists the adapters for `<model>.gguf` in `<model>.gguf.adapters`,
+/// next to the model in the models folder. Each line is `lora <file>` or
+/// `mmproj <file>`; blank lines and lines starting with `#` are skipped. The
+/// files must sit in the same folder. Every listed file is hashed and shown in
+/// the launch approval before anything starts.
+pub const LOCAL_MODEL_ADAPTERS_SUFFIX: &str = ".adapters";
+const LOCAL_MODEL_ADAPTERS_MAX_BYTES: u64 = 4096;
+const LOCAL_MODEL_MAX_LORAS: usize = 8;
 
-pub fn local_model_components(model_filename: &str) -> &'static [LocalModelComponent] {
-    if model_filename == "Inkling-2-Mini-AD-Q4_K.gguf" {
-        &INKLING_UNCENSORED_COMPONENTS
-    } else {
-        &[]
+pub fn local_model_adapters_path(models_dir: &Path, model_filename: &str) -> PathBuf {
+    models_dir.join(format!("{model_filename}{LOCAL_MODEL_ADAPTERS_SUFFIX}"))
+}
+
+/// Reads the adapter list for a model. No list means no adapters.
+pub fn local_model_adapters(
+    models_dir: &Path,
+    model_filename: &str,
+) -> Result<Vec<LocalModelAdapter>, ProviderError> {
+    let path = local_model_adapters_path(models_dir, model_filename);
+    let list_name = format!("{model_filename}{LOCAL_MODEL_ADAPTERS_SUFFIX}");
+    let rejected = |reason: String| ProviderError::LocalRuntimeFileRejected {
+        file: list_name.clone(),
+        reason,
+    };
+    let metadata = match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(rejected(format!("it cannot be read: {error}"))),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(rejected("it must be a plain file, not a link or folder".into()));
     }
+    if metadata.len() > LOCAL_MODEL_ADAPTERS_MAX_BYTES {
+        return Err(rejected(format!(
+            "it is larger than {LOCAL_MODEL_ADAPTERS_MAX_BYTES} bytes"
+        )));
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| rejected(format!("it cannot be read as UTF-8 text: {error}")))?;
+    parse_local_model_adapters(&text).map_err(rejected)
+}
+
+fn parse_local_model_adapters(text: &str) -> Result<Vec<LocalModelAdapter>, String> {
+    let mut adapters = Vec::new();
+    for (index, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let number = index + 1;
+        let (keyword, filename) = line
+            .split_once(char::is_whitespace)
+            .map(|(keyword, rest)| (keyword, rest.trim()))
+            .ok_or_else(|| format!("line {number} needs a kind and a file name"))?;
+        let kind = match keyword.to_ascii_lowercase().as_str() {
+            "lora" => LocalModelComponentKind::Lora,
+            "mmproj" => LocalModelComponentKind::Mmproj,
+            other => {
+                return Err(format!(
+                    "line {number} starts with \"{other}\"; use \"lora\" or \"mmproj\""
+                ))
+            }
+        };
+        if filename.is_empty()
+            || filename.contains(['/', '\\', ':'])
+            || filename.chars().any(char::is_control)
+            || !filename.to_ascii_lowercase().ends_with(".gguf")
+        {
+            return Err(format!(
+                "line {number} must name a .gguf file in the models folder, without a path"
+            ));
+        }
+        if adapters
+            .iter()
+            .any(|adapter: &LocalModelAdapter| adapter.filename == filename)
+        {
+            return Err(format!("line {number} lists {filename} a second time"));
+        }
+        adapters.push(LocalModelAdapter {
+            kind,
+            filename: filename.to_owned(),
+        });
+    }
+    let mmproj = adapters
+        .iter()
+        .filter(|adapter| adapter.kind == LocalModelComponentKind::Mmproj)
+        .count();
+    if mmproj > 1 {
+        return Err("it lists more than one mmproj file".into());
+    }
+    if adapters.len() - mmproj > LOCAL_MODEL_MAX_LORAS {
+        return Err(format!("it lists more than {LOCAL_MODEL_MAX_LORAS} LoRA files"));
+    }
+    Ok(adapters)
 }
 
 const LOCAL_MODEL_OFFERS: [LocalModelOffer; 1] = [LocalModelOffer {
@@ -820,6 +893,61 @@ fn validate_model_path_shape(path: &Path) -> Result<(), ProviderError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn adapter_lists_name_lora_and_mmproj_files() {
+        let adapters = super::parse_local_model_adapters(
+            "# Inkling\nlora  Inkling-LoRA.gguf\n\nMMPROJ mmproj-F16.gguf\n",
+        )
+        .expect("valid list");
+        assert_eq!(
+            adapters,
+            vec![
+                super::LocalModelAdapter {
+                    kind: super::LocalModelComponentKind::Lora,
+                    filename: "Inkling-LoRA.gguf".into(),
+                },
+                super::LocalModelAdapter {
+                    kind: super::LocalModelComponentKind::Mmproj,
+                    filename: "mmproj-F16.gguf".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn adapter_lists_reject_paths_unknown_kinds_and_repeats() {
+        for (text, needle) in [
+            ("lora ..\\other.gguf", "without a path"),
+            ("lora C:model.gguf", "without a path"),
+            ("lora notes.txt", "without a path"),
+            ("vision a.gguf", "\"vision\""),
+            ("lora", "needs a kind"),
+            ("lora a.gguf\nlora a.gguf", "second time"),
+            ("mmproj a.gguf\nmmproj b.gguf", "more than one mmproj"),
+        ] {
+            let error = super::parse_local_model_adapters(text).expect_err(text);
+            assert!(error.contains(needle), "{text}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_missing_adapter_list_means_no_adapters() {
+        let directory = tempfile::tempdir().expect("directory");
+        assert!(super::local_model_adapters(directory.path(), "model.gguf")
+            .expect("no list")
+            .is_empty());
+        std::fs::write(
+            super::local_model_adapters_path(directory.path(), "model.gguf"),
+            "bogus line",
+        )
+        .expect("write list");
+        let error = super::local_model_adapters(directory.path(), "model.gguf")
+            .expect_err("bad list")
+            .to_string();
+        assert!(error.contains("model.gguf.adapters"), "{error}");
+        assert!(error.contains("line 1"), "{error}");
+    }
+
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::mpsc;

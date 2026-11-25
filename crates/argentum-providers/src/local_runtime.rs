@@ -30,7 +30,7 @@ use crate::runtime_bundles::{
     extract_runtime_session_leased, open_runtime_archive_lease, open_runtime_launcher_lease,
 };
 use crate::{
-    local_model_components, local_runtime_offers, LocalModelComponentKind, ModelProvider,
+    local_model_adapters, local_runtime_offers, LocalModelComponentKind, ModelProvider,
     OpenAiCompatibleProvider, ProviderError,
 };
 
@@ -42,6 +42,7 @@ const LOCAL_RUNTIME_GPU_LAYER_POLICY: &str = "llama.cpp memory fit";
 const LOCAL_RUNTIME_MMPROJ_FIT_TARGET_MIB: u32 = 2_048;
 const LOCAL_RUNTIME_MAX_PREDICTION: i32 = -1;
 const LOCAL_RUNTIME_READY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const LOCAL_RUNTIME_STOP_TIMEOUT: Duration = Duration::from_secs(15);
 const LOCAL_RUNTIME_MIN_MODEL_BYTES: u64 = 1024 * 1024;
 const LOCAL_RUNTIME_DEFAULT_MODEL_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 const LOCAL_RUNTIME_MAX_MODEL_BYTES: u64 = 256 * 1024 * 1024 * 1024;
@@ -1175,6 +1176,10 @@ impl LocalRuntimeModule {
         let launcher = Arc::clone(&self.launcher);
         let client_cell = Arc::new(StdMutex::new(None::<Arc<LocalRuntimeClient>>));
         let publish_cell = Arc::clone(&client_cell);
+        // The lifecycle kernel reports a failed effect as text. Keep the
+        // launcher's own error so the owner sees the real reason.
+        let launch_error_cell = Arc::new(StdMutex::new(None::<ProviderError>));
+        let launch_error_record = Arc::clone(&launch_error_cell);
         let mount_cancellation = cancellation.clone();
         let mount_authority = authority.clone();
         authority.ensure_activation()?;
@@ -1194,7 +1199,11 @@ impl LocalRuntimeModule {
                                     .launch(prepared, launch_authority.clone(), &mount_cancellation)
                                     .await
                                     .map_err(|error_value| {
-                                        EffectFailure::new(error_value.to_string())
+                                        let failure = EffectFailure::new(error_value.to_string());
+                                        if let Ok(mut slot) = launch_error_record.lock() {
+                                            *slot = Some(error_value);
+                                        }
+                                        failure
                                     })?;
                                 if !launch_authority.is_current() {
                                     return Err(EffectFailure::new(
@@ -1219,7 +1228,16 @@ impl LocalRuntimeModule {
                 },
             )
             .await
-            .map_err(|_| ProviderError::LocalRuntimeLifecycleFailed)?;
+            .map_err(|error_value| {
+                launch_error_cell
+                    .lock()
+                    .ok()
+                    .and_then(|mut slot| slot.take())
+                    .unwrap_or_else(|| ProviderError::LocalRuntimeStartFailed {
+                        stage: "activate",
+                        detail: error_value.to_string(),
+                    })
+            })?;
         authority.ensure_activation()?;
         let client = client_cell
             .lock()
@@ -1307,10 +1325,122 @@ async fn unmount_runtime(
             cancellation,
         )
         .await
-        .map_err(|_| ProviderError::LocalRuntimeLifecycleFailed)?;
+        .map_err(|error_value| ProviderError::LocalRuntimeStartFailed {
+            stage: "stop",
+            detail: error_value.to_string(),
+        })?;
     state.mounted = None;
     state.active = None;
     Ok(())
+}
+
+/// The last lines llama-server printed, kept so a failed start can say why.
+#[derive(Clone, Default)]
+struct OutputTail {
+    state: Arc<StdMutex<OutputTailState>>,
+    done: Arc<tokio::sync::Notify>,
+}
+
+#[derive(Default)]
+struct OutputTailState {
+    lines: std::collections::VecDeque<String>,
+    partial: String,
+    finished: bool,
+}
+
+const OUTPUT_TAIL_LINES: usize = 40;
+const OUTPUT_TAIL_LINE_CHARS: usize = 300;
+const OUTPUT_SUMMARY_LINES: usize = 6;
+
+impl OutputTail {
+    fn collect(
+        mut receiver: tokio::sync::mpsc::UnboundedReceiver<argentum_execution::ProcessOutputChunk>,
+    ) -> Self {
+        let tail = Self::default();
+        let collector = tail.clone();
+        tokio::spawn(async move {
+            while let Some(chunk) = receiver.recv().await {
+                collector.push(&chunk.text);
+            }
+            if let Ok(mut state) = collector.state.lock() {
+                let rest = std::mem::take(&mut state.partial);
+                push_line(&mut state.lines, &rest);
+                state.finished = true;
+            }
+            collector.done.notify_waiters();
+        });
+        tail
+    }
+
+    fn push(&self, text: &str) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        state.partial.push_str(text);
+        while let Some(end) = state.partial.find('\n') {
+            let line: String = state.partial.drain(..=end).collect();
+            push_line(&mut state.lines, &line);
+        }
+        if state.partial.len() > 4 * OUTPUT_TAIL_LINE_CHARS {
+            let line = std::mem::take(&mut state.partial);
+            push_line(&mut state.lines, &line);
+        }
+    }
+
+    /// Waits briefly for the last output of a stopped process, then summarizes.
+    async fn settled_summary(&self) -> String {
+        let finished = self.state.lock().map(|state| state.finished).unwrap_or(true);
+        if !finished {
+            let _ = tokio::time::timeout(Duration::from_millis(500), self.done.notified()).await;
+        }
+        self.summary()
+    }
+
+    fn summary(&self) -> String {
+        let Ok(state) = self.state.lock() else {
+            return "its output could not be read".into();
+        };
+        summarize_output(state.lines.iter().map(String::as_str))
+    }
+}
+
+fn push_line(lines: &mut std::collections::VecDeque<String>, raw: &str) {
+    let line: String = raw
+        .trim()
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(OUTPUT_TAIL_LINE_CHARS)
+        .collect();
+    if line.is_empty() {
+        return;
+    }
+    if lines.len() == OUTPUT_TAIL_LINES {
+        lines.pop_front();
+    }
+    lines.push_back(line);
+}
+
+fn summarize_output<'a>(lines: impl DoubleEndedIterator<Item = &'a str> + Clone) -> String {
+    let looks_like_error = |line: &&str| {
+        let lower = line.to_ascii_lowercase();
+        ["error", "failed", "unable", "out of memory", "cannot", "invalid", "abort"]
+            .iter()
+            .any(|word| lower.contains(word))
+    };
+    let mut picked: Vec<&str> = lines
+        .clone()
+        .rev()
+        .filter(looks_like_error)
+        .take(OUTPUT_SUMMARY_LINES)
+        .collect();
+    if picked.is_empty() {
+        picked = lines.rev().take(OUTPUT_SUMMARY_LINES).collect();
+    }
+    if picked.is_empty() {
+        return "nothing".into();
+    }
+    picked.reverse();
+    picked.join(" | ")
 }
 
 struct LlamaCppSidecarLauncher;
@@ -1483,10 +1613,15 @@ impl RuntimeInstance for ProductionRuntimeInstance {
     async fn stop(&mut self) -> Result<(), ProviderError> {
         let process = self.process.lock().await.take();
         if let Some(process) = process {
+            // A large model can take several seconds to unmap after the
+            // process is stopped, so a short wait reported a false failure.
             process
-                .terminate_and_wait(Duration::from_secs(2))
+                .terminate_and_wait(LOCAL_RUNTIME_STOP_TIMEOUT)
                 .await
-                .map_err(|_| ProviderError::LocalRuntimeLaunchFailed { stage: "teardown" })?;
+                .map_err(|error_value| ProviderError::LocalRuntimeStartFailed {
+                    stage: "stop",
+                    detail: error_value.to_string(),
+                })?;
         }
         drop(self.key_file.take());
         if let Some(path) = self.session_path.take() {
@@ -1513,20 +1648,29 @@ async fn remove_runtime_session(session: tempfile::TempDir) -> Result<(), Provid
 }
 
 async fn remove_runtime_session_path(path: &Path) -> Result<(), ProviderError> {
-    for attempt in 0..20 {
+    // Windows releases a stopped process's DLLs a little after it exits, so
+    // removal is retried for up to about 10 seconds.
+    const ATTEMPTS: u32 = 100;
+    let mut last_error = None;
+    for attempt in 0..ATTEMPTS {
         match tokio::fs::remove_dir_all(path).await {
             Ok(()) => return Ok(()),
             Err(error_value) if error_value.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(_) if attempt < 19 => tokio::time::sleep(Duration::from_millis(50)).await,
-            Err(_) => {
-                return Err(ProviderError::LocalRuntimeLaunchFailed {
-                    stage: "session-cleanup",
-                })
+            Err(error_value) => {
+                last_error = Some(error_value);
+                if attempt + 1 < ATTEMPTS {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
             }
         }
     }
-    Err(ProviderError::LocalRuntimeLaunchFailed {
+    Err(ProviderError::LocalRuntimeStartFailed {
         stage: "session-cleanup",
+        detail: format!(
+            "the runtime folder {} could not be removed: {}",
+            path.display(),
+            last_error.map_or_else(|| "unknown error".into(), |error| error.to_string())
+        ),
     })
 }
 
@@ -1832,16 +1976,16 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             config.limits.max_model_bytes,
         )?;
         protect_selected_model_file(&model_path)?;
-        let auxiliary_model_paths = local_model_components(&profile.model)
-            .iter()
-            .map(|component| {
+        let auxiliary_model_paths = local_model_adapters(&config.models_dir, &profile.model)?
+            .into_iter()
+            .map(|adapter| {
                 let path = resolve_selected_model_with_limit(
                     &config.models_dir,
-                    component.filename,
+                    &adapter.filename,
                     config.limits.max_model_bytes,
                 )?;
                 protect_selected_model_file(&path)?;
-                Ok((*component, path))
+                Ok((adapter, path))
             })
             .collect::<Result<Vec<_>, ProviderError>>()?;
         let offer = *local_runtime_offers()
@@ -1858,17 +2002,21 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             let session =
                 extract_runtime_session_leased(&mut archive_lease, &offer, &session_parent)?;
             let launcher_lease = open_runtime_launcher_lease(session.path(), &offer)?;
-            let model_lease = ModelFileLease::open(&model_path, max_model_bytes)
-                .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
-            let mut auxiliary_model_leases = Vec::with_capacity(auxiliary_model_paths.len());
-            for (component, path) in auxiliary_model_paths {
-                let lease = ModelFileLease::open(&path, max_model_bytes)
-                    .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
-                if lease.size_bytes() != component.size_bytes || lease.sha256() != component.sha256
-                {
-                    return Err(ProviderError::LocalRuntimeModelInvalid);
+            let model_lease = ModelFileLease::open(&model_path, max_model_bytes).map_err(|error| {
+                ProviderError::LocalRuntimeFileRejected {
+                    file: model_path.display().to_string(),
+                    reason: format!("it could not be opened and hashed: {error}"),
                 }
-                auxiliary_model_leases.push((component.kind, lease));
+            })?;
+            let mut auxiliary_model_leases = Vec::with_capacity(auxiliary_model_paths.len());
+            for (adapter, path) in auxiliary_model_paths {
+                let lease = ModelFileLease::open(&path, max_model_bytes).map_err(|error| {
+                    ProviderError::LocalRuntimeFileRejected {
+                        file: adapter.filename.clone(),
+                        reason: format!("it could not be opened and hashed: {error}"),
+                    }
+                })?;
+                auxiliary_model_leases.push((adapter.kind, lease));
             }
             Ok::<_, ProviderError>((
                 session,
@@ -1930,10 +2078,20 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
             })
             .ok_or(ProviderError::LocalRuntimeModelInvalid)?;
         if total_model_size_bytes > config.limits.max_model_bytes {
-            return Err(ProviderError::LocalRuntimeModelInvalid);
+            return Err(ProviderError::LocalRuntimeFileRejected {
+                file: profile.model.clone(),
+                reason: format!(
+                    "the model and its adapters are {total_model_size_bytes} bytes together, \
+                     over the limit of {} bytes",
+                    config.limits.max_model_bytes
+                ),
+            });
         }
         let process_limits = ManagedProcessLimits::for_local_model(total_model_size_bytes)
-            .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
+            .map_err(|error| ProviderError::LocalRuntimeStartFailed {
+                stage: "memory limit",
+                detail: error.to_string(),
+            })?;
         let process_spec = ProcessSpec::argv(
             program.to_string_lossy().into_owned(),
             arguments.clone(),
@@ -2079,9 +2237,12 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
         }
         let resume_authority = authority.clone();
         let resume_cancellation = cancellation.clone();
-        let process_result = ManagedProcess::spawn_checked(
+        let (output_sender, output_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let output_tail = OutputTail::collect(output_receiver);
+        let process_result = ManagedProcess::spawn_checked_with_output(
             resources.process_spec.clone(),
             resources.process_limits,
+            Some(output_sender),
             move || !resume_cancellation.is_cancelled() && resume_authority.is_current(),
         )
         .await;
@@ -2093,7 +2254,10 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
                         ProviderError::LocalRuntimeCancelled
                     }
                     ProcessError::PreResumeCheckFailed => ProviderError::LocalRuntimeApprovalStale,
-                    _ => ProviderError::LocalRuntimeLaunchFailed { stage: "spawn" },
+                    other => ProviderError::LocalRuntimeStartFailed {
+                        stage: "spawn",
+                        detail: other.to_string(),
+                    },
                 };
                 return Err(cleanup_pre_spawn_failure(resources, launch_error).await);
             }
@@ -2122,7 +2286,15 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
                     .has_exited()
                     .map_err(|_| ProviderError::LocalRuntimeLaunchFailed { stage: "wait" })?
                 {
-                    return Err(ProviderError::LocalRuntimeLaunchFailed { stage: "startup" });
+                    let code = process.try_wait().ok().flatten();
+                    return Err(ProviderError::LocalRuntimeStartFailed {
+                        stage: "startup",
+                        detail: format!(
+                            "llama-server stopped{} before it was ready. It said: {}",
+                            code.map_or(String::new(), |code| format!(" with exit code {code}")),
+                            output_tail.settled_summary().await
+                        ),
+                    });
                 }
                 let listeners = process
                     .loopback_listeners()
@@ -2150,7 +2322,14 @@ impl LocalRuntimeLauncher for LlamaCppSidecarLauncher {
                     }
                 }
                 if tokio::time::Instant::now() >= deadline {
-                    return Err(ProviderError::LocalRuntimeLaunchFailed { stage: "readiness" });
+                    return Err(ProviderError::LocalRuntimeStartFailed {
+                        stage: "readiness",
+                        detail: format!(
+                            "llama-server was not ready after {} seconds. Its last output: {}",
+                            LOCAL_RUNTIME_READY_TIMEOUT.as_secs(),
+                            output_tail.settled_summary().await
+                        ),
+                    });
                 }
                 tokio::select! {
                     _ = cancellation.cancelled() => {
@@ -2263,39 +2442,68 @@ fn resolve_selected_model_with_limit(
     max_model_bytes: u64,
 ) -> Result<PathBuf, ProviderError> {
     LocalRuntimeLimits { max_model_bytes }.validate()?;
-    if !models_dir.is_absolute()
-        || model.is_empty()
+    let rejected = |reason: String| ProviderError::LocalRuntimeFileRejected {
+        file: model.chars().take(256).collect(),
+        reason,
+    };
+    if !models_dir.is_absolute() {
+        return Err(rejected("the models folder path is not absolute".into()));
+    }
+    if model.is_empty()
         || model.chars().count() > 256
         || model.chars().any(char::is_control)
         || model.contains(['/', '\\', ':'])
-        || !model.to_ascii_lowercase().ends_with(".gguf")
     {
-        return Err(ProviderError::LocalRuntimeModelInvalid);
+        return Err(rejected(
+            "the name must be a plain file name in the models folder, without a path".into(),
+        ));
+    }
+    if !model.to_ascii_lowercase().ends_with(".gguf") {
+        return Err(rejected("only .gguf files can be loaded".into()));
     }
     let mut components = Path::new(model).components();
     if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
-        return Err(ProviderError::LocalRuntimeModelInvalid);
+        return Err(rejected(
+            "the name must be a plain file name in the models folder, without a path".into(),
+        ));
     }
-    let root =
-        std::fs::canonicalize(models_dir).map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
+    let root = std::fs::canonicalize(models_dir).map_err(|error| {
+        rejected(format!(
+            "the models folder {} cannot be opened: {error}",
+            models_dir.display()
+        ))
+    })?;
     let selected = root.join(model);
-    let metadata = std::fs::symlink_metadata(&selected)
-        .map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > max_model_bytes
-    {
-        return Err(ProviderError::LocalRuntimeModelInvalid);
+    let metadata = std::fs::symlink_metadata(&selected).map_err(|error| {
+        rejected(if error.kind() == std::io::ErrorKind::NotFound {
+            format!("it is not in the models folder {}", models_dir.display())
+        } else {
+            format!("it cannot be read: {error}")
+        })
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(rejected("it must be a plain file, not a link or folder".into()));
     }
-    let selected =
-        std::fs::canonicalize(selected).map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
+    if metadata.len() > max_model_bytes {
+        return Err(rejected(format!(
+            "it is {} bytes, over the limit of {max_model_bytes} bytes",
+            metadata.len()
+        )));
+    }
+    let selected = std::fs::canonicalize(selected)
+        .map_err(|error| rejected(format!("it cannot be opened: {error}")))?;
     if selected.parent() != Some(root.as_path()) {
-        return Err(ProviderError::LocalRuntimeModelInvalid);
+        return Err(rejected("it resolves to a place outside the models folder".into()));
     }
     Ok(selected)
 }
 
 fn protect_selected_model_directory(path: &Path) -> Result<(), ProviderError> {
     #[cfg(windows)]
-    ensure_owner_only_directory(path).map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
+    ensure_owner_only_directory(path).map_err(|error| ProviderError::LocalRuntimeFileRejected {
+        file: path.display().to_string(),
+        reason: format!("its access could not be limited to this user: {error}"),
+    })?;
     #[cfg(not(windows))]
     let _ = path;
     Ok(())
@@ -2303,7 +2511,10 @@ fn protect_selected_model_directory(path: &Path) -> Result<(), ProviderError> {
 
 fn protect_selected_model_file(path: &Path) -> Result<(), ProviderError> {
     #[cfg(windows)]
-    ensure_owner_only_file(path).map_err(|_| ProviderError::LocalRuntimeModelInvalid)?;
+    ensure_owner_only_file(path).map_err(|error| ProviderError::LocalRuntimeFileRejected {
+        file: path.display().to_string(),
+        reason: format!("its access could not be limited to this user: {error}"),
+    })?;
     #[cfg(not(windows))]
     let _ = path;
     Ok(())
@@ -2316,28 +2527,12 @@ fn llama_server_arguments(
     port: u16,
     api_prefix: &str,
 ) -> Vec<String> {
-    llama_server_arguments_with_context(
-        model_path,
-        key_path,
-        port,
-        api_prefix,
-        LOCAL_RUNTIME_CONTEXT,
-    )
-}
-
-fn llama_server_arguments_with_context(
-    model_path: &Path,
-    key_path: &Path,
-    port: u16,
-    api_prefix: &str,
-    context_tokens: u32,
-) -> Vec<String> {
     llama_server_arguments_with_context_and_auxiliary(
         model_path,
         key_path,
         port,
         api_prefix,
-        context_tokens,
+        LOCAL_RUNTIME_CONTEXT,
         &[],
     )
 }
@@ -2353,6 +2548,13 @@ fn llama_server_arguments_with_context_and_auxiliary(
     let mut arguments = vec![
         "--model".into(),
         model_path.to_string_lossy().into_owned(),
+        // llama-server names the model by its full path unless told otherwise,
+        // and that path then shows up as the model that answered.
+        "--alias".into(),
+        model_path
+            .file_name()
+            .map_or_else(|| model_path.to_string_lossy(), |name| name.to_string_lossy())
+            .into_owned(),
         "--host".into(),
         LOCAL_RUNTIME_HOST.into(),
         "--port".into(),
@@ -2365,6 +2567,13 @@ fn llama_server_arguments_with_context_and_auxiliary(
         context_tokens.to_string(),
         "--fit".into(),
         "on".into(),
+        // When `--fit` leaves some weights in system memory, such as the
+        // experts of a large mixture-of-experts model, llama.cpp would copy
+        // them to the GPU for every prompt batch and reserve a compute buffer
+        // larger than the card. Keeping those operations on the CPU lets the
+        // model start on an 8 GB GPU. With every layer on the GPU it changes
+        // nothing.
+        "--no-op-offload".into(),
         "--parallel".into(),
         "1".into(),
         "--predict".into(),
@@ -2535,10 +2744,15 @@ mod tests {
             .prepare(&config, &local_profile("oversized.gguf"), 1)
             .await;
 
-        assert!(matches!(
-            result,
-            Err(ProviderError::LocalRuntimeModelInvalid)
-        ));
+        assert!(
+            matches!(
+                &result,
+                Err(ProviderError::LocalRuntimeFileRejected { file, reason })
+                    if file == "oversized.gguf" && reason.contains("over the limit")
+            ),
+            "{:?}",
+            result.err()
+        );
     }
 
     #[tokio::test]
@@ -2805,14 +3019,54 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_start_reports_the_error_lines_llama_server_printed() {
+        let tail = OutputTail::default();
+        tail.push("build: 12650
+load_tensors: loading model
+");
+        tail.push("ggml_vulkan: Device memory allocation of size 13 GB failed.
+");
+        tail.push("llama_init_from_model: failed to initialize the context
+main: exiting");
+        let summary = tail.summary();
+        assert!(summary.contains("allocation of size 13 GB failed"), "{summary}");
+        assert!(summary.contains("failed to initialize the context"), "{summary}");
+        assert!(!summary.contains("loading model"), "{summary}");
+
+        let quiet = OutputTail::default();
+        quiet.push("one
+two
+");
+        assert_eq!(quiet.summary(), "one | two");
+        assert_eq!(OutputTail::default().summary(), "nothing");
+    }
+
+    #[test]
+    fn llama_server_keeps_offloaded_weights_on_the_cpu() {
+        let arguments = llama_server_arguments(
+            Path::new("fixture.gguf"),
+            Path::new("key.txt"),
+            43123,
+            "/fixture",
+        );
+        assert!(arguments.iter().any(|argument| argument == "--no-op-offload"));
+    }
+
+    #[test]
     fn context_variants_change_only_the_fixed_context_argument_and_plan_digest() {
         let model = Path::new(r"C:\models\fixture.gguf");
         let key = Path::new(r"C:\runtime\key.txt");
         let baseline = llama_server_arguments(model, key, 43123, "/fixture");
         let context_index = baseline.iter().position(|v| v == "--ctx-size").unwrap() + 1;
         for size in crate::SIDECAR_CONTEXT_VARIANTS {
-            let mut actual =
-                llama_server_arguments_with_context(model, key, 43123, "/fixture", size);
+            let mut actual = llama_server_arguments_with_context_and_auxiliary(
+                model,
+                key,
+                43123,
+                "/fixture",
+                size,
+                &[],
+            );
             assert_eq!(actual[context_index], size.to_string());
             actual[context_index] = baseline[context_index].clone();
             assert_eq!(actual, baseline);
@@ -2932,7 +3186,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(ProviderError::LocalRuntimeLaunchFailed { stage: "spawn" })
+            Err(ProviderError::LocalRuntimeStartFailed { stage: "spawn", .. })
         ));
         assert!(!session_path.exists(), "spawn failure retained session");
     }

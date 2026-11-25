@@ -1153,20 +1153,20 @@ mod tests {
         let offer = local_runtime_offers().first().expect("runtime offer");
 
         assert!(runtime_offer_is_trusted(offer));
-        assert_eq!(offer.version, "v0.3.0");
+        assert_eq!(offer.version, "v0.4.0");
         assert_eq!(offer.backend, "vulkan");
         assert_eq!(offer.platform, "windows");
         assert_eq!(offer.arch, "x86_64");
-        assert_eq!(offer.size_bytes, 34_403_304);
+        assert_eq!(offer.size_bytes, 38_939_284);
         assert_eq!(
             offer.sha256,
-            "2672d85bf87c8280d94dee01eb6a86280046878f70a07d786a93637fa9081163"
+            "6dea3c0aa58319337bfbe32046d3b36573e8ac742ebefbccc6dedd9b283b6876"
         );
         assert_eq!(offer.executable, "llama-server.exe");
-        assert_eq!(offer.executable_size_bytes, 9_216);
+        assert_eq!(offer.executable_size_bytes, 10_240);
         assert_eq!(
             offer.executable_sha256,
-            "0f706d509ce7937504d527f49cc1e68a0e45ee60cfc4153b3ff16f76a0f4e3ac"
+            "f57bf386996a089974133e96f31acc4e429fcb691516c9f0684ffa11d6606b9b"
         );
         assert_eq!(offer.license, "MIT");
     }
@@ -1484,7 +1484,7 @@ mod tests {
         assert_eq!(
             local_runtime_bundle_path(root, offer).expect("bundle path"),
             root.join("llama-cpp")
-                .join("v0.3.0")
+                .join("v0.4.0")
                 .join("vulkan-x64")
                 .join("bundle.zip")
         );

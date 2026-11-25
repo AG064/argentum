@@ -11812,6 +11812,8 @@ fn provider_probe_failure_detail(label: &str, error_value: &ProviderError) -> St
         ProviderError::LocalRuntimeCancelled | ProviderError::RequestCancelled => {
             format!("{label} operation was cancelled.")
         }
+        ProviderError::LocalRuntimeFileRejected { .. }
+        | ProviderError::LocalRuntimeStartFailed { .. } => format!("{label}: {error_value}"),
         ProviderError::LocalRuntimeLaunchFailed { .. }
         | ProviderError::LocalRuntimeLifecycleFailed
         | ProviderError::LocalRuntimeLeaseStale => {
@@ -11919,6 +11921,8 @@ fn provider_catalog_failure_detail(label: &str, error_value: &ProviderError) -> 
         | ProviderError::LocalRuntimeApprovalStale
         | ProviderError::LocalRuntimeCancelled
         | ProviderError::LocalRuntimeLaunchFailed { .. }
+        | ProviderError::LocalRuntimeFileRejected { .. }
+        | ProviderError::LocalRuntimeStartFailed { .. }
         | ProviderError::LocalRuntimeLifecycleFailed
         | ProviderError::LocalRuntimeLeaseStale
         | ProviderError::RequestCancelled => {

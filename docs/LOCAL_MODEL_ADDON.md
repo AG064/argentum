@@ -53,8 +53,51 @@ and workload. Argentum leaves the cache disabled by default. llama.cpp provides
 a cache tuner to measure cache sizes and CPU shares for a specific machine and
 workload.
 
-The mmproj file is passed to llama.cpp. This change does not add image attachment
-support to Argentum's chat interface.
+The mmproj file is passed to llama.cpp. Argentum's chat interface does not yet
+attach images.
+
+Argentum also passes `--no-op-offload`. When weights stay in system memory, such
+as the experts of a large MoE model, llama.cpp would otherwise copy them to the
+GPU for each prompt batch and reserve a compute buffer larger than an 8 GB card,
+and the model would not start. With every layer on the GPU the flag changes
+nothing.
+
+Measured on Windows with an 8 GB GPU and 32 GB of system memory, Inkling at a
+16K context put 25 of 49 layers on the GPU, used about 6.3 GB of GPU memory and
+17.6 GB of process memory (8.5 GB private, the rest the mapped model file), and
+generated about 5 tokens per second. At 8K, Argentum's own coding request does
+not fit, so use 16K or more.
+
+## Any local model
+
+The add-on list is a convenience. Any `.gguf` file you put in `<data>/models/`
+can be chosen as the llama.cpp model, and it is hashed and shown in the launch
+approval like the listed ones.
+
+To load adapters with a model, write a plain text file next to it named after
+the model with `.adapters` added, such as `MyModel.gguf.adapters`:
+
+```text
+# Lines starting with # are skipped.
+lora MyModel-LoRA.gguf
+mmproj mmproj-MyModel-F16.gguf
+```
+
+Each line is `lora <file>` or `mmproj <file>`. The files must be in the same
+folder. Up to eight LoRA files and one mmproj file are accepted. Every listed
+file is hashed and shown, with its size and SHA-256, in the launch approval, and
+nothing starts until you approve it. If the list or a file is wrong, the launch
+stops and says which file and why.
+
+The Inkling download writes `Inkling-2-Mini-AD-Q4_K.gguf.adapters` with its LoRA
+and mmproj. Delete the `lora` line to run Inkling without the Uncensored LoRA.
+Argentum keeps a list that already exists, and removing the add-on deletes it.
+
+## When a launch fails
+
+Argentum shows the reason. A file problem names the file and what is wrong with
+it. If llama-server stops before it is ready, Argentum shows its exit code and
+the error lines it printed, such as a failed GPU memory allocation.
 
 The pins are in `crates/argentum-update/src/addon.rs`. The runtime pin must match
 the local runtime's own pin in `crates/argentum-providers/src/runtime_bundles.rs`.

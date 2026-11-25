@@ -138,6 +138,9 @@ fn client() -> Result<reqwest::Client, UpdateError> {
     reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(5))
         .connect_timeout(Duration::from_secs(15))
+        // A download that receives nothing for this long has stalled. Without
+        // it a dropped connection could leave the progress bar stuck forever.
+        .read_timeout(Duration::from_secs(60))
         .user_agent(concat!("Argentum/", env!("CARGO_PKG_VERSION")))
         .https_only(true)
         .build()
@@ -166,7 +169,7 @@ async fn fetch_bounded(
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| UpdateError("The download stopped early.".into()))?
+        .map_err(|error| UpdateError(format!("The download stopped early: {error}")))?
     {
         if body.len() + chunk.len() > limit {
             return fail("The response was larger than expected.");
@@ -277,7 +280,7 @@ impl PartialFile {
     pub(crate) fn finish(mut self, target: &Path) -> Result<(), UpdateError> {
         drop(self.file.take());
         fs::rename(&self.path, target)
-            .map_err(|_| UpdateError("The download could not be saved.".into()))?;
+            .map_err(|error| UpdateError(format!("The download could not be saved: {error}")))?;
         self.path = PathBuf::new();
         Ok(())
     }
@@ -307,7 +310,7 @@ pub(crate) async fn stream_checked(
         .get(url)
         .send()
         .await
-        .map_err(|_| UpdateError("The download could not start.".into()))?;
+        .map_err(|error| UpdateError(format!("The download could not start: {error}")))?;
     if !response.status().is_success() {
         return fail(format!(
             "The download answered with status {}.",
@@ -328,15 +331,17 @@ pub(crate) async fn stream_checked(
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| UpdateError("The download stopped early.".into()))?
+        .map_err(|error| UpdateError(format!("The download stopped early: {error}")))?
     {
         received += chunk.len() as u64;
         if received > limit || exact_size.is_some_and(|exact| received > exact) {
             return fail("The download is larger than Argentum accepts.");
         }
         hasher.update(&chunk);
-        file.write_all(&chunk).map_err(|_| {
-            UpdateError("The download could not be saved. Check free disk space.".into())
+        file.write_all(&chunk).map_err(|error| {
+            UpdateError(format!(
+                "The download could not be saved ({error}). Check free disk space."
+            ))
         })?;
         progress(received, total);
     }
@@ -344,7 +349,7 @@ pub(crate) async fn stream_checked(
         return fail("The download stopped early.");
     }
     file.sync_all()
-        .map_err(|_| UpdateError("The download could not be saved.".into()))?;
+        .map_err(|error| UpdateError(format!("The download could not be saved: {error}")))?;
     if hex(&hasher.finalize()) != expected_sha256 {
         return fail("The download does not match its published checksum, so it was discarded.");
     }

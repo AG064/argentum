@@ -55,8 +55,9 @@ mod tls_contract_tests;
 mod tool_contract;
 mod usage_accounting;
 pub use local_models::{
-    android_local_model_offers, download_local_model, local_model_components, local_model_offers,
-    LocalLlamaCppProvider, LocalModelComponent, LocalModelComponentKind, LocalModelOffer,
+    android_local_model_offers, download_local_model, local_model_adapters,
+    local_model_adapters_path, local_model_offers, LocalLlamaCppProvider, LocalModelAdapter,
+    LocalModelComponentKind, LocalModelOffer, LOCAL_MODEL_ADAPTERS_SUFFIX,
 };
 #[cfg(feature = "test-support")]
 pub use local_runtime::{
@@ -173,6 +174,10 @@ pub enum ProviderError {
     LocalRuntimeCancelled,
     #[error("local runtime launch failed during {stage}")]
     LocalRuntimeLaunchFailed { stage: &'static str },
+    #[error("local model file {file} cannot be used: {reason}")]
+    LocalRuntimeFileRejected { file: String, reason: String },
+    #[error("local runtime could not start ({stage}): {detail}")]
+    LocalRuntimeStartFailed { stage: &'static str, detail: String },
     #[error("local runtime lifecycle operation failed")]
     LocalRuntimeLifecycleFailed,
     #[error("local runtime client lease is stale")]
