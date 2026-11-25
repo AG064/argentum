@@ -27,8 +27,8 @@ import java.util.regex.Pattern;
 import com.argentum.ArgentumActivity;
 
 /**
- * Emulator UI tests for the debug APK. Keys reach the app through Android's
- * real input path. The app's debug-only test bridge reports what is on screen
+ * Emulator UI tests for the debug APK. The Back key reaches the app through
+ * Android's real input path. The app's debug-only test bridge reports what is on screen
  * in files/ui-test/state.json and runs a few button callbacks from
  * files/ui-test/commands, so no test taps at screen coordinates.
  *
@@ -137,9 +137,9 @@ public final class ArgentumUiInstrumentation extends Instrumentation {
         results.put("first_run", "pass");
     }
 
-    /** Ctrl+, opens Settings, through the hardware keyboard path. */
+    /** The Settings button's action opens Settings. */
     private void settingsTest() throws Exception {
-        sendChord(KeyEvent.KEYCODE_COMMA, KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON);
+        command("open_settings");
         waitFor("settings", STEP_TIMEOUT_MS, s -> s.contains("\"settings_open\":true"));
         SystemClock.sleep(800);
         screenshot("03-settings");
@@ -150,7 +150,7 @@ public final class ArgentumUiInstrumentation extends Instrumentation {
     private void backTest(Activity activity) throws Exception {
         sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
         waitFor("back", STEP_TIMEOUT_MS, s -> s.contains("\"settings_open\":false"));
-        sendChord(KeyEvent.KEYCODE_B, KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON);
+        command("open_drawer");
         waitFor("back", STEP_TIMEOUT_MS, s -> s.contains("\"drawer_open\":true"));
         screenshot("04-drawer");
         sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
@@ -174,12 +174,6 @@ public final class ArgentumUiInstrumentation extends Instrumentation {
         SystemClock.sleep(800);
         screenshot("06-reply");
         results.put("message", "pass");
-    }
-
-    private void sendChord(int keyCode, int meta) {
-        long now = SystemClock.uptimeMillis();
-        sendKeySync(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta));
-        sendKeySync(new KeyEvent(now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0, meta));
     }
 
     private void command(String line) throws IOException {

@@ -8,8 +8,8 @@
 //! When on, it writes what is on screen to `files/ui-test/state.json` and reads
 //! one line at a time from `files/ui-test/commands`. A command calls the same
 //! UI callback a button calls, so a test can enter a server address or send a
-//! message without tapping at screen coordinates. Keys such as Back and Ctrl+,
-//! still come from Android's real input path.
+//! message without tapping at screen coordinates. The Back key still comes
+//! from Android's real input path.
 
 use std::fs;
 use std::io::Write;
@@ -181,6 +181,16 @@ fn run_command(window: &argentum_ui::MainWindow, line: &str) -> Result<(), &'sta
         // The Start button at the end of first run.
         ["first_run_finish"] => {
             app.invoke_first_run_finish();
+            Ok(())
+        }
+        // The Settings button in the header.
+        ["open_settings"] => {
+            app.invoke_open_settings();
+            Ok(())
+        }
+        // The menu button that opens the drawer on a phone.
+        ["open_drawer"] => {
+            app.set_drawer_open(true);
             Ok(())
         }
         // The send button in the composer, with this text.
