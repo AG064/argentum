@@ -506,6 +506,8 @@ export struct ProviderUsageView {
     total: string,
     // "1.2k for compaction" when compaction used any, else empty.
     compaction: string,
+    // True for providers that report an account balance.
+    has_balance: bool,
     // "12.4k this month of 50k" or "12.4k this month".
     month: string,
     // "ok", "warn" (80% or more of the limit) or "stopped".

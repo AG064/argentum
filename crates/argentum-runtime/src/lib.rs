@@ -3030,6 +3030,9 @@ impl RuntimeService {
                 self.publish_ui_preferences()
             }
             AppCommand::LoadProviderUsage => self.publish_provider_usage(),
+            AppCommand::LoadProviderBalance { profile_id } => {
+                self.load_provider_balance(profile_id).await
+            }
             AppCommand::SetProviderSpendLimit {
                 profile_id,
                 monthly_tokens,
@@ -7976,6 +7979,35 @@ impl RuntimeService {
         Ok(())
     }
 
+    /// Reads a provider's account balance when the owner asks. The provider
+    /// uses the key the owner saved for it, on its own host; the result says
+    /// only what the provider reported, or why it could not be read.
+    async fn load_provider_balance(&self, profile_id: String) -> Result<(), RuntimeError> {
+        let Some(profile) = self
+            .store
+            .provider_profiles(self.project_id)?
+            .into_iter()
+            .find(|profile| profile.id == profile_id)
+        else {
+            return Err(RuntimeError::Provider(ProviderError::InvalidResponse(
+                "no such provider profile".into(),
+            )));
+        };
+        let (balance, error) = match self.providers.provider_for_profile(&profile) {
+            Ok(provider) => match provider.account_balance().await {
+                Ok(balance) => (balance, String::new()),
+                Err(error) => (None, error.to_string()),
+            },
+            Err(error) => (None, error.to_string()),
+        };
+        self.publish_transient(AppEvent::ProviderBalanceLoaded {
+            profile_id,
+            balance,
+            error,
+        });
+        Ok(())
+    }
+
     /// Every file a session changed, for the Changes panel. A session from
     /// another project is refused, like every other session command.
     fn load_session_changes(&self, session_id: SessionId) -> Result<(), RuntimeError> {
@@ -12485,6 +12517,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::LayoutChanged(_)
         | AppEvent::UiPreferencesLoaded { .. }
         | AppEvent::ProviderUsageLoaded { .. }
+        | AppEvent::ProviderBalanceLoaded { .. }
         | AppEvent::GitStatusLoaded(_)
         | AppEvent::GitDiffLoaded(_)
         | AppEvent::BrowserPageLoaded(_)
@@ -12638,6 +12671,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::LayoutChanged(_)
         | AppEvent::UiPreferencesLoaded { .. }
         | AppEvent::ProviderUsageLoaded { .. }
+        | AppEvent::ProviderBalanceLoaded { .. }
         | AppEvent::GitStatusLoaded(_)
         | AppEvent::GitDiffLoaded(_)
         | AppEvent::BrowserPageLoaded(_)

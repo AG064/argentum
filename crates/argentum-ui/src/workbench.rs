@@ -517,6 +517,30 @@ pub(crate) fn parse_spend_limit(text: &str) -> Result<Option<u64>, ()> {
     }
 }
 
+/// Providers whose account balance can be read: DeepSeek and OpenRouter,
+/// over HTTPS on their own hosts.
+fn reports_balance(endpoint: &str) -> bool {
+    url::Url::parse(endpoint).is_ok_and(|url| {
+        url.scheme() == "https"
+            && matches!(url.host_str(), Some("api.deepseek.com" | "openrouter.ai"))
+    })
+}
+
+/// The Usage panel's balance line.
+pub(crate) fn balance_text(
+    balance: Option<&argentum_domain::AccountBalance>,
+    error: &str,
+) -> String {
+    match balance {
+        Some(balance) if balance.detail.is_empty() => format!("Balance: {}", balance.remaining),
+        Some(balance) => format!("Balance: {}. {}", balance.remaining, balance.detail),
+        None if !error.is_empty() => {
+            "The balance could not be read. Check the key in Settings > Providers.".into()
+        }
+        None => "This provider does not report a balance.".into(),
+    }
+}
+
 pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
     let profiles = window.get_provider_profiles();
     let label_for = |id: &str| {
@@ -553,6 +577,9 @@ pub fn apply_provider_usage(window: &MainWindow, rows: &[ProviderUsageRow]) {
                 limit: row
                     .monthly_limit
                     .map_or_else(SharedString::default, |limit| limit.to_string().into()),
+                has_balance: profile
+                    .as_ref()
+                    .is_some_and(|profile| reports_balance(profile.endpoint.as_str())),
                 compaction: if row.compaction_tokens == 0 {
                     SharedString::default()
                 } else {
@@ -1223,6 +1250,18 @@ where
                 }
             },
         );
+        let balance_dispatch = dispatch.clone();
+        let balance_window = window.as_weak();
+        app.on_load_balance(move |profile_id| {
+            if let Some(window) = balance_window.upgrade() {
+                let app = window.global::<crate::App>();
+                app.set_balance_profile_id(profile_id.clone());
+                app.set_balance_text("Checking the balance".into());
+            }
+            balance_dispatch(AppCommand::LoadProviderBalance {
+                profile_id: profile_id.to_string(),
+            });
+        });
         app.on_undo_ui_change(move |index| {
             let Some(window) = history_window.upgrade() else {
                 return;
@@ -1816,5 +1855,25 @@ mod spend_tests {
         assert_eq!(parse_spend_limit(""), Ok(None));
         assert_eq!(parse_spend_limit("0"), Err(()));
         assert_eq!(parse_spend_limit("lots"), Err(()));
+    }
+}
+
+#[cfg(test)]
+mod balance_tests {
+    use super::*;
+
+    #[test]
+    fn only_deepseek_and_openrouter_offer_a_balance_and_errors_stay_plain() {
+        assert!(reports_balance("https://api.deepseek.com/"));
+        assert!(reports_balance("https://openrouter.ai/api/v1/"));
+        assert!(!reports_balance("http://api.deepseek.com/"));
+        assert!(!reports_balance("https://api.openai.com/v1/"));
+        let balance = argentum_domain::AccountBalance {
+            remaining: "42.50 USD".into(),
+            detail: String::new(),
+        };
+        assert_eq!(balance_text(Some(&balance), ""), "Balance: 42.50 USD");
+        let failed = balance_text(None, "provider returned HTTP 401");
+        assert!(!failed.contains("401") && failed.contains("Settings > Providers"));
     }
 }

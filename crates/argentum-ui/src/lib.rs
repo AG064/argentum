@@ -2036,6 +2036,16 @@ impl UiHandle {
                 );
                 self.reconcile_first_run(preferences.first_run_complete);
             }
+            AppEvent::ProviderBalanceLoaded {
+                profile_id,
+                balance,
+                error,
+            } => {
+                let app = self.window.global::<App>();
+                if app.get_balance_profile_id().as_str() == profile_id {
+                    app.set_balance_text(workbench::balance_text(balance.as_ref(), error).into());
+                }
+            }
             AppEvent::ProviderUsageLoaded {
                 rows,
                 daily,
