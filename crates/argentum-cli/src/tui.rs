@@ -170,6 +170,10 @@ pub enum TuiError {
 
 pub struct TuiState {
     settings_busy: bool,
+    /// The project's memory notes from the latest snapshot, newest first.
+    memory_notes: Vec<argentum_domain::memory::MemoryNote>,
+    /// Print the notes when the next snapshot arrives.
+    memory_listing: bool,
     next_skill: Option<argentum_workspaces::SelectedSkill>,
     workspace: PathBuf,
     no_color: bool,
@@ -231,6 +235,8 @@ impl TuiState {
     pub fn new(workspace: PathBuf, no_color: bool) -> Self {
         Self {
             settings_busy: false,
+            memory_notes: Vec::new(),
+            memory_listing: false,
             next_skill: None,
             workspace,
             no_color,
@@ -795,6 +801,15 @@ impl TuiState {
                     self.truncate_timeline();
                 }
             }
+            AppEvent::MemorySnapshot { notes, notice, .. } => {
+                self.memory_notes = notes;
+                if let Some(notice) = notice {
+                    self.append_system(&notice);
+                }
+                if std::mem::take(&mut self.memory_listing) {
+                    self.append_system(&memory_listing(&self.memory_notes));
+                }
+            }
             AppEvent::PlanUpdated { run_id, steps } => {
                 if self.run_is_current(run_id) {
                     self.show_plan(run_id, &steps);
@@ -1299,6 +1314,78 @@ impl TuiState {
         }
     }
 
+    /// `/memory [add TEXT | edit N TEXT | delete N | export]`. N is the
+    /// number `/memory` shows. Every change goes through the runtime, which
+    /// refuses a note that looks like it holds a secret.
+    fn memory_command(&mut self, prompt: &str) -> TuiAction {
+        let rest = prompt
+            .split_once(char::is_whitespace)
+            .map_or("", |(_, rest)| rest)
+            .trim();
+        let (action, rest) = rest
+            .split_once(char::is_whitespace)
+            .map_or((rest, ""), |(action, rest)| (action, rest.trim()));
+        let note_id = |state: &Self, number: &str| {
+            number
+                .parse::<usize>()
+                .ok()
+                .and_then(|number| state.memory_notes.get(number.wrapping_sub(1)))
+                .map(|note| note.id)
+        };
+        match action.to_ascii_lowercase().as_str() {
+            "" | "list" => {
+                self.memory_listing = true;
+                TuiAction::Dispatch(AppCommand::ListMemory)
+            }
+            "add" if !rest.is_empty() => {
+                self.memory_listing = true;
+                TuiAction::Dispatch(AppCommand::AddMemoryNote { text: rest.into() })
+            }
+            "edit" => {
+                let (number, text) = rest
+                    .split_once(char::is_whitespace)
+                    .map_or((rest, ""), |(number, text)| (number, text.trim()));
+                match note_id(self, number).filter(|_| !text.is_empty()) {
+                    Some(id) => {
+                        self.memory_listing = true;
+                        TuiAction::Dispatch(AppCommand::UpdateMemoryNote {
+                            id,
+                            text: text.into(),
+                        })
+                    }
+                    None => {
+                        self.append_system("Usage: /memory edit N TEXT, with N from /memory.");
+                        TuiAction::Redraw
+                    }
+                }
+            }
+            "delete" => match note_id(self, rest) {
+                Some(id) => {
+                    self.memory_listing = true;
+                    TuiAction::Dispatch(AppCommand::DeleteMemoryNote { id })
+                }
+                None => {
+                    self.append_system("Usage: /memory delete N, with N from /memory.");
+                    TuiAction::Redraw
+                }
+            },
+            "export" => {
+                let mut text = String::from("# Project memory\n");
+                for note in &self.memory_notes {
+                    text.push_str(&format!("\n- {}", note.text));
+                }
+                self.append_system(&text);
+                TuiAction::Redraw
+            }
+            _ => {
+                self.append_system(
+                    "Usage: /memory, /memory add TEXT, /memory edit N TEXT, /memory delete N, /memory export",
+                );
+                TuiAction::Redraw
+            }
+        }
+    }
+
     fn handle_slash_command(&mut self, prompt: &str) -> TuiAction {
         let mut parts = prompt.split_whitespace();
         let command = parts.next().unwrap_or_default().to_ascii_lowercase();
@@ -1336,7 +1423,7 @@ impl TuiState {
             }
             "/help" => {
                 self.append_system(
-                    "Commands: /help /setup /new /fork /sessions /resume SESSION_ID /queue [continue|discard] /steer TEXT /stop /retry /quit",
+                    "Commands: /help /setup /new /fork /sessions /resume SESSION_ID /queue [continue|discard] /steer TEXT /memory /stop /retry /quit",
                 );
                 TuiAction::Redraw
             }
@@ -1453,6 +1540,7 @@ impl TuiState {
                 }
                 TuiAction::Redraw
             }
+            "/memory" => self.memory_command(prompt),
             "/context" => {
                 if parts.next().is_some() {
                     self.append_system("Usage: /context");
@@ -3128,6 +3216,27 @@ impl KeyMapper {
         }
         map_key_event(key)
     }
+}
+
+/// The notes as `/memory` shows them, numbered for edit and delete.
+fn memory_listing(notes: &[argentum_domain::memory::MemoryNote]) -> String {
+    if notes.is_empty() {
+        return "Project memory is empty. The agent adds notes with its remember tool, or use /memory add TEXT.".into();
+    }
+    let mut text = format!(
+        "Project memory, {} note{}, newest first. Stored with this project's data, not in the repository:",
+        notes.len(),
+        if notes.len() == 1 { "" } else { "s" }
+    );
+    for (index, note) in notes.iter().enumerate() {
+        text.push_str(&format!(
+            "\n{:>3}. {} ({})",
+            index + 1,
+            note.text,
+            note.author.as_str()
+        ));
+    }
+    text
 }
 
 #[cfg(test)]

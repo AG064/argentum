@@ -168,6 +168,13 @@ export struct ToolCatalogView {
     requires_approval: bool,
 }
 
+// One project memory note. `id` is the store's id; 0 is never used.
+export struct MemoryNoteView {
+    id: int,
+    text: string,
+    author: string,
+}
+
 // One thing found in Claude Code, Codex or OpenCode settings.
 export struct ImportRowView {
     id: string,

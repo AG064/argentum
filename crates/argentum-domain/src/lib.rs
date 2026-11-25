@@ -24,6 +24,7 @@ pub mod reply_steps;
 pub use reply_steps::{REASONING_STEP_BREAK, REASONING_STEP_MARK};
 pub mod goal_supervision;
 pub mod imports;
+pub mod memory;
 pub mod process_job_contract;
 pub mod recovery;
 pub mod supplemental;
@@ -2918,6 +2919,20 @@ pub enum AppCommand {
     ImportItems {
         ids: Vec<String>,
     },
+    /// Lists the project's memory notes.
+    ListMemory,
+    /// The owner adds, edits or deletes a memory note. A note that looks like
+    /// it holds a secret is refused.
+    AddMemoryNote {
+        text: String,
+    },
+    UpdateMemoryNote {
+        id: i64,
+        text: String,
+    },
+    DeleteMemoryNote {
+        id: i64,
+    },
     /// Reads a provider profile's account balance from the provider, when the
     /// owner asks. Only DeepSeek and OpenRouter report one.
     LoadProviderBalance {
@@ -3023,6 +3038,15 @@ pub enum AppEvent {
     },
     SkillInspectionSnapshot {
         inspection: SkillInspectionView,
+    },
+    MemorySnapshot {
+        notes: Vec<memory::MemoryNote>,
+        /// What the last change did, or why it was refused.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notice: Option<String>,
+        /// True when the last change was refused and nothing changed.
+        #[serde(default)]
+        refused: bool,
     },
     ImportScanSnapshot {
         items: Vec<imports::ImportItemView>,
@@ -3322,6 +3346,7 @@ impl AppEvent {
             Self::ToolCatalogSnapshot { .. } => "tool_catalog_snapshot",
             Self::SkillCatalogSnapshot { .. } => "skill_catalog_snapshot",
             Self::ImportScanSnapshot { .. } => "import_scan_snapshot",
+            Self::MemorySnapshot { .. } => "memory_snapshot",
             Self::SkillInspectionSnapshot { .. } => "skill_inspection_snapshot",
             Self::AccountingSnapshot { .. } => "accounting_snapshot",
             Self::RunDiagnosticsSnapshot { .. } => "run_diagnostics_snapshot",

@@ -844,6 +844,82 @@ fn scenes() -> Vec<Scene> {
             ui.window().set_settings_open(true);
             ui.window().set_settings_section("tools".into());
         }),
+        s("61-settings-import", (1440, 900), |ui| {
+            use argentum_domain::imports::{ImportItemView, ImportOrigin};
+            modules(ui, "full");
+            let item =
+                |id: &str, kind: &str, summary: &str, destination: Option<&str>| ImportItemView {
+                    id: id.into(),
+                    kind: kind.into(),
+                    name: id.rsplit(':').next().unwrap_or(id).into(),
+                    origin: ImportOrigin::ClaudeCodeProject,
+                    summary: summary.into(),
+                    source_path: ".claude".into(),
+                    destination: destination.map(Into::into),
+                    dropped: if kind == "skill" {
+                        vec!["the allowed-tools field".into()]
+                    } else {
+                        vec![]
+                    },
+                    conflict: None,
+                    importable: kind != "instructions",
+                };
+            ui.apply_event(&argentum_domain::AppEvent::ImportScanSnapshot {
+                items: vec![
+                    item(
+                        "instructions:claude_code_project:CLAUDE.md",
+                        "instructions",
+                        "Instructions CLAUDE.md: loaded with AGENTS.md, nothing to import",
+                        None,
+                    ),
+                    item(
+                        "mcp:claude_code_project:github",
+                        "mcp_server",
+                        "MCP server github: npx -y @modelcontextprotocol/server-github",
+                        None,
+                    ),
+                    item(
+                        "skill:claude_code_project:release-review",
+                        "skill",
+                        "Skill release-review: Check a release before tagging",
+                        Some(".agents/skills/release-review/SKILL.md"),
+                    ),
+                ],
+                problems: vec![],
+                results: vec![],
+            });
+            ui.window().set_settings_open(true);
+            ui.window().set_settings_section("tools".into());
+        }),
+        s("62-settings-memory", (1440, 1700), |ui| {
+            use argentum_domain::memory::{MemoryAuthor, MemoryNote};
+            modules(ui, "full");
+            let note = |id: i64, text: &str, author: MemoryAuthor| MemoryNote {
+                id,
+                text: text.into(),
+                author,
+                created_at: 0,
+                updated_at: 0,
+            };
+            ui.apply_event(&argentum_domain::AppEvent::MemorySnapshot {
+                notes: vec![
+                    note(
+                        2,
+                        "Run cargo test -p argentum-store before a commit.",
+                        MemoryAuthor::Agent,
+                    ),
+                    note(
+                        1,
+                        "Plain language in docs, no em dashes.",
+                        MemoryAuthor::Owner,
+                    ),
+                ],
+                notice: None,
+                refused: false,
+            });
+            ui.window().set_settings_open(true);
+            ui.window().set_settings_section("workspace".into());
+        }),
         s("32-goal-panel", (1440, 900), |ui| {
             modules(ui, "full");
             conversation(ui);

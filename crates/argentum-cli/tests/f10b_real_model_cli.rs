@@ -6862,8 +6862,8 @@ fn strip_status_tools(tools: &mut Vec<&str>) {
     if tools.is_empty() {
         return;
     }
-    for status_tool in ["ask_user", "update_plan"] {
+    for status_tool in ["ask_user", "remember", "update_plan"] {
         assert!(tools.contains(&status_tool), "{status_tool} offered");
     }
-    tools.retain(|tool| !matches!(*tool, "ask_user" | "update_plan"));
+    tools.retain(|tool| !matches!(*tool, "ask_user" | "remember" | "update_plan"));
 }

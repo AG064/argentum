@@ -873,7 +873,12 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         // Imports read the owner's other agents' settings and write project
         // skills, only when the owner asks in the app or the local CLI.
         | AppCommand::ScanImports
-        | AppCommand::ImportItems { .. } => false,
+        | AppCommand::ImportItems { .. }
+        // Memory notes are the owner's, read and changed in the app or chat.
+        | AppCommand::ListMemory
+        | AppCommand::AddMemoryNote { .. }
+        | AppCommand::UpdateMemoryNote { .. }
+        | AppCommand::DeleteMemoryNote { .. } => false,
     }
 }
 

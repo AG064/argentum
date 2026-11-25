@@ -203,6 +203,11 @@ impl RuntimeService {
                 text.push_str(argentum_domain::environment::execution_environment());
                 text.push('\n');
             }
+            // Memory notes are data like the repository instructions, and go
+            // just before them.
+            if let Some(memory) = self.memory_context()? {
+                text.push_str(&memory);
+            }
             text.push_str(&instructions::host_guidance(policy, responder));
             if policy
                 .capability_enabled

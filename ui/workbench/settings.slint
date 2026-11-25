@@ -7,7 +7,7 @@ import { App, Mods } from "state.slint";
 import { Badge, Btn, Divider, VDivider, Field, Focus, Icon, IconBtn, Label, Meter, Row, Scroller, SectionLabel, Sheet, Spinner, Switch } from "kit.slint";
 import { BrandMark } from "../components/brand.slint";
 import { RichBlocks } from "rich.slint";
-import { BudgetSection, CapabilitiesPage, CredentialSection, DiagnosticsPage, GrantsSection, LocalModelSection, PresetChips, ProviderCatalog, ToolsPage, VerificationPage } from "ops.slint";
+import { BudgetSection, CapabilitiesPage, CredentialSection, DiagnosticsPage, GrantsSection, LocalModelSection, MemorySection, PresetChips, ProviderCatalog, ToolsPage, VerificationPage } from "ops.slint";
 
 component Heading inherits VerticalLayout {
     in property <string> title;
@@ -582,6 +582,7 @@ component WorkspacePage inherits VerticalLayout {
         }
     }
     Text { text: "Opening a different folder keeps Argentum open. Sessions stay with the folder they belong to."; color: Theme.text-3; font-size: Theme.fs-xs + 0.5px; wrap: word-wrap; }
+    MemorySection { }
 }
 
 // Updates live in Settings rather than in a module: keeping up to date should not

@@ -195,6 +195,13 @@ pub(super) const COMMANDS: &[Command] = &[
         false
     ),
     cmd!(
+        "/memory",
+        "Project memory notes: add, edit N, delete N, export",
+        "conversation",
+        None,
+        false
+    ),
+    cmd!(
         "/context",
         "Selected context, separate from scrollback",
         "diagnostics",

@@ -282,6 +282,48 @@ export component VerificationReviewSheet inherits Sheet {
     }
 }
 
+// Project memory: short notes kept with this project's data, never in the
+// repository. The owner reads, edits and deletes them here.
+export component MemorySection inherits VerticalLayout {
+    spacing: Theme.sp4;
+    init => { App.memory_refresh(); }
+    SectionLabel { text: "PROJECT MEMORY"; height: 22px; }
+    Label {
+        text: "Short notes kept for this project, by you and by the agent's remember tool. The newest 4 KB go into each request. They are stored with this project's data, not in the repository, and grant nothing. Notes that look like they hold a secret are refused.";
+        tone: "secondary";
+        size: "sm";
+        wrap: word-wrap;
+    }
+    if App.memory_notes.length == 0: Label { text: "No notes yet."; tone: "muted"; size: "sm"; }
+    for note in App.memory_notes: HorizontalLayout {
+        spacing: Theme.sp8;
+        padding-top: Theme.sp4;
+        padding-bottom: Theme.sp4;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: Theme.sp2;
+            Label { text: note.text; wrap: word-wrap; }
+            Label { text: note.author == "agent" ? "Kept by the agent" : "Yours"; tone: "muted"; size: "xs"; }
+        }
+        Btn { small: true; label: "Edit"; clicked => { App.memory_editing = note.id; App.memory_draft = note.text; } }
+        Btn { small: true; label: "Delete"; clicked => { App.memory_delete(note.id); } }
+    }
+    Field {
+        label: App.memory_editing != 0 ? "Edit note" : "Add a note";
+        placeholder: "Such as: run cargo test -p argentum-store before a commit";
+        value <=> App.memory_draft;
+        error: App.memory_notice;
+        edited(text) => { App.memory_notice = ""; }
+        accepted(text) => { App.memory_save(); }
+    }
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.sp8;
+        Btn { small: true; label: App.memory_editing != 0 ? "Save note" : "Add note"; clicked => { App.memory_save(); } }
+        if App.memory_editing != 0: Btn { small: true; label: "Cancel"; clicked => { App.memory_editing = 0; App.memory_draft = ""; } }
+    }
+}
+
 export component ToolsPage inherits VerticalLayout {
     spacing: Theme.sp16;
     init => {

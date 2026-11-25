@@ -675,10 +675,11 @@ async fn f05_observe_guidance_and_context_access_follow_effective_policy() {
     Fixture::finish(fixture.start()).await.unwrap();
     {
         let requests = fixture.requests.lock().unwrap();
-        // Observe tools, the plan and question tools, and Git only in a repository.
+        // Observe tools, the plan, question and memory tools, and Git only
+        // in a repository.
         assert_eq!(
             requests[0].tools.len(),
-            10 - super::hidden_by_workspace(fixture.directory.path(), &["git_read"])
+            11 - super::hidden_by_workspace(fixture.directory.path(), &["git_read"])
         );
         assert!(requests[0]
             .system

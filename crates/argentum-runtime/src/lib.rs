@@ -97,6 +97,7 @@ mod diagnostics;
 #[cfg(feature = "extensions")]
 mod extensions;
 mod imports;
+pub mod memory;
 mod modules;
 pub use authority::RuntimeHostAuthority;
 
@@ -3033,6 +3034,10 @@ impl RuntimeService {
             AppCommand::LoadProviderUsage => self.publish_provider_usage(),
             AppCommand::ScanImports => self.publish_import_scan(Vec::new()),
             AppCommand::ImportItems { ids } => self.import_items(ids),
+            AppCommand::ListMemory => self.publish_memory(None),
+            AppCommand::AddMemoryNote { text } => self.owner_add_memory(&text),
+            AppCommand::UpdateMemoryNote { id, text } => self.owner_update_memory(id, &text),
+            AppCommand::DeleteMemoryNote { id } => self.owner_delete_memory(id),
             AppCommand::LoadProviderBalance { profile_id } => {
                 self.load_provider_balance(profile_id).await
             }
@@ -6351,6 +6356,7 @@ impl RuntimeService {
             if !definitions.is_empty() {
                 definitions.push(plan::plan_tool_definition());
                 definitions.push(plan::ask_tool_definition());
+                definitions.push(memory::remember_tool_definition());
             }
             definitions
         })
@@ -6460,6 +6466,9 @@ impl RuntimeService {
             return Ok(ModelToolStep::Ready(
                 self.record_goal_completion_report(invocation.run_id, &call)?,
             ));
+        }
+        if call.name == memory::REMEMBER_TOOL_ID {
+            return Ok(ModelToolStep::Ready(self.remember(&call)?));
         }
         if call.name == plan::PLAN_TOOL_ID {
             return Ok(ModelToolStep::Ready(
@@ -12482,6 +12491,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::SkillCatalogSnapshot { .. }
         | AppEvent::SkillInspectionSnapshot { .. }
         | AppEvent::ImportScanSnapshot { .. }
+        | AppEvent::MemorySnapshot { .. }
         | AppEvent::AccountingSnapshot { .. }
         | AppEvent::RunDiagnosticsSnapshot { .. }
         | AppEvent::RunResultSnapshot { .. }
@@ -12639,6 +12649,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::SkillCatalogSnapshot { .. }
         | AppEvent::SkillInspectionSnapshot { .. }
         | AppEvent::ImportScanSnapshot { .. }
+        | AppEvent::MemorySnapshot { .. }
         | AppEvent::AccountingSnapshot { .. }
         | AppEvent::RunDiagnosticsSnapshot { .. }
         | AppEvent::RunResultSnapshot { .. }
@@ -14251,9 +14262,10 @@ mod tests {
         ));
 
         let definitions = runtime.model_tool_definitions().expect("tool definitions");
+        // Includes the plan, question and memory tools.
         assert_eq!(
             definitions.len(),
-            10 - hidden_by_workspace(runtime.workspace.root(), &["git_read"])
+            11 - hidden_by_workspace(runtime.workspace.root(), &["git_read"])
         );
         assert!(definitions.iter().any(|tool| tool.name == "ui_inspect"));
         assert!(!definitions.iter().any(|tool| tool.name == "ui_update"));
@@ -16693,11 +16705,11 @@ mod tests {
         assert_eq!(requests.len(), 2);
         // Optional supplemental execution is registered but not owner-enabled
         // by this default policy; it must not enter the advertised model set.
-        // The plan and question tools join every run with tools; Git and
-        // Rust job tools need a Git repository or a Cargo project.
+        // The plan, question and memory tools join every run with tools; Git
+        // and Rust job tools need a Git repository or a Cargo project.
         assert_eq!(
             requests[0].tools.len(),
-            runtime.tools.descriptors().len() + 2
+            runtime.tools.descriptors().len() + 3
                 - 1
                 - usize::from(cfg!(feature = "extensions"))
                 - 6 * usize::from(cfg!(feature = "desktop-control"))
@@ -20662,6 +20674,112 @@ mod tests {
                 .await
                 .map_err(|_| ProviderError::ConsumerClosed)
         }
+    }
+
+    struct SystemCapturingProvider {
+        seen_systems: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl ModelProvider for SystemCapturingProvider {
+        fn id(&self) -> &'static str {
+            "memory-capture"
+        }
+
+        fn status(&self) -> ProviderStatus {
+            test_provider_status(self.id())
+        }
+
+        async fn stream(
+            &self,
+            request: ModelRequest,
+            sender: mpsc::Sender<ProviderEvent>,
+        ) -> Result<(), ProviderError> {
+            self.seen_systems
+                .lock()
+                .map_err(|_| ProviderError::InvalidResponse("test lock failed".into()))?
+                .push(request.system.unwrap_or_default());
+            sender
+                .send(ProviderEvent::Delta("done".into()))
+                .await
+                .map_err(|_| ProviderError::ConsumerClosed)?;
+            sender
+                .send(ProviderEvent::Completed)
+                .await
+                .map_err(|_| ProviderError::ConsumerClosed)
+        }
+    }
+
+    #[tokio::test]
+    async fn memory_notes_are_checked_kept_and_loaded_as_data() {
+        let seen_systems = Arc::new(Mutex::new(Vec::new()));
+        let mut providers = ProviderRegistry::default();
+        providers.register(SystemCapturingProvider {
+            seen_systems: seen_systems.clone(),
+        });
+        let (runtime, mut events) = runtime_with_providers(providers);
+        runtime
+            .dispatch(AppCommand::SaveProviderProfile {
+                profile: ProviderProfile {
+                    id: "memory-capture".into(),
+                    label: "memory-capture".into(),
+                    kind: ProviderKind::OpenAiCompatible,
+                    endpoint: "https://memory.example.test/v1/".into(),
+                    model: "m".into(),
+                    selected: true,
+                },
+            })
+            .await
+            .expect("saved profile");
+        runtime
+            .declare_model_budget("memory-capture", [2_000_000, 1_900_000, 8192, 4096, 1024])
+            .unwrap();
+        let _ = drain_events(&mut events);
+        runtime
+            .dispatch(AppCommand::AddMemoryNote {
+                text: "the password is SYNTHETIC_CANARY".into(),
+            })
+            .await
+            .expect("refused note");
+        runtime
+            .dispatch(AppCommand::AddMemoryNote {
+                text: "Run  cargo test\n before a commit.".into(),
+            })
+            .await
+            .expect("kept note");
+        let snapshots: Vec<_> = drain_events(&mut events)
+            .into_iter()
+            .filter_map(|event| match event {
+                AppEvent::MemorySnapshot { notes, refused, .. } => Some((notes, refused)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(snapshots.len(), 2);
+        assert!(snapshots[0].1, "the secret-looking note is refused");
+        assert!(snapshots[0].0.is_empty());
+        assert!(!snapshots[1].1);
+        assert_eq!(snapshots[1].0[0].text, "Run cargo test before a commit.");
+
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "hello".into(),
+            })
+            .await
+            .expect("model request");
+        let systems = seen_systems.lock().expect("systems").clone();
+        assert!(systems[0].contains("Project memory (JSON)"));
+        assert!(systems[0].contains("Run cargo test before a commit."));
+        assert!(!systems[0].contains("SYNTHETIC_CANARY"));
+
+        let id = snapshots[1].0[0].id;
+        runtime
+            .dispatch(AppCommand::DeleteMemoryNote { id })
+            .await
+            .expect("deleted note");
+        assert!(drain_events(&mut events).iter().any(|event| matches!(
+            event,
+            AppEvent::MemorySnapshot { notes, refused: false, .. } if notes.is_empty()
+        )));
     }
 
     #[derive(Debug)]
