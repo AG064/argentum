@@ -169,6 +169,10 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
     let inference_foreground = Arc::new(AndroidInferenceForeground::new(app.clone()));
     let insets_timer = slint::Timer::default();
     let insets_timer_ref = &insets_timer;
+    #[cfg(debug_assertions)]
+    let test_bridge = std::cell::RefCell::new(None);
+    #[cfg(debug_assertions)]
+    let test_bridge_ref = &test_bridge;
     let result = run_native_host(
         Some(config),
         NativeHostOptions {
@@ -231,6 +235,11 @@ fn run_android(app: AndroidApp) -> Result<(), AndroidHostError> {
                     );
                 },
             );
+            #[cfg(debug_assertions)]
+            {
+                *test_bridge_ref.borrow_mut() =
+                    crate::ui_test_bridge::start(ui, configure_app.internal_data_path());
+            }
             // Back closes what is on top first: a menu, a sheet, Settings,
             // the drawer or a panel over the chat. It leaves the app only
             // when nothing is open. The decision is made on the UI thread, so
