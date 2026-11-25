@@ -3301,16 +3301,26 @@ impl UiHandle {
         let app = self.window.global::<App>();
         let projection = self.projection();
         let log = &projection.requests;
+        let scale = log
+            .latest()
+            .map_or(requests::TokenScale::Estimated, |record| {
+                log.scale_for(&record.model)
+            });
         let parts = log
             .latest()
-            .map(|record| requests::context_parts(&record.accounting))
+            .map(|record| requests::context_parts(&record.accounting, scale))
             .unwrap_or_default();
         app.set_context_parts(ModelRc::new(VecModel::from(
             parts
                 .iter()
                 .map(|part| ContextPartView {
                     label: part.label.into(),
-                    amount: format!("{} ({:.0}%)", part.amount, part.share * 100.0).into(),
+                    amount: format!(
+                        "{} ({:.0}%)",
+                        workbench::compact_count(part.amount),
+                        part.share * 100.0
+                    )
+                    .into(),
                     share: part.share,
                 })
                 .collect::<Vec<_>>(),
@@ -3319,15 +3329,24 @@ impl UiHandle {
             log.latest()
                 .map(|record| {
                     let accounting = &record.accounting;
+                    let input = record.input_tokens.unwrap_or_else(|| {
+                        accounting
+                            .wire_bytes()
+                            .map_or(accounting.accounted_input, |bytes| scale.tokens(bytes))
+                    });
                     format!(
-                        "{} of {} usable, estimated in bytes. {}",
-                        accounting.accounted_input,
-                        accounting.usable_context,
+                        "{} of {} usable tokens. {} {} tokens left before compaction starts. {}.",
+                        workbench::compact_count(input),
+                        workbench::compact_count(accounting.usable_context),
                         if accounting.fits {
                             "It fits."
                         } else {
                             "It does not fit, so it was not sent."
-                        }
+                        },
+                        workbench::compact_count(requests::left_before_compaction(
+                            accounting, input
+                        )),
+                        scale.label(),
                     )
                 })
                 .unwrap_or_default()

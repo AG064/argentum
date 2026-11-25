@@ -886,7 +886,7 @@ export component RequestsPanel inherits Rectangle {
             spacing: Theme.sp10;
             SectionLabel { text: "CONTEXT OF THE LATEST REQUEST"; height: 22px; }
             if App.context_parts.length == 0: Label {
-                text: "Appears after the next request. Sizes are estimated in bytes, which is never fewer than tokens.";
+                text: "Appears after the next request: what fills the context window, by part, in tokens.";
                 tone: "muted";
                 size: "sm";
                 wrap: word-wrap;
