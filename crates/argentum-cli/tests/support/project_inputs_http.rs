@@ -2,6 +2,8 @@
 // Copyright (C) 2026 AG064
 
 //! Operator-supplied real Node project control. No external provider or credentials.
+// The controls that use these helpers run on Windows only.
+#![cfg_attr(not(windows), allow(dead_code))]
 use super::*;
 use argentum_domain::VerificationRunnerId;
 use sha2::{Digest, Sha256};

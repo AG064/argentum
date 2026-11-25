@@ -1107,6 +1107,8 @@ enum Reply {
     HeldDelta,
     Patch(Value),
     GoalRead,
+    // Sent only by the Windows process-control tests.
+    #[cfg_attr(not(windows), allow(dead_code))]
     Tool(Value),
     Verify,
     Write,

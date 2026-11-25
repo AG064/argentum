@@ -416,6 +416,11 @@ impl ProcessContainment {
     pub(crate) fn terminate(&mut self) -> Result<(), std::io::Error> {
         match rustix::process::kill_process_group(self.group, rustix::process::Signal::KILL) {
             Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
+            // macOS answers EPERM for a group whose members have all exited
+            // but are not reaped yet. The group is this process's own child,
+            // so nothing else can be refused here.
+            #[cfg(target_os = "macos")]
+            Err(rustix::io::Errno::PERM) => Ok(()),
             Err(error) => Err(error.into()),
         }
     }

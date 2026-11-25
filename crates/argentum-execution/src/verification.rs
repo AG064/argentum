@@ -281,7 +281,7 @@ impl VerificationRegistry {
     }
 
     #[cfg(test)]
-    #[cfg_attr(target_os = "android", allow(dead_code))]
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn for_tests(runners: Vec<VerificationRunnerDefinition>) -> Self {
         Self {
             version: VERIFICATION_REGISTRY_VERSION,
@@ -1012,9 +1012,9 @@ fn empty_sha256() -> Sha256Digest {
     Sha256Digest(format!("{:x}", Sha256::digest([])))
 }
 
-// The verification tests run Rust tools, which Android does not have.
+// Most verification tests drive Windows commands; Android has no Rust tools.
 #[cfg(test)]
-#[cfg_attr(target_os = "android", allow(unused_imports, dead_code))]
+#[cfg_attr(not(windows), allow(unused_imports, dead_code))]
 mod tests {
     use std::path::Path;
     use std::time::Duration;

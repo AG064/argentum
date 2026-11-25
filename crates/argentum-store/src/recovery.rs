@@ -2722,9 +2722,24 @@ pub(super) fn pinned_physical_identity(
     ))
 }
 
+/// Diagnostic only, as on Windows. macOS has no `/proc`, so this is the time
+/// the store first asked, in nanoseconds since the Unix epoch, fixed for the
+/// life of the process.
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+fn current_process_start_key() -> Result<u64, StoreError> {
+    static START: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    Ok(*START.get_or_init(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |elapsed| {
+                u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX)
+            })
+    }))
+}
+
 /// Diagnostic only, as on Windows: the process start time in clock ticks since
 /// boot, field 22 of `/proc/self/stat`.
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn current_process_start_key() -> Result<u64, StoreError> {
     let stat = std::fs::read_to_string("/proc/self/stat").map_err(io_as_database_error)?;
     stat.rsplit_once(')')

@@ -21,6 +21,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(windows)]
 use crate::executable::resolve_fixed_executable;
 use crate::windows_job::ProcessContainment;
 
@@ -363,7 +364,7 @@ fn capture_settlement_timeout() -> Duration {
     CAPTURE_SETTLEMENT_TIMEOUT
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 async fn with_capture_settlement_timeout_for_test<F>(timeout: Duration, future: F) -> F::Output
 where
     F: std::future::Future,
@@ -1740,8 +1741,13 @@ fn request_process_group_stop(process_id: u32) -> Result<(), std::io::Error> {
         .ok()
         .and_then(rustix::process::Pid::from_raw)
         .ok_or_else(|| std::io::Error::other("invalid process group"))?;
-    rustix::process::kill_process_group(group, rustix::process::Signal::TERM)
-        .map_err(std::io::Error::from)
+    match rustix::process::kill_process_group(group, rustix::process::Signal::TERM) {
+        Ok(()) => Ok(()),
+        // See ProcessContainment::terminate: an exited but unreaped group.
+        #[cfg(target_os = "macos")]
+        Err(rustix::io::Errno::PERM) => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 #[cfg(not(any(windows, unix)))]
@@ -2200,6 +2206,7 @@ fn inherited_environment_names() -> &'static [&'static str] {
 mod process_group_tests;
 
 #[cfg(test)]
+#[cfg_attr(not(windows), allow(unused_imports))]
 mod tests {
     use std::collections::BTreeMap;
     use std::fs;

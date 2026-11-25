@@ -735,6 +735,22 @@ impl<'a, C: FnMut() -> bool> SearchWalker<'a, C> {
                 return;
             }
         };
+        // Directory order differs between file systems (sorted on NTFS, hashed
+        // on ext4), so entries are visited by name for the same results on
+        // every system. Reading stops one past the entry limit, which keeps
+        // the buffer bounded and still trips the limit below.
+        let remaining = MAX_SEARCH_ENTRIES
+            .saturating_sub(self.report.entries_visited)
+            .saturating_add(1);
+        let mut entries = entries
+            .take(usize::try_from(remaining).unwrap_or(usize::MAX))
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| match (left, right) {
+            (Ok(left), Ok(right)) => left.file_name().cmp(&right.file_name()),
+            (Err(_), Ok(_)) => std::cmp::Ordering::Less,
+            (Ok(_), Err(_)) => std::cmp::Ordering::Greater,
+            (Err(_), Err(_)) => std::cmp::Ordering::Equal,
+        });
         for entry in entries {
             if self.stop || self.cancelled() {
                 return;

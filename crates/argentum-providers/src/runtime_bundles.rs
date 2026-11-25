@@ -1478,7 +1478,7 @@ mod tests {
 
     #[test]
     fn bundle_path_is_versioned_and_never_uses_offer_input_as_a_path() {
-        let root = Path::new(r"C:\Argentum\runtimes");
+        let root = &std::env::temp_dir().join("Argentum").join("runtimes");
         let offer = local_runtime_offers().first().expect("runtime offer");
 
         assert_eq!(
