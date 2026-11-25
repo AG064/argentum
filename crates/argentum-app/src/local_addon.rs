@@ -454,10 +454,8 @@ mod tests {
         let inkling = addon::model("Inkling-2-Mini-AD-Q4_K.gguf").expect("Inkling pin");
         // The adapter list the add-on writes is one the local runtime accepts,
         // and names only files downloaded with the model.
-        let models = std::env::temp_dir().join(format!(
-            "argentum-addon-adapters-{}",
-            std::process::id()
-        ));
+        let models =
+            std::env::temp_dir().join(format!("argentum-addon-adapters-{}", std::process::id()));
         std::fs::create_dir_all(&models).expect("models folder");
         std::fs::write(
             argentum_providers::local_model_adapters_path(&models, inkling.id),

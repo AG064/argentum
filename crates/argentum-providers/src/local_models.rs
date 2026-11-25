@@ -173,7 +173,9 @@ pub fn local_model_adapters(
         Err(error) => return Err(rejected(format!("it cannot be read: {error}"))),
     };
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(rejected("it must be a plain file, not a link or folder".into()));
+        return Err(rejected(
+            "it must be a plain file, not a link or folder".into(),
+        ));
     }
     if metadata.len() > LOCAL_MODEL_ADAPTERS_MAX_BYTES {
         return Err(rejected(format!(
@@ -234,7 +236,9 @@ fn parse_local_model_adapters(text: &str) -> Result<Vec<LocalModelAdapter>, Stri
         return Err("it lists more than one mmproj file".into());
     }
     if adapters.len() - mmproj > LOCAL_MODEL_MAX_LORAS {
-        return Err(format!("it lists more than {LOCAL_MODEL_MAX_LORAS} LoRA files"));
+        return Err(format!(
+            "it lists more than {LOCAL_MODEL_MAX_LORAS} LoRA files"
+        ));
     }
     Ok(adapters)
 }

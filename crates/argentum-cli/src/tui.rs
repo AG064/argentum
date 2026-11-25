@@ -3568,7 +3568,11 @@ mod tests {
         for command in ["/quit", "/exit"] {
             let mut state = TuiState::new(PathBuf::from("workspace"), true);
             state.apply_input(InputEvent::Text(command.into()));
-            assert_eq!(state.apply_input(InputEvent::Enter), TuiAction::Exit, "{command}");
+            assert_eq!(
+                state.apply_input(InputEvent::Enter),
+                TuiAction::Exit,
+                "{command}"
+            );
         }
     }
 

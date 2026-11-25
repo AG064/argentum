@@ -442,8 +442,11 @@ pub async fn install(
     )?;
 
     let staging = layout.staging();
-    fs::create_dir_all(&staging)
-        .map_err(|error| UpdateError(format!("The add-on download folder could not be created: {error}")))?;
+    fs::create_dir_all(&staging).map_err(|error| {
+        UpdateError(format!(
+            "The add-on download folder could not be created: {error}"
+        ))
+    })?;
     let mut transaction = Transaction {
         layout,
         placed: Vec::new(),
@@ -484,10 +487,7 @@ pub async fn install(
         let target = layout.adapter_list_path(model);
         // Keep a list the owner has already written or edited.
         if fs::symlink_metadata(&target).is_err() {
-            let staged = staging.join(format!(
-                "{}{ADAPTER_LIST_SUFFIX}",
-                model.artifact.file_name
-            ));
+            let staged = staging.join(format!("{}{ADAPTER_LIST_SUFFIX}", model.artifact.file_name));
             fs::write(&staged, list).map_err(|error| {
                 UpdateError(format!("The adapter list could not be written: {error}"))
             })?;
@@ -499,21 +499,25 @@ pub async fn install(
     let journal = Journal {
         placed: moves.iter().map(|(_, target)| target.clone()).collect(),
     };
-    let journal_bytes = serde_json::to_vec(&journal)
-        .map_err(|error| UpdateError(format!("The install record could not be written: {error}")))?;
-    fs::write(layout.journal(), journal_bytes)
-        .map_err(|error| UpdateError(format!("The install record could not be written: {error}")))?;
+    let journal_bytes = serde_json::to_vec(&journal).map_err(|error| {
+        UpdateError(format!("The install record could not be written: {error}"))
+    })?;
+    fs::write(layout.journal(), journal_bytes).map_err(|error| {
+        UpdateError(format!("The install record could not be written: {error}"))
+    })?;
     for (staged, target) in moves {
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|error| UpdateError(format!("The add-on folder could not be created: {error}")))?;
+            fs::create_dir_all(parent).map_err(|error| {
+                UpdateError(format!("The add-on folder could not be created: {error}"))
+            })?;
         }
         if fs::symlink_metadata(&target).is_ok() {
             // Present but wrong, such as a damaged runtime archive. Replace it.
             remove_file_if_present(&target)?;
         }
-        fs::rename(&staged, &target)
-            .map_err(|error| UpdateError(format!("The add-on could not be put in place: {error}")))?;
+        fs::rename(&staged, &target).map_err(|error| {
+            UpdateError(format!("The add-on could not be put in place: {error}"))
+        })?;
         transaction.placed.push(target);
     }
     fs::remove_file(layout.journal())
@@ -1031,7 +1035,10 @@ Connection: close
             }
             assert_eq!(
                 model.total_size_bytes(),
-                model.artifacts().map(|artifact| artifact.size_bytes).sum::<u64>()
+                model
+                    .artifacts()
+                    .map(|artifact| artifact.size_bytes)
+                    .sum::<u64>()
             );
         }
     }
