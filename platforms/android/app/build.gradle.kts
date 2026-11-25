@@ -34,6 +34,18 @@ val onDeviceInferenceArgs: Array<String> =
         emptyArray()
     }
 
+// Debug builds make both ABIs unless -PdebugAbis names fewer, such as x86_64
+// for the emulator tests.
+val debugAbiArgs: Array<String> =
+    (providers.gradleProperty("debugAbis").orNull ?: "arm64-v8a,x86_64")
+        .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        .flatMap { listOf("-t", it) }.toTypedArray()
+
+// -PuiTests=true runs the emulator UI tests on the debug APK, which has the
+// debug-only test bridge. Without it, the instrumentation is the on-device
+// inference evidence suite on the evidence build.
+val uiTests = providers.gradleProperty("uiTests").orNull == "true"
+
 val buildRustDebug by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir.resolve("../.."))
     environment("CARGO_BUILD_JOBS", "1")
@@ -43,7 +55,7 @@ val buildRustDebug by tasks.registering(Exec::class) {
         environment("GGML_VULKAN_SHADERS_GEN_TOOLCHAIN", windowsHostToolchain.absolutePath)
     }
     commandLine(
-        "cargo", "ndk", "-t", "arm64-v8a", "-t", "x86_64",
+        "cargo", "ndk", *debugAbiArgs,
         "-P", "28",
         "-o", rustDebugJniDir.get().asFile.absolutePath,
         "build", "-p", "argentum-android", "--lib", "--locked",
@@ -108,7 +120,11 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testApplicationId = "com.argentum.test"
-        testInstrumentationRunner = "com.argentum.bridge.ArgentumInferenceInstrumentation"
+        testInstrumentationRunner = if (uiTests) {
+            "com.argentum.uitest.ArgentumUiInstrumentation"
+        } else {
+            "com.argentum.bridge.ArgentumInferenceInstrumentation"
+        }
     }
 
     buildTypes {
@@ -118,7 +134,7 @@ android {
             matchingFallbacks += listOf("debug")
         }
     }
-    testBuildType = "evidence"
+    testBuildType = if (uiTests) "debug" else "evidence"
 
     sourceSets.getByName("debug").jniLibs.directories.add(rustDebugJniDir.get().asFile.absolutePath)
     sourceSets.getByName("evidence").jniLibs.directories.add(rustEvidenceJniDir.get().asFile.absolutePath)
