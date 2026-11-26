@@ -28,6 +28,7 @@ pub(crate) fn connect(
     });
 
     connect_folder_picker(ui);
+    connect_image_picker(ui);
 
     // Settings > Workspace and the first-start project step open a folder the
     // same way.
@@ -130,6 +131,28 @@ fn connect_folder_picker(ui: &UiHandle) {
 
 #[cfg(not(windows))]
 fn connect_folder_picker(_ui: &UiHandle) {}
+
+/// The composer's Attach button, shown while the Images module is on. The
+/// chosen files are read here, bounded, and checked again by the runtime.
+#[cfg(windows)]
+fn connect_image_picker(ui: &UiHandle) {
+    use argentum_app::windows_dialogs::pick_images;
+    let app = ui.window().global::<App>();
+    app.set_image_picker_available(true);
+    let weak = ui.weak_window();
+    app.on_attach_images(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(paths) = pick_images("Attach pictures") else {
+            return;
+        };
+        argentum_ui::set_pending_images(&window, argentum_app::read_image_attachments(&paths));
+    });
+}
+
+#[cfg(not(windows))]
+fn connect_image_picker(_ui: &UiHandle) {}
 
 /// The Windows Save dialog for an in-app session export. The file is written
 /// only after the owner chooses where.

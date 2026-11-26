@@ -179,6 +179,7 @@ async fn contained_qwen_capability_template_parser_and_output_control_share_the_
     );
     let provider = registry.provider_for_profile(&profile).unwrap();
     let request = ModelRequest {
+        prompt_images: Vec::new(),
         disable_thinking: false,
         require_tool_call: false,
         continuation_scope: None,

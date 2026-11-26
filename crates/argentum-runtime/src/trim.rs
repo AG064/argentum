@@ -109,6 +109,7 @@ mod tests {
 
     fn request(history: Vec<ModelMessage>) -> ModelRequest {
         ModelRequest {
+            prompt_images: Vec::new(),
             disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,

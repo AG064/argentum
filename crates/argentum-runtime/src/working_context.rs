@@ -373,6 +373,7 @@ impl RuntimeService {
         let configured_context = self.configured_local_context_tokens(&profile.model)?;
         let provider = self.providers.provider_for_profile(&profile)?;
         let request = argentum_providers::ModelRequest {
+            prompt_images: Vec::new(),
             disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
@@ -777,6 +778,7 @@ impl RuntimeService {
             let profile = profile.as_ref().ok_or(RuntimeError::NoProvider)?;
             let budget = self.resolve_model_budget(profile)?;
             let request = argentum_providers::ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,

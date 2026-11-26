@@ -240,6 +240,10 @@ pub struct ModelRequest {
     pub system: Option<String>,
     pub history: Vec<ModelMessage>,
     pub prompt: String,
+    /// Pictures the owner attached to this prompt, sent with it on routes
+    /// that have an image representation. Transient: never saved in history.
+    #[serde(skip)]
+    pub prompt_images: Vec<ModelImage>,
     pub tools: Vec<ModelToolDefinition>,
     pub tool_exchanges: Vec<ModelToolExchange>,
     /// Asks for an answer without thinking, on providers that have a switch
@@ -408,6 +412,7 @@ pub struct ModelToolResult {
 #[derive(Clone, PartialEq, Eq)]
 pub struct ModelImage {
     data_url: String,
+    media_type: &'static str,
     pub sha256: String,
     pub origin: String,
     extension_binding: Option<ExtensionImageBinding>,
@@ -419,6 +424,50 @@ pub struct ExtensionImageBinding {
     pub run_id: uuid::Uuid,
     pub context_id: uuid::Uuid,
 }
+/// Largest picture the owner can attach to one message.
+pub const MAX_ATTACHED_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+/// Most pictures on one message.
+pub const MAX_ATTACHED_IMAGES: usize = 4;
+
+/// Media type and dimensions from a PNG or JPEG header, without decoding.
+fn attached_image_header(bytes: &[u8]) -> Option<(&'static str, u32, u32)> {
+    if bytes.len() >= 24 && bytes.starts_with(b"\x89PNG\r\n\x1a\n") && &bytes[12..16] == b"IHDR" {
+        let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
+        let height = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
+        return Some(("image/png", width, height));
+    }
+    if !(bytes.starts_with(&[0xff, 0xd8]) && bytes.ends_with(&[0xff, 0xd9])) {
+        return None;
+    }
+    // Walk the JPEG segments to the first start-of-frame marker.
+    let mut at = 2;
+    while at + 4 <= bytes.len() {
+        if bytes[at] != 0xff {
+            return None;
+        }
+        let marker = bytes[at + 1];
+        if marker == 0xff {
+            at += 1;
+            continue;
+        }
+        let length = usize::from(u16::from_be_bytes([bytes[at + 2], bytes[at + 3]]));
+        if length < 2 {
+            return None;
+        }
+        let start_of_frame = matches!(marker, 0xc0..=0xcf) && !matches!(marker, 0xc4 | 0xc8 | 0xcc);
+        if start_of_frame {
+            if at + 9 > bytes.len() {
+                return None;
+            }
+            let height = u32::from(u16::from_be_bytes([bytes[at + 5], bytes[at + 6]]));
+            let width = u32::from(u16::from_be_bytes([bytes[at + 7], bytes[at + 8]]));
+            return Some(("image/jpeg", width, height));
+        }
+        at += 2 + length;
+    }
+    None
+}
+
 impl std::fmt::Debug for ModelImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ModelImage")
@@ -494,10 +543,51 @@ impl ModelImage {
                 "data:image/png;base64,{}",
                 base64::engine::general_purpose::STANDARD.encode(bytes)
             ),
+            media_type: "image/png",
             sha256: hash,
             origin,
             extension_binding: None,
         })
+    }
+
+    /// A picture the owner attached to a message: PNG or JPEG, at most
+    /// `MAX_ATTACHED_IMAGE_BYTES`, with sane dimensions. Its origin is
+    /// `owner-attachment`.
+    pub fn from_attachment(bytes: &[u8]) -> Result<Self, ProviderError> {
+        if bytes.len() > MAX_ATTACHED_IMAGE_BYTES {
+            return Err(ProviderError::InvalidRequest(
+                "an attached image is larger than 5 MiB",
+            ));
+        }
+        let (media_type, width, height) = attached_image_header(bytes).ok_or(
+            ProviderError::InvalidRequest("an attached image must be a PNG or JPEG file"),
+        )?;
+        if width == 0 || height == 0 || width > 8192 || height > 8192 {
+            return Err(ProviderError::InvalidRequest(
+                "an attached image is wider or taller than 8192 pixels",
+            ));
+        }
+        use base64::Engine;
+        use sha2::Digest;
+        Ok(Self {
+            data_url: format!(
+                "data:{media_type};base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            ),
+            media_type,
+            sha256: format!("{:x}", sha2::Sha256::digest(bytes)),
+            origin: "owner-attachment".into(),
+            extension_binding: None,
+        })
+    }
+
+    pub fn media_type(&self) -> &'static str {
+        self.media_type
+    }
+
+    /// The base64 payload without the `data:` prefix.
+    pub fn base64_data(&self) -> &str {
+        self.data_url.split_once(',').map_or("", |(_, data)| data)
     }
     pub fn bind_extension(mut self, binding: ExtensionImageBinding) -> Self {
         self.extension_binding = Some(binding);
@@ -541,6 +631,9 @@ pub struct ProviderModel {
     pub context_window_tokens: Option<u64>,
     /// Effort levels the provider reports for this model, lowest first.
     pub thinking_levels: Vec<argentum_domain::ThinkingMode>,
+    /// Whether the provider's model list says the model reads images.
+    /// `None` when the list does not say.
+    pub accepts_images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3711,6 +3804,11 @@ fn build_chat_request_with_effort(
             "model and positive output limit are required",
         ));
     }
+    if sidecar && !request.prompt_images.is_empty() {
+        return Err(ProviderError::InvalidRequest(
+            "this local model route has no image input",
+        ));
+    }
     if request.require_tool_call && (sidecar || request.tools.is_empty()) {
         return Err(ProviderError::InvalidRequest(
             "required tool response needs a compatible hosted tool catalog",
@@ -3728,6 +3826,7 @@ fn build_chat_request_with_effort(
             request.system,
             request.history,
             request.prompt,
+            &request.prompt_images,
             request.tool_exchanges,
             replay_reasoning,
         ),
@@ -4052,7 +4151,7 @@ struct ChatStreamOptions {
 #[derive(Debug, Serialize)]
 struct ChatMessage {
     role: &'static str,
-    content: Option<String>,
+    content: Option<ChatContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<ChatToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -4065,11 +4164,42 @@ struct ChatMessage {
     name: Option<String>,
 }
 
+/// A chat message body: plain text, or text and images as content parts.
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum ChatContent {
+    Text(String),
+    Parts(Vec<serde_json::Value>),
+}
+
+impl ChatContent {
+    #[cfg(test)]
+    fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Text(text) => Some(text),
+            Self::Parts(_) => None,
+        }
+    }
+}
+
 impl ChatMessage {
+    fn user_with_images(text: String, images: &[ModelImage]) -> Self {
+        if images.is_empty() {
+            return Self::text("user", text);
+        }
+        let mut parts = vec![serde_json::json!({"type": "text", "text": text})];
+        parts.extend(images.iter().map(|image| {
+            serde_json::json!({"type": "image_url", "image_url": {"url": image.data_url()}})
+        }));
+        let mut message = Self::text("user", String::new());
+        message.content = Some(ChatContent::Parts(parts));
+        message
+    }
+
     fn text(role: &'static str, content: String) -> Self {
         Self {
             role,
-            content: Some(content),
+            content: Some(ChatContent::Text(content)),
             tool_calls: None,
             tool_call_id: None,
             reasoning_details: None,
@@ -4126,6 +4256,7 @@ fn build_messages(
     system: Option<String>,
     history: Vec<ModelMessage>,
     prompt: String,
+    prompt_images: &[ModelImage],
     tool_exchanges: Vec<ModelToolExchange>,
     replay_reasoning: bool,
 ) -> Vec<ChatMessage> {
@@ -4160,7 +4291,7 @@ fn build_messages(
             message.content,
         ));
     }
-    messages.push(ChatMessage::text("user", prompt));
+    messages.push(ChatMessage::user_with_images(prompt, prompt_images));
     append_tool_exchanges(&mut messages, tool_exchanges, replay_reasoning);
     messages
 }
@@ -4176,10 +4307,16 @@ fn append_tool_exchanges(
             .flatten();
         messages.push(ChatMessage {
             role: "assistant",
-            content: continuation.as_ref().map_or_else(
-                || (!exchange.assistant_content.is_empty()).then_some(exchange.assistant_content),
-                |state| state.content.clone(),
-            ),
+            content: continuation
+                .as_ref()
+                .map_or_else(
+                    || {
+                        (!exchange.assistant_content.is_empty())
+                            .then_some(exchange.assistant_content)
+                    },
+                    |state| state.content.clone(),
+                )
+                .map(ChatContent::Text),
             tool_calls: Some(
                 exchange
                     .calls
@@ -4209,7 +4346,7 @@ fn append_tool_exchanges(
         });
         messages.extend(exchange.results.into_iter().map(|result| ChatMessage {
             role: "tool",
-            content: Some(result.content),
+            content: Some(ChatContent::Text(result.content)),
             tool_calls: None,
             tool_call_id: Some(result.call_id),
             reasoning_details: None,
@@ -4782,9 +4919,30 @@ struct ModelDescriptor {
     // field cannot lose the catalog.
     #[serde(default)]
     effort: Option<serde_json::Value>,
+    // DeepSeek reports `input_modalities`; OpenRouter reports
+    // `architecture.input_modalities`. Loose for the same reason.
+    #[serde(default)]
+    input_modalities: Option<serde_json::Value>,
+    #[serde(default)]
+    architecture: Option<serde_json::Value>,
 }
 
 impl ModelDescriptor {
+    /// Whether the list says the model reads images, or `None` if it does not say.
+    fn accepts_images(&self) -> Option<bool> {
+        let modalities = self.input_modalities.as_ref().or_else(|| {
+            self.architecture
+                .as_ref()
+                .and_then(|architecture| architecture.get("input_modalities"))
+        })?;
+        let modalities = modalities.as_array()?;
+        Some(
+            modalities
+                .iter()
+                .any(|modality| modality.as_str() == Some("image")),
+        )
+    }
+
     /// The effort levels the server reports, lowest first. Unknown values are dropped.
     fn thinking_levels(&self) -> Vec<argentum_domain::ThinkingMode> {
         let mut levels = self
@@ -4881,6 +5039,7 @@ fn parse_lm_studio_models_response(body: &[u8]) -> Result<Vec<ProviderModel>, Pr
         }
         for instance in model.loaded_instances {
             result.push(ProviderModel {
+                accepts_images: None,
                 id: instance.id,
                 label: model.display_name.clone(),
                 context_window_tokens: instance
@@ -4891,6 +5050,7 @@ fn parse_lm_studio_models_response(body: &[u8]) -> Result<Vec<ProviderModel>, Pr
             });
         }
         result.push(ProviderModel {
+            accepts_images: None,
             id: model.key,
             label: model.display_name,
             context_window_tokens: model.max_context_length.filter(|tokens| *tokens > 0),
@@ -4924,6 +5084,7 @@ fn parse_models_response(body: &[u8]) -> Result<Vec<ProviderModel>, ProviderErro
             .map(|model| ProviderModel {
                 label: model.label(),
                 thinking_levels: model.thinking_levels(),
+                accepts_images: model.accepts_images(),
                 id: model.id,
                 context_window_tokens: None,
             })
@@ -4960,6 +5121,7 @@ fn sanitize_provider_models(
             label: label.to_owned(),
             context_window_tokens: model.context_window_tokens,
             thinking_levels: model.thinking_levels,
+            accepts_images: model.accepts_images,
         });
     }
     Ok(normalized.into_values().collect())
@@ -5012,6 +5174,7 @@ pub fn known_provider_models(profile: &ProviderProfile) -> Vec<ProviderModel> {
         .chain((!configured.is_empty() && !ids.contains(&configured)).then_some(configured))
         .map(|id| {
             let mut model = ProviderModel {
+                accepts_images: None,
                 id: id.to_owned(),
                 label: id.to_owned(),
                 context_window_tokens: canonical_context_window(&profile.id, id),
@@ -5559,6 +5722,7 @@ mod tests {
 
     pub(super) fn empty_model_request() -> ModelRequest {
         ModelRequest {
+            prompt_images: Vec::new(),
             disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
@@ -6329,11 +6493,18 @@ mod tests {
             None,
             Vec::new(),
             "prompt".into(),
+            &[],
             vec![exchange.clone()],
             true,
         );
-        let deepseek_messages =
-            build_messages(None, Vec::new(), "prompt".into(), vec![exchange], false);
+        let deepseek_messages = build_messages(
+            None,
+            Vec::new(),
+            "prompt".into(),
+            &[],
+            vec![exchange],
+            false,
+        );
         // Display text cannot manufacture a provider continuation object.
         assert!(minimax_messages[1].reasoning_details.is_none());
         assert!(deepseek_messages[1].reasoning_details.is_none());
@@ -6533,6 +6704,7 @@ mod tests {
             Some("fresh system".into()),
             request.history.clone(),
             "current task".into(),
+            &[],
             Vec::new(),
             false,
         ))
@@ -6554,6 +6726,7 @@ mod tests {
             Some("fresh system".into()),
             request.history.clone(),
             "current task".into(),
+            &[],
             Vec::new(),
             true,
         ))
@@ -6605,19 +6778,32 @@ mod tests {
                 },
             ],
             "current user".into(),
+            &[],
             Vec::new(),
             false,
         );
 
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].role, "system");
-        assert_eq!(messages[0].content.as_deref(), Some("system"));
+        assert_eq!(
+            messages[0].content.as_ref().and_then(ChatContent::as_text),
+            Some("system")
+        );
         assert_eq!(messages[1].role, "user");
-        assert_eq!(messages[1].content.as_deref(), Some("earlier user"));
+        assert_eq!(
+            messages[1].content.as_ref().and_then(ChatContent::as_text),
+            Some("earlier user")
+        );
         assert_eq!(messages[2].role, "assistant");
-        assert_eq!(messages[2].content.as_deref(), Some("earlier assistant"));
+        assert_eq!(
+            messages[2].content.as_ref().and_then(ChatContent::as_text),
+            Some("earlier assistant")
+        );
         assert_eq!(messages[3].role, "user");
-        assert_eq!(messages[3].content.as_deref(), Some("current user"));
+        assert_eq!(
+            messages[3].content.as_ref().and_then(ChatContent::as_text),
+            Some("current user")
+        );
     }
 
     #[test]
@@ -6723,6 +6909,7 @@ mod tests {
             Some("system".into()),
             Vec::new(),
             "inspect".into(),
+            &[],
             vec![ModelToolExchange {
                 chatgpt_continuation: None,
                 assistant_continuation: None,
@@ -6754,7 +6941,10 @@ mod tests {
         );
         assert_eq!(messages[3].role, "tool");
         assert_eq!(messages[3].tool_call_id.as_deref(), Some("call_1"));
-        assert_eq!(messages[3].content.as_deref(), Some("bounded result"));
+        assert_eq!(
+            messages[3].content.as_ref().and_then(ChatContent::as_text),
+            Some("bounded result")
+        );
     }
 
     #[test]
@@ -6819,12 +7009,14 @@ mod tests {
             models,
             vec![
                 ProviderModel {
+                    accepts_images: None,
                     id: "model-a".into(),
                     label: "model-a".into(),
                     context_window_tokens: None,
                     thinking_levels: Vec::new(),
                 },
                 ProviderModel {
+                    accepts_images: None,
                     id: "model-z".into(),
                     label: "model-z".into(),
                     context_window_tokens: None,
@@ -6866,12 +7058,14 @@ mod tests {
             models,
             vec![
                 ProviderModel {
+                    accepts_images: None,
                     id: "publisher/model".into(),
                     label: "Model".into(),
                     context_window_tokens: Some(65_536),
                     thinking_levels: Vec::new(),
                 },
                 ProviderModel {
+                    accepts_images: None,
                     id: "publisher/model:loaded".into(),
                     label: "Model".into(),
                     context_window_tokens: Some(32_768),
@@ -7084,6 +7278,109 @@ mod tests {
         }
     }
 
+    pub(super) fn tiny_png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = vec![
+            0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d,
+        ];
+        bytes.extend(b"IHDR");
+        bytes.extend(width.to_be_bytes());
+        bytes.extend(height.to_be_bytes());
+        bytes.extend([8, 6, 0, 0, 0]);
+        bytes
+    }
+
+    fn tiny_jpeg(width: u16, height: u16) -> Vec<u8> {
+        let mut bytes = vec![0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00];
+        bytes.extend([0xff, 0xc0, 0x00, 0x0b, 0x08]);
+        bytes.extend(height.to_be_bytes());
+        bytes.extend(width.to_be_bytes());
+        bytes.extend([0x01, 0x01, 0x11, 0x00, 0xff, 0xd9]);
+        bytes
+    }
+
+    #[test]
+    fn attached_images_are_checked_before_they_are_sent() {
+        let png = ModelImage::from_attachment(&tiny_png(640, 480)).expect("png");
+        assert_eq!(png.media_type(), "image/png");
+        assert!(png.data_url().starts_with("data:image/png;base64,"));
+        assert!(!png.base64_data().contains(','));
+        let jpeg = ModelImage::from_attachment(&tiny_jpeg(1920, 1080)).expect("jpeg");
+        assert_eq!(jpeg.media_type(), "image/jpeg");
+        assert_eq!(jpeg.origin, "owner-attachment");
+        for refused in [
+            b"GIF89a....".to_vec(),
+            tiny_png(9000, 10),
+            tiny_jpeg(0, 10),
+            vec![0xff, 0xd8, 0xff, 0xd9],
+            vec![0_u8; MAX_ATTACHED_IMAGE_BYTES + 1],
+        ] {
+            assert!(ModelImage::from_attachment(&refused).is_err());
+        }
+        assert!(!format!("{png:?}").contains(png.base64_data()));
+    }
+
+    #[test]
+    fn compatible_route_sends_prompt_images_as_content_parts() {
+        let mut request = empty_model_request();
+        request.prompt = "what is in this picture?".into();
+        let image = ModelImage::from_attachment(&tiny_png(2, 2)).expect("png");
+        request.prompt_images = vec![image.clone()];
+        let body = serde_json::to_value(
+            build_chat_request_inner(request.clone(), false, false, false).expect("request"),
+        )
+        .expect("json");
+        let user = body["messages"]
+            .as_array()
+            .expect("messages")
+            .iter()
+            .rev()
+            .find(|message| message["role"] == "user")
+            .expect("user message");
+        assert_eq!(user["content"][0]["type"], "text");
+        assert_eq!(user["content"][0]["text"], "what is in this picture?");
+        assert_eq!(user["content"][1]["type"], "image_url");
+        assert_eq!(user["content"][1]["image_url"]["url"], image.data_url());
+        // Without images the prompt stays a plain string.
+        request.prompt_images.clear();
+        let body = serde_json::to_value(
+            build_chat_request_inner(request.clone(), false, false, false).expect("request"),
+        )
+        .expect("json");
+        assert!(body["messages"]
+            .as_array()
+            .expect("messages")
+            .iter()
+            .any(|message| message["content"] == "what is in this picture?"));
+        // The local sidecar route has no image input.
+        request.prompt_images = vec![image];
+        assert!(build_chat_request_inner(request, false, false, true).is_err());
+    }
+
+    #[test]
+    fn model_lists_say_whether_a_model_reads_images() {
+        let models = parse_models_response(
+            br#"{"data":[
+                {"id":"vision","input_modalities":["text","image"]},
+                {"id":"text","input_modalities":["text"]},
+                {"id":"router","architecture":{"input_modalities":["image","text"]}},
+                {"id":"silent"},
+                {"id":"odd","input_modalities":"image"}]}"#,
+        )
+        .expect("catalog");
+        let accepts = |id: &str| {
+            models
+                .iter()
+                .find(|model| model.id == id)
+                .expect("model")
+                .accepts_images
+        };
+        assert_eq!(accepts("vision"), Some(true));
+        assert_eq!(accepts("text"), Some(false));
+        assert_eq!(accepts("router"), Some(true));
+        assert_eq!(accepts("silent"), None);
+        assert_eq!(accepts("odd"), None);
+    }
+
     #[test]
     fn malformed_or_unknown_effort_levels_keep_the_model() {
         use argentum_domain::ThinkingMode::{High, Max};
@@ -7117,6 +7414,7 @@ mod tests {
         let go = Url::parse("https://opencode.ai/inference/go/openai/v1/").unwrap();
         let other = Url::parse("https://api.example.com/v1/").unwrap();
         let reported = |id: &str, levels: Vec<argentum_domain::ThinkingMode>| ProviderModel {
+            accepts_images: None,
             id: id.into(),
             label: id.into(),
             context_window_tokens: None,

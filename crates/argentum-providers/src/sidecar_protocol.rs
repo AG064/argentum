@@ -206,6 +206,7 @@ mod context_variant_tests {
                 uncertainty_tokens: 128,
             };
             let request = ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
@@ -267,6 +268,7 @@ mod tests {
             uncertainty_tokens: 128,
         };
         let request = ModelRequest {
+            prompt_images: Vec::new(),
             disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,

@@ -2,6 +2,8 @@
 // Copyright (C) 2026 AG064
 
 pub mod devices_ui;
+mod image_attach;
+pub use image_attach::read_image_attachments;
 mod local_addon;
 mod market;
 pub mod native_host;

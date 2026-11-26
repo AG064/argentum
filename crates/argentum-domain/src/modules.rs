@@ -29,6 +29,8 @@ pub enum ModuleSettingKind {
     Address,
     /// `true` or `false`.
     Flag,
+    /// Model ids separated by commas.
+    ModelList,
 }
 
 /// An owner setting. Changing one needs local owner authority.
@@ -58,6 +60,8 @@ pub const WEB_FETCH_TOOL: &str = "web_fetch";
 pub const WEB_SEARCH_TOOL: &str = "web_search";
 pub const SETTING_ALLOW_LOCAL_ADDRESSES: &str = "allow-local-addresses";
 pub const SETTING_SEARCH_ADDRESS: &str = "search-address";
+pub const SETTING_IMAGE_MODELS: &str = "image-models";
+pub const IMAGES_CAPABILITY: &str = "module.images";
 
 const ALLOW_LOCAL_ADDRESSES: ModuleSettingSpec = ModuleSettingSpec {
     key: SETTING_ALLOW_LOCAL_ADDRESSES,
@@ -108,8 +112,24 @@ pub const WEB_SEARCH: ModuleManifest = ModuleManifest {
     surfaces: &[],
 };
 
+pub const IMAGES: ModuleManifest = ModuleManifest {
+    id: "images",
+    capability_id: IMAGES_CAPABILITY,
+    label: "Images in messages",
+    summary: "Attach PNG or JPEG pictures to a message, for a model that reads images. They go only to the model provider you chose, with that message, and are not saved in the session.",
+    permissions: &[],
+    tools: &[],
+    settings: &[ModuleSettingSpec {
+        key: SETTING_IMAGE_MODELS,
+        label: "Models that read images",
+        detail: "Model ids, separated by commas, that you know read images, for providers whose model list does not say.",
+        kind: ModuleSettingKind::ModelList,
+    }],
+    surfaces: &[SurfaceId::Conversation],
+};
+
 /// Every first-party agent module, in the order Settings lists them.
-pub const FIRST_PARTY_MODULES: &[ModuleManifest] = &[WEB_FETCH, WEB_SEARCH];
+pub const FIRST_PARTY_MODULES: &[ModuleManifest] = &[WEB_FETCH, WEB_SEARCH, IMAGES];
 
 pub fn module(id: &str) -> Option<&'static ModuleManifest> {
     FIRST_PARTY_MODULES.iter().find(|module| module.id == id)
@@ -144,6 +164,17 @@ pub fn validate_setting(module_id: &str, key: &str, value: &str) -> Result<Strin
             "false" | "off" | "no" | "" => Ok("false".into()),
             _ => Err("use true or false".into()),
         },
+        ModuleSettingKind::ModelList => {
+            let ids = value
+                .split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .collect::<Vec<_>>();
+            if ids.len() > 32 || ids.iter().any(|id| id.len() > 128) {
+                return Err("use at most 32 model ids of at most 128 characters".into());
+            }
+            Ok(ids.join(","))
+        }
         ModuleSettingKind::Address if value.is_empty() => Ok(String::new()),
         ModuleSettingKind::Address => {
             let lower = value.to_ascii_lowercase();
@@ -193,5 +224,9 @@ mod tests {
         );
         assert!(validate_setting("web-fetch", SETTING_SEARCH_ADDRESS, "x").is_err());
         assert!(validate_setting("nope", "x", "y").is_err());
+        assert_eq!(
+            validate_setting("images", SETTING_IMAGE_MODELS, " gpt-4o , ,claude-x "),
+            Ok("gpt-4o,claude-x".into())
+        );
     }
 }

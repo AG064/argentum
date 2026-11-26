@@ -6477,6 +6477,7 @@ fn f10b_deterministic_adapter_sends_requested_generation_cap() {
     )
     .expect("F10B deterministic provider");
     let request = ModelRequest {
+        prompt_images: Vec::new(),
         disable_thinking: false,
         require_tool_call: false,
         continuation_scope: None,

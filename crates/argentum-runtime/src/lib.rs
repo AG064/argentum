@@ -175,6 +175,8 @@ pub enum RuntimeError {
     Change(#[from] ChangeError),
     #[error(transparent)]
     Platform(#[from] PlatformError),
+    #[error("pictures were not attached: {0}")]
+    ImagesRefused(String),
     #[error("no provider is configured")]
     NoProvider,
     #[error("task prompt must not be empty")]
@@ -514,6 +516,9 @@ pub struct RuntimeService {
     run_lifecycles: Arc<Mutex<BTreeMap<RunId, TaskLifecycle>>>,
     model_context_windows: Arc<Mutex<BTreeMap<ModelContextKey, u64>>>,
     provider_model_catalogs: Arc<Mutex<BTreeMap<String, Vec<DomainProviderModel>>>>,
+    /// Pictures attached to a run's prompt, by run. Held only while the run
+    /// lasts and never written to the store.
+    prompt_images: Arc<Mutex<BTreeMap<RunId, Vec<argentum_providers::ModelImage>>>>,
     provider_model_catalog_sources: Arc<Mutex<BTreeMap<String, ProviderCatalogSource>>>,
     pending_approvals: Arc<Mutex<BTreeMap<argentum_domain::ApprovalId, PendingTool>>>,
     approval_responder: Arc<Mutex<Option<Arc<approvals::ApprovalChannel>>>>,
@@ -910,6 +915,7 @@ impl RuntimeService {
             run_lifecycles: Arc::new(Mutex::new(BTreeMap::new())),
             model_context_windows: Arc::new(Mutex::new(BTreeMap::new())),
             provider_model_catalogs: Arc::new(Mutex::new(BTreeMap::new())),
+            prompt_images: Arc::new(Mutex::new(BTreeMap::new())),
             provider_model_catalog_sources: Arc::new(Mutex::new(BTreeMap::new())),
             pending_approvals: Arc::new(Mutex::new(BTreeMap::new())),
             approval_responder: Arc::new(Mutex::new(None)),
@@ -973,6 +979,7 @@ impl RuntimeService {
             run_lifecycles: Arc::new(Mutex::new(BTreeMap::new())),
             model_context_windows: Arc::new(Mutex::new(BTreeMap::new())),
             provider_model_catalogs: Arc::new(Mutex::new(BTreeMap::new())),
+            prompt_images: Arc::new(Mutex::new(BTreeMap::new())),
             provider_model_catalog_sources: Arc::new(Mutex::new(BTreeMap::new())),
             pending_approvals: Arc::new(Mutex::new(BTreeMap::new())),
             approval_responder: Arc::new(Mutex::new(None)),
@@ -3101,6 +3108,9 @@ impl RuntimeService {
             AppCommand::SubmitTaskWithSkill { prompt, skill } => {
                 self.submit_task_with_skill(prompt, skill).await
             }
+            AppCommand::SubmitTaskWithImages { prompt, images } => {
+                self.submit_task_with_images(prompt, images).await
+            }
             AppCommand::SubmitTaskWithAnswerSchema {
                 prompt,
                 answer_schema,
@@ -4315,6 +4325,140 @@ impl RuntimeService {
             .await
     }
 
+    fn prompt_images_for(
+        &self,
+        run_id: RunId,
+    ) -> Result<Vec<argentum_providers::ModelImage>, RuntimeError> {
+        Ok(self
+            .prompt_images
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .get(&run_id)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    /// Whether the selected model reads images: its provider's model list says
+    /// so, or the owner listed it in the Images module settings. A list that
+    /// says it does not, wins over nothing; the owner's list wins over both.
+    fn selected_model_reads_images(&self, profile: &ProviderProfile) -> Result<bool, RuntimeError> {
+        let settings = self.store.load_module_settings(self.project_id)?;
+        let owner_listed = settings
+            .get(argentum_domain::modules::IMAGES.id)
+            .and_then(|values| values.get(argentum_domain::modules::SETTING_IMAGE_MODELS))
+            .is_some_and(|ids| ids.split(',').any(|id| id == profile.model));
+        if owner_listed {
+            return Ok(true);
+        }
+        Ok(self
+            .cached_profile_model_catalog(&profile.id)?
+            .and_then(|models| {
+                models
+                    .into_iter()
+                    .find(|model| model.id == profile.model)
+                    .and_then(|model| model.accepts_images)
+            })
+            .unwrap_or(false))
+    }
+
+    /// Run one owner task with pictures attached. The Images module must be
+    /// on, the model must read images, and every picture must be a bounded
+    /// PNG or JPEG. The pictures go with this run's requests only.
+    async fn submit_task_with_images(
+        &self,
+        prompt: String,
+        images: Vec<argentum_domain::ImageAttachment>,
+    ) -> Result<(), RuntimeError> {
+        let refuse = |message: &str| -> Result<(), RuntimeError> {
+            self.publish_transient(AppEvent::Error {
+                message: message.to_owned(),
+                recoverable: true,
+            });
+            Err(RuntimeError::ImagesRefused(message.to_owned()))
+        };
+        if images.is_empty() {
+            return self.submit_task(prompt).await;
+        }
+        let policy = self.load_execution_policy()?;
+        if !self.with_harness(|harness| {
+            harness.capability_is_enabled(&policy, argentum_domain::modules::IMAGES_CAPABILITY)
+        }) {
+            return refuse(
+                "Turn on Images in messages in Settings > Capabilities to attach pictures.",
+            );
+        }
+        if images.len() > argentum_providers::MAX_ATTACHED_IMAGES {
+            return refuse("Attach at most 4 pictures to one message.");
+        }
+        let Some(profile) = self.store.selected_provider_profile(self.project_id)? else {
+            return Err(RuntimeError::NoProvider);
+        };
+        if !self.selected_model_reads_images(&profile)? {
+            return refuse("The selected model does not read images, or its provider does not say. Choose a model that does, or add it to the Images module's list of models that read images.");
+        }
+        let mut admitted = Vec::with_capacity(images.len());
+        for image in &images {
+            use base64::Engine;
+            if image.data_base64.len() > argentum_providers::MAX_ATTACHED_IMAGE_BYTES / 3 * 4 + 8 {
+                return refuse("An attached picture is larger than 5 MiB.");
+            }
+            let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&image.data_base64)
+            else {
+                return refuse("An attached picture could not be read.");
+            };
+            match argentum_providers::ModelImage::from_attachment(&bytes) {
+                Ok(admitted_image) => admitted.push(admitted_image),
+                Err(_) => {
+                    return refuse(
+                        "Attach PNG or JPEG pictures of at most 5 MiB and 8192 pixels a side.",
+                    )
+                }
+            }
+        }
+        let prompt = prompt.trim().to_owned();
+        if prompt.is_empty() || prompt.len() > MAX_PROMPT_BYTES {
+            return self.submit_task(prompt).await;
+        }
+        // History keeps a note that pictures were attached, not the pictures.
+        let noted = format!(
+            "{prompt}\n\n[{} attached: {}]",
+            if admitted.len() == 1 {
+                "1 picture".to_owned()
+            } else {
+                format!("{} pictures", admitted.len())
+            },
+            images
+                .iter()
+                .map(|image| truncate_utf8_bytes(image.name.replace(char::is_control, " "), 80))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let run_id = Uuid::new_v4();
+        self.prompt_images
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .insert(run_id, admitted);
+        let completion = self
+            .submit_task_attempt(TaskSubmission {
+                id: Uuid::new_v4(),
+                run_id,
+                prompt: noted,
+                skill: None,
+                answer_contract: None,
+                target: SubmissionTarget {
+                    project_id: self.project_id,
+                    session_id: self.session_id(),
+                    workspace: self.workspace.root().to_path_buf(),
+                },
+            })
+            .await;
+        self.prompt_images
+            .lock()
+            .map_err(|_| RuntimeError::StateLockPoisoned)?
+            .remove(&run_id);
+        completion.result
+    }
+
     async fn submit_task_with_selected_skill(
         &self,
         prompt: String,
@@ -4995,6 +5139,7 @@ impl RuntimeService {
                     self.store.load_ui_preferences()?.thinking,
                 );
                 let mut request = ModelRequest {
+                    prompt_images: self.prompt_images_for(context.run_id)?,
                     disable_thinking: false,
                     require_tool_call: next_context_ordinal == 1
                         && context.profile.kind == ProviderKind::OpenAiCompatible
@@ -9859,7 +10004,9 @@ impl RuntimeService {
                     ..CommandIdentityScope::default()
                 }
             }
-            AppCommand::SubmitTask { .. } | AppCommand::SubmitTaskWithSkill { .. } => {
+            AppCommand::SubmitTask { .. }
+            | AppCommand::SubmitTaskWithSkill { .. }
+            | AppCommand::SubmitTaskWithImages { .. } => {
                 let (provider_profile_id, execution_snapshot_sha256) =
                     self.durable_submission_snapshot_for_answer_contract(None)?;
                 CommandIdentityScope {
@@ -12219,6 +12366,7 @@ fn domain_provider_model(model: argentum_providers::ProviderModel) -> DomainProv
         label: model.label,
         context_window_tokens: model.context_window_tokens,
         thinking_levels: model.thinking_levels,
+        accepts_images: model.accepts_images,
     }
 }
 
@@ -17361,6 +17509,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let models = vec![DomainProviderModel {
+            accepts_images: None,
             id: profile.model.clone(),
             label: "Synthetic".into(),
             context_window_tokens: Some(20_000),
@@ -20615,12 +20764,14 @@ mod tests {
         async fn list_models(&self) -> Result<Vec<ProviderCatalogModel>, ProviderError> {
             Ok(vec![
                 ProviderCatalogModel {
+                    accepts_images: None,
                     id: "model-a".into(),
                     label: "Model A".into(),
                     context_window_tokens: Some(32_768),
                     thinking_levels: Vec::new(),
                 },
                 ProviderCatalogModel {
+                    accepts_images: None,
                     id: "model-b".into(),
                     label: "Model B".into(),
                     context_window_tokens: None,
@@ -20678,6 +20829,7 @@ mod tests {
         async fn list_models(&self) -> Result<Vec<ProviderCatalogModel>, ProviderError> {
             if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
                 Ok(vec![ProviderCatalogModel {
+                    accepts_images: None,
                     id: "live-model".into(),
                     label: "Live model".into(),
                     context_window_tokens: None,

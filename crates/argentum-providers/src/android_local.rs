@@ -294,6 +294,7 @@ impl ModelProvider for AndroidLlamaCppProvider {
     async fn list_models(&self) -> Result<Vec<ProviderModel>, ProviderError> {
         self.active_report().await?;
         Ok(vec![ProviderModel {
+            accepts_images: None,
             id: self.model.clone(),
             label: self.model.clone(),
             context_window_tokens: Some(4_096),

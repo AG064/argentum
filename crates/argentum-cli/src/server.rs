@@ -824,6 +824,7 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::RequestRecoveryRestore { .. }
         | AppCommand::SubmitTask { .. }
         | AppCommand::SubmitTaskWithSkill { .. }
+        | AppCommand::SubmitTaskWithImages { .. }
         | AppCommand::SubmitTaskWithAnswerSchema { .. }
         | AppCommand::CancelRun { .. }
         | AppCommand::ToggleSurface { .. }
@@ -903,6 +904,7 @@ fn protected_command_kind(command: &AppCommand) -> Option<&'static str> {
         AppCommand::RequestRecoveryRestore { .. } => Some("request_recovery_restore"),
         AppCommand::SubmitTask { .. }
         | AppCommand::SubmitTaskWithSkill { .. }
+        | AppCommand::SubmitTaskWithImages { .. }
         | AppCommand::SubmitTaskWithAnswerSchema { .. } => Some("submit_task"),
         AppCommand::CancelRun { .. } => Some("cancel_run"),
         AppCommand::ToggleSurface { .. } => Some("toggle_surface"),
@@ -1461,6 +1463,7 @@ fn is_long_running(command: &AppCommand) -> bool {
         command,
         AppCommand::SubmitTask { .. }
             | AppCommand::SubmitTaskWithSkill { .. }
+            | AppCommand::SubmitTaskWithImages { .. }
             | AppCommand::SubmitTaskWithAnswerSchema { .. }
             | AppCommand::ProbeProvider { .. }
             | AppCommand::ListProviderModels { .. }
