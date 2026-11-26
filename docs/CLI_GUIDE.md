@@ -114,6 +114,10 @@ In chat:
 - `/compact` summarizes the session context to free space. It uses the selected model and
   can consume usage. `/compact deactivate` turns the summary off without calling a model.
 - `/steer TEXT` applies your text to the active run at its next request.
+- `/tiers` shows the project's model tiers. `/tier add NAME MODEL [PROFILE]` and
+  `/tier remove NAME` change them, and `/tier use planning|editing|summaries NAME|selected`
+  picks the tier for a step. A tier only picks the model on the provider the run already
+  uses; it never changes permissions. Run details show which model each step used.
 - `/queue` shows prompts waiting behind the active run. `/queue continue` and
   `/queue discard` resume or drop them. A failed or cancelled run pauses the queue.
 - Esc closes a panel without sending your draft. During a run, Esc or `/stop` cancels the

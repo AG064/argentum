@@ -97,6 +97,7 @@ mod diagnostics;
 #[cfg(feature = "extensions")]
 mod extensions;
 mod imports;
+mod model_tiers;
 mod modules;
 pub use authority::RuntimeHostAuthority;
 
@@ -759,6 +760,10 @@ struct ModelStreamState {
     /// Every request's usage in this run, never reset between rounds.
     turn_total: argentum_domain::UsageTotal,
     served_model: Option<String>,
+    /// The model this round asked for, from the owner's tiers.
+    round_model: Option<String>,
+    /// The last step choice journaled for this run.
+    step_choice: Option<argentum_domain::model_tiers::StepModelChoice>,
 }
 
 #[derive(Default)]
@@ -3036,6 +3041,8 @@ impl RuntimeService {
             AppCommand::LoadProviderBalance { profile_id } => {
                 self.load_provider_balance(profile_id).await
             }
+            AppCommand::LoadModelTiers => self.publish_model_tiers(None),
+            AppCommand::SaveModelTiers { settings } => self.save_model_tiers(settings),
             AppCommand::SetProviderSpendLimit {
                 profile_id,
                 monthly_tokens,
@@ -4969,6 +4976,26 @@ impl RuntimeService {
                 argentum_providers::set_deepseek_thinking(
                     self.store.load_ui_preferences()?.thinking,
                 );
+                // The first request of a run plans; later ones read and edit.
+                let step = if next_context_ordinal == 1 {
+                    argentum_domain::model_tiers::ModelStep::Planning
+                } else {
+                    argentum_domain::model_tiers::ModelStep::Editing
+                };
+                // A tier changes only the model of this round's request, and
+                // only within the run's own provider profile.
+                let selected_profile = profile.clone();
+                let selected_budget = budget.clone();
+                let (profile, budget, step_choice) = self.step_route(step, &profile, &budget)?;
+                if stream.step_choice.as_ref() != Some(&step_choice) {
+                    self.record_step_model(
+                        context.session_id,
+                        context.run_id,
+                        step_choice.clone(),
+                    )?;
+                    stream.step_choice = Some(step_choice.clone());
+                }
+                stream.round_model = Some(step_choice.model.clone());
                 let mut request = ModelRequest {
                     disable_thinking: false,
                     require_tool_call: next_context_ordinal == 1
@@ -4977,7 +5004,7 @@ impl RuntimeService {
                         && self.native_requires_tool_work(context.run_id)?,
                     continuation_scope: Some(context.continuation_scope),
                     output_limit: budget.requested_output_tokens,
-                    model: context.model.clone(),
+                    model: step_choice.model,
                     system: Some(system),
                     history: history.messages,
                     prompt: current_prompt.clone(),
@@ -5165,9 +5192,10 @@ impl RuntimeService {
                         .store
                         .selected_provider_profile(self.project_id)?
                         .ok_or(RuntimeError::NoProvider)?;
-                    let current_budget = self.store.model_budget(self.project_id, &profile)?;
-                    let snapshot_changed = current_profile != profile
-                        || current_budget.as_ref() != Some(&budget)
+                    let current_budget =
+                        self.store.model_budget(self.project_id, &selected_profile)?;
+                    let snapshot_changed = current_profile != selected_profile
+                        || current_budget.as_ref() != Some(&selected_budget)
                         || (context.enforce_execution_snapshot
                             && current_policy != context.catalog_policy);
                     if snapshot_changed {
@@ -5277,7 +5305,6 @@ impl RuntimeService {
                     &round_steering,
                     &mut next_context_ordinal,
                 )?;
-                let dispatch_budget = budget.clone();
                 let mut attempt = 1_u8;
                 let mut waited = std::time::Duration::ZERO;
                 let round = loop {
@@ -5289,7 +5316,9 @@ impl RuntimeService {
                         provider.as_ref(),
                         &prepared,
                         &request_validation,
-                        &dispatch_budget,
+                        // The stored budget is the selected model's; a tier
+                        // only changes this round's copy.
+                        &selected_budget,
                         &mut instruction_run,
                     )
                     .await?;
@@ -6224,9 +6253,11 @@ impl RuntimeService {
                     total_tokens: usage.total_tokens,
                     reasoning_tokens: usage.reasoning_tokens,
                     cached_input_tokens: usage.cached_input_tokens,
-                    context_window_tokens: usage
-                        .context_window_tokens
-                        .or(self.model_context_window(&context.profile_id, &context.model)?),
+                    context_window_tokens: usage.context_window_tokens.or(self
+                        .model_context_window(
+                            &context.profile_id,
+                            stream.round_model.as_deref().unwrap_or(&context.model),
+                        )?),
                     turn_total: None,
                 };
                 stream.turn_total.add(&usage);
@@ -6239,6 +6270,7 @@ impl RuntimeService {
                         model: stream
                             .served_model
                             .clone()
+                            .or_else(|| stream.round_model.clone())
                             .unwrap_or_else(|| context.model.clone()),
                         usage,
                     },
@@ -7265,6 +7297,7 @@ impl RuntimeService {
         let stored = if matches!(
             &event,
             AppEvent::ModelRequestAttempt { .. }
+                | AppEvent::ModelStepChosen { .. }
                 | AppEvent::SteeringChanged(_)
                 | AppEvent::SummaryTransportObserved { .. }
                 | AppEvent::ExtensionOperationRecorded { .. }
@@ -12470,6 +12503,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::ContextCompactionProgress { .. }
         | AppEvent::ContextRequestAccounted { .. }
         | AppEvent::ModelRequestAttempt { .. }
+        | AppEvent::ModelStepChosen { .. }
         | AppEvent::SummaryTransportObserved { .. }
         | AppEvent::ExtensionOperationRecorded { .. }
         | AppEvent::GoalRequestAccounting { .. }
@@ -12525,6 +12559,7 @@ fn trajectory_entry_from_record(record: StoredEventRecord) -> Option<TrajectoryE
         | AppEvent::LayoutChanged(_)
         | AppEvent::UiPreferencesLoaded { .. }
         | AppEvent::ProviderUsageLoaded { .. }
+        | AppEvent::ModelTiersLoaded { .. }
         | AppEvent::ProviderBalanceLoaded { .. }
         | AppEvent::GitStatusLoaded(_)
         | AppEvent::GitDiffLoaded(_)
@@ -12602,6 +12637,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         AppEvent::ContextRequestAccounted { run_id, .. }
         | AppEvent::ToolActivity { run_id, .. }
         | AppEvent::ModelRequestAttempt { run_id, .. }
+        | AppEvent::ModelStepChosen { run_id, .. }
         | AppEvent::SummaryTransportObserved { run_id, .. }
         | AppEvent::ExtensionOperationRecorded { run_id, .. }
         | AppEvent::GoalRequestAccounting { run_id, .. } => Some(*run_id),
@@ -12680,6 +12716,7 @@ fn event_run_id(event: &AppEvent) -> Option<RunId> {
         | AppEvent::LayoutChanged(_)
         | AppEvent::UiPreferencesLoaded { .. }
         | AppEvent::ProviderUsageLoaded { .. }
+        | AppEvent::ModelTiersLoaded { .. }
         | AppEvent::ProviderBalanceLoaded { .. }
         | AppEvent::GitStatusLoaded(_)
         | AppEvent::GitDiffLoaded(_)
@@ -15563,6 +15600,149 @@ mod tests {
             right_models.lock().expect("right models").as_slice(),
             ["right-model"]
         );
+    }
+
+    async fn tier_run(planning_profile: &str) -> (Vec<String>, Vec<String>, Vec<AppEvent>) {
+        use argentum_domain::model_tiers::{ModelStep, ModelTier, ModelTierSettings};
+        let left_models = Arc::new(Mutex::new(Vec::new()));
+        let right_models = Arc::new(Mutex::new(Vec::new()));
+        let mut providers = ProviderRegistry::default();
+        providers.register(ModelCapturingProvider {
+            id: "model-left",
+            seen_models: left_models.clone(),
+        });
+        providers.register(ModelCapturingProvider {
+            id: "model-right",
+            seen_models: right_models.clone(),
+        });
+        let (runtime, mut events) = runtime_with_providers(providers);
+        for (id, selected) in [("model-left", true), ("model-right", false)] {
+            runtime
+                .dispatch(AppCommand::SaveProviderProfile {
+                    profile: ProviderProfile {
+                        id: id.into(),
+                        label: id.into(),
+                        kind: ProviderKind::OpenAiCompatible,
+                        endpoint: format!("https://{id}.example.test/v1/"),
+                        model: "work-model".into(),
+                        selected,
+                    },
+                })
+                .await
+                .expect("saved profile");
+        }
+        runtime
+            .declare_model_budget("model-left", [2_000_000, 1_900_000, 8192, 4096, 1024])
+            .unwrap();
+        // The models' context windows, as a provider catalog reports them.
+        {
+            let left = runtime
+                .store
+                .provider_profiles(runtime.project_id)
+                .unwrap()
+                .into_iter()
+                .find(|profile| profile.id == "model-left")
+                .unwrap();
+            let mut windows = runtime.model_context_windows.lock().unwrap();
+            for model in ["work-model", "plan-model"] {
+                windows.insert(
+                    (
+                        left.id.clone(),
+                        profile_context_binding(&left),
+                        model.into(),
+                    ),
+                    2_000_000,
+                );
+            }
+        }
+        runtime
+            .dispatch(AppCommand::SaveModelTiers {
+                settings: ModelTierSettings {
+                    tiers: vec![ModelTier {
+                        name: "strong".into(),
+                        profile_id: planning_profile.into(),
+                        model: "plan-model".into(),
+                    }],
+                    steps: std::collections::BTreeMap::from([(
+                        ModelStep::Planning,
+                        "strong".into(),
+                    )]),
+                },
+            })
+            .await
+            .expect("saved tiers");
+        let _ = drain_events(&mut events);
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "plan this".into(),
+            })
+            .await
+            .expect("model request");
+        let left = left_models.lock().expect("left").clone();
+        let right = right_models.lock().expect("right").clone();
+        (left, right, drain_events(&mut events))
+    }
+
+    #[tokio::test]
+    async fn a_planning_tier_on_the_same_profile_names_its_model_in_the_request() {
+        let (left, right, events) = tier_run("model-left").await;
+        assert_eq!(left, ["plan-model"]);
+        assert!(right.is_empty());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            AppEvent::ModelStepChosen { choice, .. }
+                if choice.tier.as_deref() == Some("strong") && choice.model == "plan-model"
+        )));
+    }
+
+    #[tokio::test]
+    async fn without_tiers_a_run_journals_no_step_choice() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut providers = ProviderRegistry::default();
+        providers.register(ModelCapturingProvider {
+            id: "model-left",
+            seen_models: seen.clone(),
+        });
+        let (runtime, mut events) = runtime_with_providers(providers);
+        runtime
+            .dispatch(AppCommand::SaveProviderProfile {
+                profile: ProviderProfile {
+                    id: "model-left".into(),
+                    label: "model-left".into(),
+                    kind: ProviderKind::OpenAiCompatible,
+                    endpoint: "https://model-left.example.test/v1/".into(),
+                    model: "work-model".into(),
+                    selected: true,
+                },
+            })
+            .await
+            .expect("saved profile");
+        runtime
+            .declare_model_budget("model-left", [2_000_000, 1_900_000, 8192, 4096, 1024])
+            .unwrap();
+        let _ = drain_events(&mut events);
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "no tiers".into(),
+            })
+            .await
+            .expect("model request");
+        assert_eq!(seen.lock().expect("models").as_slice(), ["work-model"]);
+        assert!(!drain_events(&mut events)
+            .iter()
+            .any(|event| matches!(event, AppEvent::ModelStepChosen { .. })));
+    }
+
+    #[tokio::test]
+    async fn a_tier_on_another_provider_never_receives_the_conversation() {
+        let (left, right, events) = tier_run("model-right").await;
+        assert_eq!(left, ["work-model"]);
+        assert!(right.is_empty());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            AppEvent::ModelStepChosen { choice, .. }
+                if choice.tier.is_none() && choice.reason.contains("another provider")
+        )));
     }
 
     #[tokio::test]

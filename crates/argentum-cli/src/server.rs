@@ -868,6 +868,9 @@ fn jsonl_command_is_permitted(command: &AppCommand) -> bool {
         | AppCommand::PreviewWorkspaceFile { .. }
         // Spend limits are the owner's setting, in the app or the local CLI.
         | AppCommand::SetProviderSpendLimit { .. }
+        // Model tiers are the owner's setting, like the selected model.
+        | AppCommand::LoadModelTiers
+        | AppCommand::SaveModelTiers { .. }
         // A balance is read with the owner's key, only when the owner asks in the app.
         | AppCommand::LoadProviderBalance { .. }
         // Imports read the owner's other agents' settings and write project

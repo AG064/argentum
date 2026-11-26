@@ -170,6 +170,12 @@ pub enum TuiError {
 
 pub struct TuiState {
     settings_busy: bool,
+    /// The project's model tiers from the latest snapshot.
+    model_tiers: argentum_domain::model_tiers::ModelTierSettings,
+    /// The profile runs use now, for `/tier add` without a profile.
+    tier_profile: Option<String>,
+    /// Print the tiers when the next snapshot arrives.
+    tiers_listing: bool,
     next_skill: Option<argentum_workspaces::SelectedSkill>,
     workspace: PathBuf,
     no_color: bool,
@@ -231,6 +237,9 @@ impl TuiState {
     pub fn new(workspace: PathBuf, no_color: bool) -> Self {
         Self {
             settings_busy: false,
+            model_tiers: Default::default(),
+            tier_profile: None,
+            tiers_listing: false,
             next_skill: None,
             workspace,
             no_color,
@@ -795,6 +804,21 @@ impl TuiState {
                     self.truncate_timeline();
                 }
             }
+            AppEvent::ModelTiersLoaded {
+                settings,
+                selected_profile_id,
+                notice,
+                ..
+            } => {
+                self.model_tiers = settings;
+                self.tier_profile = selected_profile_id;
+                if let Some(notice) = notice {
+                    self.append_system(&notice);
+                }
+                if std::mem::take(&mut self.tiers_listing) {
+                    self.append_system(&tiers_listing(&self.model_tiers));
+                }
+            }
             AppEvent::PlanUpdated { run_id, steps } => {
                 if self.run_is_current(run_id) {
                     self.show_plan(run_id, &steps);
@@ -1299,6 +1323,59 @@ impl TuiState {
         }
     }
 
+    /// `/tiers`, `/tier add NAME MODEL [PROFILE]`, `/tier remove NAME`,
+    /// `/tier use STEP NAME|selected`. Changes go to the runtime, which checks
+    /// them and refuses a profile that is not set up.
+    fn tier_command(&mut self, prompt: &str) -> TuiAction {
+        use argentum_domain::model_tiers::{ModelStep, ModelTier};
+        let words: Vec<&str> = prompt.split_whitespace().skip(1).collect();
+        let mut settings = self.model_tiers.clone();
+        let usage = "Usage: /tiers, /tier add NAME MODEL [PROFILE], /tier remove NAME, /tier use planning|editing|summaries NAME|selected";
+        match words.as_slice() {
+            [] | ["list"] => {
+                self.tiers_listing = true;
+                return TuiAction::Dispatch(AppCommand::LoadModelTiers);
+            }
+            ["add", name, model, rest @ ..] if rest.len() <= 1 => {
+                let Some(profile_id) = rest
+                    .first()
+                    .map(|profile| (*profile).to_owned())
+                    .or_else(|| self.tier_profile.clone())
+                else {
+                    self.append_system("Run /tiers first, or name the provider profile.");
+                    return TuiAction::Redraw;
+                };
+                settings.tiers.retain(|tier| tier.name != *name);
+                settings.tiers.push(ModelTier {
+                    name: (*name).to_owned(),
+                    profile_id,
+                    model: (*model).to_owned(),
+                });
+            }
+            ["remove", name] => {
+                settings.tiers.retain(|tier| tier.name != *name);
+                settings.steps.retain(|_, tier| tier != name);
+            }
+            ["use", step, name] => {
+                let Some(step) = ModelStep::parse(step) else {
+                    self.append_system(usage);
+                    return TuiAction::Redraw;
+                };
+                if *name == "selected" {
+                    settings.steps.remove(&step);
+                } else {
+                    settings.steps.insert(step, (*name).to_owned());
+                }
+            }
+            _ => {
+                self.append_system(usage);
+                return TuiAction::Redraw;
+            }
+        }
+        self.tiers_listing = true;
+        TuiAction::Dispatch(AppCommand::SaveModelTiers { settings })
+    }
+
     fn handle_slash_command(&mut self, prompt: &str) -> TuiAction {
         let mut parts = prompt.split_whitespace();
         let command = parts.next().unwrap_or_default().to_ascii_lowercase();
@@ -1453,6 +1530,7 @@ impl TuiState {
                 }
                 TuiAction::Redraw
             }
+            "/tiers" | "/tier" => self.tier_command(prompt),
             "/context" => {
                 if parts.next().is_some() {
                     self.append_system("Usage: /context");
@@ -3128,6 +3206,32 @@ impl KeyMapper {
         }
         map_key_event(key)
     }
+}
+
+/// The tiers as `/tiers` shows them.
+fn tiers_listing(settings: &argentum_domain::model_tiers::ModelTierSettings) -> String {
+    use argentum_domain::model_tiers::ModelStep;
+    let mut text = String::from("Model per task. A tier only picks the model; permissions stay the same. Only tiers on the provider runs use now apply, so a step never sends the conversation to another provider.");
+    if settings.tiers.is_empty() {
+        text.push_str("\nNo tiers. Add one with /tier add NAME MODEL.");
+    }
+    for tier in &settings.tiers {
+        text.push_str(&format!(
+            "\nTier {}: {} on {}",
+            tier.name, tier.model, tier.profile_id
+        ));
+    }
+    for step in ModelStep::ALL {
+        text.push_str(&format!(
+            "\n{}: {}",
+            step.as_str(),
+            settings
+                .steps
+                .get(&step)
+                .map_or("selected model", String::as_str)
+        ));
+    }
+    text
 }
 
 #[cfg(test)]

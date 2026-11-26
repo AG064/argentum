@@ -294,6 +294,15 @@ pub struct DiagnosticLimits {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelStepDiagnostics {
+    pub step: String,
+    pub model: String,
+    /// The tier that picked it, or `None` for the selected model.
+    pub tier: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunDiagnosticsReport {
     pub schema_version: u16,
     pub metadata_only: bool,
@@ -318,6 +327,9 @@ pub struct RunDiagnosticsReport {
     pub context: Vec<ContextDiagnostics>,
     pub compaction: Vec<CompactionDiagnostics>,
     pub steering: Vec<SteeringDiagnostics>,
+    /// Which model each step used, from the owner's tiers, in order.
+    #[serde(default)]
+    pub model_steps: Vec<ModelStepDiagnostics>,
     pub provenance: ProvenanceDiagnostics,
     pub coverage: DiagnosticCoverage,
 }
@@ -518,7 +530,7 @@ impl Store {
                AND event_type IN ('task_accepted','run_status_changed','model_usage_updated',
                  'context_request_accounted','model_request_attempt','goal_request_accounting',
                  'tool_started','tool_finished','approval_requested','approval_resolved',
-                 'run_error','context_compaction_completed','steering_changed')",
+                 'run_error','context_compaction_completed','steering_changed','model_step_chosen')",
             params![project_id.to_string(), run_id.to_string(), expected_session],
             |row| row.get(0),
         )?;
@@ -532,7 +544,7 @@ impl Store {
                AND event_type IN ('task_accepted','run_status_changed','model_usage_updated',
                  'context_request_accounted','model_request_attempt','goal_request_accounting',
                  'tool_started','tool_finished','approval_requested','approval_resolved',
-                 'run_error','context_compaction_completed','steering_changed')
+                 'run_error','context_compaction_completed','steering_changed','model_step_chosen')
              ORDER BY id DESC LIMIT ?5",
         )?;
         let rows = statement.query_map(
@@ -583,6 +595,7 @@ impl Store {
         let mut context = Vec::new();
         let mut compaction = Vec::new();
         let mut answered_by: Option<String> = None;
+        let mut model_steps: Vec<ModelStepDiagnostics> = Vec::new();
         let mut compaction_tokens: u64 = 0;
         let mut question_asked = false;
         let mut steering = Vec::new();
@@ -681,6 +694,22 @@ impl Store {
                     }
                     if let Some(value) = stop_reason.as_deref().and_then(safe_stop_reason) {
                         item.stop_reason = Some(value);
+                    }
+                }
+                AppEvent::ModelStepChosen {
+                    run_id: stored,
+                    choice,
+                    ..
+                } if stored == run_id => {
+                    if let Some(model) = safe_model_id(&choice.model) {
+                        model_steps.push(ModelStepDiagnostics {
+                            step: choice.step.as_str().into(),
+                            model,
+                            tier: choice
+                                .tier
+                                .filter(|tier| argentum_domain::model_tiers::valid_tier_name(tier)),
+                            reason: choice.reason.chars().take(240).collect(),
+                        });
                     }
                 }
                 AppEvent::QuestionAsked { run_id: stored, .. } if stored == run_id => {
@@ -1216,6 +1245,7 @@ impl Store {
             context,
             compaction,
             steering,
+            model_steps,
             provenance: ProvenanceDiagnostics {
                 instruction_sources: DiagnosticValue::unavailable(
                     "safe_instruction_provenance_not_retained",
@@ -1288,6 +1318,16 @@ pub fn format_run_diagnostics_human(report: &RunDiagnosticsReport) -> String {
         text.push_str("\nNo completed file-changing operation was recorded in the complete change-reference coverage.");
     } else if report.changes.is_empty() {
         text.push_str("\nCompleted file-changing operations are unknown because change-reference coverage is partial.");
+    }
+    for step in &report.model_steps {
+        text.push_str(&format!(
+            "\nModel for {}: {} ({})",
+            step.step,
+            step.model,
+            step.tier
+                .as_ref()
+                .map_or_else(|| step.reason.clone(), |tier| format!("tier {tier}"))
+        ));
     }
     for tool in &report.tools {
         text.push_str(&format!(
