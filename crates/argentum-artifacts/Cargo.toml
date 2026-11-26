@@ -12,7 +12,7 @@ argentum-execution = { workspace = true, features = ["artifact-render"] }
 argentum-extensions = { workspace = true, features = ["server-support"] }
 argentum-security.workspace = true
 pulldown-cmark.workspace = true
-rmcp = { version = "=3.9.0", default-features = false, features = ["server", "transport-async-rw"] }
+rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-async-rw"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -20,10 +20,10 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
-skrifa = "=0.44.0"
+skrifa = "=0.46.2"
 
 [target.'cfg(windows)'.dependencies]
-libloading = "=0.8.9"
+libloading = "=0.9.1"
 png = "=0.18.1"
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
