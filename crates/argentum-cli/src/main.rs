@@ -9217,6 +9217,7 @@ argentum harness profile PROFILE_ID [OPTIONS]\n  \
 argentum harness surface SURFACE show|hide [OPTIONS]\n  \
 argentum harness execution PROFILE_ID [OPTIONS]\n  \
 argentum harness capability CAPABILITY_ID enable|disable [OPTIONS]\n  \
+argentum harness module-setting MODULE_ID KEY=VALUE [OPTIONS]\n  \
 argentum harness backend enable|disable [OPTIONS]\n  \
 argentum harness module MODULE_ID install|enable|disable|remove [OPTIONS]\n  \
 argentum harness trajectory [SESSION_ID] [OPTIONS]\n  \

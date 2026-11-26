@@ -480,6 +480,7 @@ few suggest. Shell completion is not included.
 | `harness surface` | harness | Show or hide a harness surface |  |
 | `harness execution` | harness | Select an execution policy profile |  |
 | `harness capability` | harness | Enable or disable a capability |  |
+| `harness module-setting` | harness | Set an agent module setting as KEY=VALUE |  |
 | `harness backend` | harness | Enable or disable a local backend |  |
 | `harness module` | harness | Install, enable, disable or remove a module |  |
 | `harness trajectory` | harness | Inspect a session trajectory |  |
