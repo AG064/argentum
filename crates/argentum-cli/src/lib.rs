@@ -3722,9 +3722,21 @@ mod tests {
         assert!(builtin_descriptors
             .iter()
             .all(|descriptor| host_descriptors.contains(descriptor)));
+        // Beyond the built-ins, the host adds only the delegation tool and the
+        // agent module tools, and every module tool asks before it reaches
+        // the network.
         assert!(host_descriptors.iter().all(|descriptor| {
-            builtin_descriptors.contains(descriptor) || descriptor.id == "delegate_readonly"
+            builtin_descriptors.contains(descriptor)
+                || descriptor.id == "delegate_readonly"
+                || argentum_domain::modules::module_for_tool(&descriptor.id).is_some()
         }));
+        for descriptor in host_descriptors.iter().filter(|descriptor| {
+            argentum_domain::modules::module_for_tool(&descriptor.id).is_some()
+        }) {
+            assert!(descriptor.requires_approval, "{}", descriptor.id);
+            assert!(descriptor.capability_id.starts_with("module."));
+            assert_eq!(descriptor.capabilities, vec![Capability::Network]);
+        }
         let write = host
             .tool_descriptors()
             .into_iter()
