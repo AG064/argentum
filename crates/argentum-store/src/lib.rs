@@ -6380,11 +6380,9 @@ mod tests {
         };
         // The message search index is one FTS5 table with four shadow tables,
         // file changes have an index by session, spend limits a table, and
-        // imported MCP server drafts and memory notes a table each, with an
-        // index for the notes.
-        assert_eq!((tables, indexes), (41, 31));
-        // imported MCP server drafts a table, and agent module settings a table.
-        assert_eq!((tables, indexes), (41, 30));
+        // imported MCP server drafts, memory notes and agent module settings a
+        // table each, with an index for the notes.
+        assert_eq!((tables, indexes), (42, 31));
         let store = Store::open(&database).expect("reopened store");
         let connection = store.connection.lock().expect("connection");
         let reopened: String = connection
