@@ -9128,6 +9128,7 @@ argentum accounting inspect --workspace PATH --database PATH --session-id SESSIO
 argentum accounting resolve --workspace PATH --database PATH --resolution FILE [--confirm-reservation EXACT_UNITS] [--json]\n  \
 argentum skills list [OPTIONS]\n  \
 argentum skills inspect NAME [OPTIONS]\n  \
+argentum import [--select ID|NUMBER]... [--all] [--json] [OPTIONS]  (MCP servers, skills and commands from Claude Code, Codex and OpenCode; grants nothing)\n  \
 argentum status [OPTIONS]\n  \
 argentum provider probe [PROVIDER_ID] [OPTIONS]\n  \
 argentum provider list [OPTIONS]\n  \

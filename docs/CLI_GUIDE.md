@@ -423,6 +423,7 @@ few suggest. Shell completion is not included.
 | `accounting resolve` | core | Resolve an accounting reservation with owner confirmation |  |
 | `skills list` | core | List project-local skills |  |
 | `skills inspect` | core | Inspect one project-local skill |  |
+| `import` | core | List MCP servers, skills and commands from Claude Code, Codex and OpenCode, and import the ones you pick |  |
 | `status` | core | Show workspace and provider readiness |  |
 | `terminal-diagnostic` | core | Write one synthetic terminal diagnostic |  |
 | `local-chat` | core | Open llama.cpp coding chat with policy-controlled tools |  |
