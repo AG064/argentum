@@ -26,6 +26,7 @@ argentum-security.workspace = true
 argentum-store.workspace = true
 argentum-ui.workspace = true
 argentum-update.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 slint.workspace = true
 tokio.workspace = true
@@ -39,6 +40,7 @@ windows = { workspace = true, features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

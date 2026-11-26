@@ -124,6 +124,11 @@ The first stable release, for Windows x64 and Android arm64:
   memory and GPU locally and marks each quantization as fitting fully on the
   GPU, with offload, on the CPU, or not at all, with the launcher's own memory
   rules. Nothing about the computer is sent.
+- **Reported speeds:** tokens per second for each quantization from a
+  community table in this repository, reviewed by pull request. You can
+  measure the running local model and share the result only by opening a
+  prefilled GitHub issue yourself, after seeing every field. Argentum sends
+  nothing.
 
 ## Planned for 0.1.5
 

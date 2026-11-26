@@ -78,6 +78,7 @@ Argentum contacts:
 - GitHub, only when you check for updates
 - the download addresses of the local model add-on, only when you install it
 - huggingface.co, only when you search, open or download in the model marketplace
+- GitHub, when you press "Refresh speeds" in the model marketplace, for the community speed table
 - a web page, only when you open it in the page reader
 
 There is no telemetry.

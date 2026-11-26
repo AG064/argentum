@@ -2066,6 +2066,17 @@ impl LocalCommandHandle {
             .await?;
         Ok(())
     }
+    /// Time a fixed prompt on the running local model, for the marketplace's
+    /// speed report. Nothing is sent anywhere but the local runtime.
+    pub async fn measure_local_speed(
+        &self,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<argentum_providers::LocalSpeedMeasurement, HostError> {
+        let Some(module) = &self.local_runtime else {
+            return Err(argentum_providers::ProviderError::LocalRuntimeLeaseStale.into());
+        };
+        Ok(module.measure_speed(cancellation).await?)
+    }
     pub async fn unload_local_model(&self) -> Result<(), HostError> {
         if let Some(module) = &self.local_runtime {
             module

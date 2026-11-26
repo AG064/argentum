@@ -24,6 +24,7 @@ use argentum_providers::{launcher_context_tokens, local_model_fit, LocalModelFit
 use argentum_security::SecretValue;
 use argentum_ui::{App, MainWindow, MarketFileView, MarketRepoView, UiHandle};
 use argentum_update::hub::{self, Hub, HubToken, Repo, RepoSummary, Variant, VariantKind};
+use argentum_update::speeds::{self, SpeedTable};
 use argentum_update::UpdateError;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 use tokio_util::sync::CancellationToken;
@@ -35,6 +36,25 @@ const HUB_TOKEN_PROMPT: &str = "huggingface-hub";
 
 pub(crate) struct Context {
     pub(crate) secrets: Arc<dyn SecretStore>,
+    pub(crate) local: argentum_cli::LocalCommandHandle,
+    pub(crate) runtime: tokio::runtime::Handle,
+}
+
+/// Reported speeds: the copy built into the app until "Refresh speeds".
+static SPEEDS: Mutex<Option<SpeedTable>> = Mutex::new(None);
+
+fn speed_summary(repo: &str, variant: &Variant) -> String {
+    if variant.kind != VariantKind::Model {
+        return String::new();
+    }
+    let Some(quant) = variant.quant.as_deref() else {
+        return String::new();
+    };
+    SPEEDS
+        .lock()
+        .ok()
+        .and_then(|table| table.as_ref().and_then(|table| table.summary(repo, quant)))
+        .unwrap_or_else(|| "No reported speed yet".into())
 }
 
 #[derive(Default)]
@@ -65,10 +85,62 @@ pub(crate) fn connect(ui: &UiHandle, context: Context) {
     let hardware = argentum_platform::detect_hardware();
     app.set_market_hardware(hardware_text(&hardware).into());
     let _ = MEMORY.set(memory_facts(&hardware));
+    if let Ok(mut table) = SPEEDS.lock() {
+        *table = Some(speeds::built_in_table());
+    }
 
     let models_dir = Arc::new(models_dir);
     let shared = Arc::new(Mutex::new(Shared::default()));
     let secrets = context.secrets;
+    crate::speed_report::connect(
+        ui,
+        crate::speed_report::Context {
+            local: context.local,
+            runtime: context.runtime,
+            models_dir: models_dir.clone(),
+            hardware,
+        },
+    );
+    {
+        let weak = ui.weak_window();
+        let shared = shared.clone();
+        let models_dir = models_dir.clone();
+        app.on_market_refresh_speeds(move || {
+            let Some(window) = weak.upgrade() else { return };
+            if !take_busy(&shared) {
+                return;
+            }
+            let app = window.global::<App>();
+            app.set_market_error(false);
+            app.set_market_detail(
+                "Fetching the community speed table from the Argentum repository on GitHub.".into(),
+            );
+            let weak = weak.clone();
+            let shared = shared.clone();
+            let models_dir = models_dir.clone();
+            spawn("market-speeds", move || {
+                let result = block_on(speeds::fetch_table());
+                release_busy(&shared);
+                let _ = weak.upgrade_in_event_loop(move |window| match result {
+                    Ok(table) => {
+                        let count = table.entries.len();
+                        if let Ok(mut current) = SPEEDS.lock() {
+                            *current = Some(table);
+                        }
+                        let repo = shared.lock().ok().and_then(|state| state.repo.clone());
+                        if let Some(repo) = repo {
+                            show_repo(&window, &repo, &models_dir, true);
+                        }
+                        window.global::<App>().set_market_detail(
+                            format!("The speed table is up to date, with {count} reported speeds.")
+                                .into(),
+                        );
+                    }
+                    Err(error_value) => show_error(&window, &error_value),
+                });
+            });
+        });
+    }
 
     {
         let weak = ui.weak_window();
@@ -210,6 +282,9 @@ pub(crate) fn connect(ui: &UiHandle, context: Context) {
     app.set_market_error(false);
                     match result {
                         Ok(path) => {
+                            if let Some(file) = variant.files.first() {
+                                crate::speed_report::record_source(&models_dir, &file.local_name, &repo.id);
+                            }
                             app.set_market_state("repo".into());
                             app.set_market_detail(
                                 format!(
@@ -664,6 +739,7 @@ fn show_repo(window: &MainWindow, repo: &Repo, models_dir: &Path, has_token: boo
                     detail: variant_detail(variant, models_dir).into(),
                     fit: fit.map_or("", LocalModelFit::label).into(),
                     fit_tone: fit.map_or("secondary", fit_tone).into(),
+                    speed: speed_summary(&repo.id, variant).into(),
                 }
             })
             .collect::<Vec<_>>(),

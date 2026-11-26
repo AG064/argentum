@@ -499,6 +499,7 @@ fn marketplace(ui: &UiHandle, state: &str) {
             detail: (*detail).into(),
             fit: ["Fits fully on GPU", "Fits with offload to system memory", "Will not fit"][index].into(),
             fit_tone: ["ok", "secondary", "danger"][index].into(),
+            speed: ["Reported 41.5 tokens/s on Example GPU with 32 GB RAM", "No reported speed yet", "No reported speed yet"][index].into(),
         })
         .collect::<Vec<_>>(),
     )));
@@ -725,6 +726,26 @@ fn scenes() -> Vec<Scene> {
         s("10c-settings-marketplace-repo", D, |ui| {
             modules(ui, "standard");
             marketplace(ui, "repo");
+            ui.window().set_settings_open(true);
+        }),
+        s("10e-settings-marketplace-report", D, |ui| {
+            modules(ui, "standard");
+            marketplace(ui, "repo");
+            let app = ui.window().global::<App>();
+            app.set_market_report_state("ready".into());
+            app.set_market_report_text("Measured on this computer: 41.5 tokens per second (128 tokens in 3.1 s) for Qwen3.5-4B-Q4_K_M.gguf at a 16384-token context. Nothing has been sent.
+
+If you choose to share it, this is the whole report:
+
+{
+  \"repo\": \"unsloth/Qwen3.5-4B-GGUF\",
+  \"quant\": \"Q4_K_M\",
+  \"gpu\": \"Example GPU\",
+  \"ram_gb\": 32,
+  \"tokens_per_second\": 41.5
+}
+
+\"Open report on GitHub\" opens a prefilled issue in your browser. You submit it there, or close it. Argentum does not send it.".into());
             ui.window().set_settings_open(true);
         }),
         s("10d-settings-marketplace-confirm", D, |ui| {

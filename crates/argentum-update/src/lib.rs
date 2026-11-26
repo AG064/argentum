@@ -25,6 +25,7 @@ pub mod addon;
 mod der;
 pub mod hub;
 pub mod sigstore;
+pub mod speeds;
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const RELEASES_URL: &str = "https://api.github.com/repos/AG064/argentum/releases/latest";

@@ -7,6 +7,7 @@ mod market;
 pub mod native_host;
 pub mod remote_control;
 pub mod session_export;
+mod speed_report;
 pub mod startup_error;
 pub mod ui_bridge;
 #[cfg(windows)]

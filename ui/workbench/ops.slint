@@ -923,6 +923,7 @@ export component LocalModelSection inherits VerticalLayout {
                     horizontal-stretch: 1;
                     Label { text: file.label; }
                     if file.fit != "": Label { text: file.fit; size: "sm"; tone: file.fit_tone; }
+                    if file.speed != "": Label { text: file.speed; size: "sm"; tone: "secondary"; }
                     Label { text: file.detail; size: "sm"; tone: "muted"; wrap: word-wrap; }
                 }
                 Btn { label: "Review"; small: true; clicked => { App.market_choose(file.index); } }
@@ -947,8 +948,22 @@ export component LocalModelSection inherits VerticalLayout {
     if App.market_supported && App.market_state != "downloading": HorizontalLayout {
         alignment: end;
         spacing: Theme.sp8;
+        Btn { label: "Refresh speeds"; small: true; clicked => { App.market_refresh_speeds(); } }
+        Btn {
+            label: App.market_report_state == "measuring" ? "Stop measuring" : "Measure speed";
+            small: true;
+            busy: App.market_report_state == "measuring";
+            clicked => { App.market_measure(); }
+        }
         if !App.market_token_set: Btn { label: "Set Hugging Face token"; small: true; clicked => { App.market_set_token(); } }
         if App.market_token_set: Btn { label: "Remove Hugging Face token"; small: true; clicked => { App.market_clear_token(); } }
+    }
+    if App.market_supported && App.market_report_text != "": Notice { text: App.market_report_text; tone: "secondary"; }
+    if App.market_supported && (App.market_report_state == "ready" || App.market_report_state == "shown"): HorizontalLayout {
+        alignment: end;
+        spacing: Theme.sp8;
+        Btn { label: "Close"; small: true; clicked => { App.market_close_report(); } }
+        if App.market_report_state == "ready": Btn { label: "Open report on GitHub"; kind: "primary"; small: true; clicked => { App.market_open_report(); } }
     }
     if App.local_inference_available: SectionLabel { text: "ON-DEVICE MODEL"; height: 22px; }
     if App.local_inference_available: Notice { text: App.local_inference_detail; tone: "secondary"; }

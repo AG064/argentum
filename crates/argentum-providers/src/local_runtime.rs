@@ -1294,6 +1294,30 @@ impl LocalRuntimeModule {
         Ok(Arc::clone(active))
     }
 
+    /// Time one fixed prompt on the local model that is already running and
+    /// approved. Starts nothing, and fails if no local model is active.
+    pub async fn measure_speed(
+        &self,
+        cancellation: CancellationToken,
+    ) -> Result<crate::LocalSpeedMeasurement, ProviderError> {
+        let active = {
+            let state = self.state.lock().await;
+            state
+                .active
+                .as_ref()
+                .map(Arc::clone)
+                .ok_or(ProviderError::LocalRuntimeLeaseStale)?
+        };
+        active.verify_lease().await?;
+        crate::local_speed::measure_speed(
+            active.provider(),
+            active.model(),
+            active.context_tokens(),
+            cancellation,
+        )
+        .await
+    }
+
     pub async fn shutdown(&self, cancellation: CancellationToken) -> Result<(), ProviderError> {
         let mut state = self.state.lock().await;
         if state.mounted.is_none() {
