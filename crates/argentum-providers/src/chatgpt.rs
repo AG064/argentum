@@ -199,7 +199,15 @@ impl ChatGptProvider {
                 input.push(json!({"role":match message.role{ModelMessageRole::User=>"user",ModelMessageRole::Assistant=>"assistant"},"content":message.content}));
             }
         }
-        input.push(json!({"role":"user","content":request.prompt}));
+        if request.prompt_images.is_empty() {
+            input.push(json!({"role":"user","content":request.prompt}));
+        } else {
+            let mut content = vec![json!({"type":"input_text","text":request.prompt})];
+            content.extend(request.prompt_images.iter().map(
+                |image| json!({"type":"input_image","image_url":image.data_url(),"detail":"auto"}),
+            ));
+            input.push(json!({"role":"user","content":content}));
+        }
         for exchange in &request.tool_exchanges {
             Self::exchange(request, exchange, &mut input, true, identity)?;
         }
@@ -877,6 +885,7 @@ impl ModelProvider for ChatGptProvider {
             .filter(|m| m["visibility"] == "list")
             .map(|m| {
                 Ok(ProviderModel {
+                    accepts_images: None,
                     id: m["slug"]
                         .as_str()
                         .ok_or_else(|| invalid("Model slug missing"))?
@@ -1040,8 +1049,33 @@ mod tests {
         worker.join().unwrap();
     }
 
+    #[test]
+    fn prompt_images_are_input_image_parts() {
+        let mut request = request();
+        request.prompt = "look".into();
+        let image = ModelImage::from_attachment(&crate::tests::tiny_png(4, 4)).expect("png");
+        request.prompt_images = vec![image.clone()];
+        let binding = uuid::Uuid::new_v4();
+        let value: Value = serde_json::from_slice(
+            &ChatGptProvider::wire_body(&request, Some((binding, "synthetic_account"))).unwrap(),
+        )
+        .unwrap();
+        let user = value["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|item| item["role"] == "user")
+            .unwrap();
+        assert_eq!(user["content"][0]["type"], "input_text");
+        assert_eq!(user["content"][0]["text"], "look");
+        assert_eq!(user["content"][1]["type"], "input_image");
+        assert_eq!(user["content"][1]["image_url"], image.data_url());
+    }
+
     fn request() -> ModelRequest {
         ModelRequest {
+            prompt_images: Vec::new(),
             disable_thinking: false,
             continuation_scope: Some(ContinuationScope {
                 session_id: uuid::Uuid::new_v4(),

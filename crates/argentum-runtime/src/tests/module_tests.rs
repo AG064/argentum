@@ -358,3 +358,119 @@ async fn a_session_approval_for_the_network_covers_one_host() {
     let _ = settle(run).await;
     assert_eq!(server.hits.load(Ordering::SeqCst), 1);
 }
+
+fn picture(name: &str) -> argentum_domain::ImageAttachment {
+    use base64::Engine;
+    let mut png = vec![
+        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d,
+    ];
+    png.extend(b"IHDR");
+    png.extend(2_u32.to_be_bytes());
+    png.extend(2_u32.to_be_bytes());
+    png.extend([8, 6, 0, 0, 0]);
+    argentum_domain::ImageAttachment {
+        name: name.into(),
+        data_base64: base64::engine::general_purpose::STANDARD.encode(png),
+    }
+}
+
+impl Fixture {
+    async fn submit_with_pictures(&self, prompt: &str) -> Result<(), RuntimeError> {
+        *self.call.lock().unwrap() = None;
+        self.requests.lock().unwrap().clear();
+        let runtime = self.owner.runtime.clone();
+        let prompt = prompt.to_owned();
+        settle(tokio::spawn(async move {
+            runtime
+                .dispatch(AppCommand::SubmitTaskWithImages {
+                    prompt,
+                    images: vec![picture("screen.png")],
+                })
+                .await
+        }))
+        .await
+    }
+
+    async fn turn_on_images(&self, list_model: bool) {
+        self.owner
+            .dispatch(AppCommand::SetHarnessCapabilityEnabled {
+                capability_id: "module.images".into(),
+                enabled: true,
+            })
+            .await
+            .expect("owner turns images on");
+        if list_model {
+            self.owner
+                .dispatch(AppCommand::SetModuleSetting {
+                    module_id: "images".into(),
+                    key: "image-models".into(),
+                    value: "other-model, test-model".into(),
+                })
+                .await
+                .expect("owner lists the model");
+        }
+    }
+}
+
+#[tokio::test]
+async fn pictures_need_the_images_module_and_a_model_that_reads_them() {
+    let fixture = Fixture::new().await;
+    assert!(matches!(
+        fixture.submit_with_pictures("what is this?").await,
+        Err(RuntimeError::ImagesRefused(_))
+    ));
+    assert!(fixture.requests.lock().unwrap().is_empty());
+
+    fixture.turn_on_images(false).await;
+    assert!(matches!(
+        fixture.submit_with_pictures("what is this?").await,
+        Err(RuntimeError::ImagesRefused(_))
+    ));
+    assert!(fixture.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn pictures_go_with_their_run_only_and_are_not_saved() {
+    let fixture = Fixture::new().await;
+    fixture.turn_on_images(true).await;
+    fixture
+        .submit_with_pictures("what is this?")
+        .await
+        .expect("run with a picture");
+    {
+        let requests = fixture.requests.lock().unwrap();
+        assert!(!requests.is_empty());
+        for request in requests.iter() {
+            assert_eq!(request.prompt_images.len(), 1);
+            assert_eq!(request.prompt_images[0].media_type(), "image/png");
+            assert!(request.prompt.contains("[1 picture attached: screen.png]"));
+        }
+    }
+    let encoded = picture("screen.png").data_base64;
+    let events = fixture
+        .owner
+        .store
+        .events_for_workspace(fixture._directory.path())
+        .unwrap();
+    assert!(!serde_json::to_string(&events).unwrap().contains(&encoded));
+
+    // The next run without pictures carries none.
+    let runtime = fixture.owner.runtime.clone();
+    fixture.requests.lock().unwrap().clear();
+    settle(tokio::spawn(async move {
+        runtime
+            .dispatch(AppCommand::SubmitTask {
+                prompt: "and now?".into(),
+            })
+            .await
+    }))
+    .await
+    .expect("run without pictures");
+    assert!(fixture
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|request| request.prompt_images.is_empty()));
+    assert!(fixture.owner.prompt_images.lock().unwrap().is_empty());
+}

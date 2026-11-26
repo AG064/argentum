@@ -619,6 +619,7 @@ impl RuntimeService {
             capabilities.require_coding()?;
             let mut instruction_run = instructions::InstructionRun::new(Path::new(""))?;
             let base = ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
@@ -860,6 +861,7 @@ impl RuntimeService {
                 break;
             }
             let request = ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: true,
                 require_tool_call: false,
                 continuation_scope: None,
@@ -2017,6 +2019,7 @@ mod tests {
             .unwrap();
         assert!(projection.preview.omitted_source_ids.is_empty());
         let base = ModelRequest {
+            prompt_images: Vec::new(),
             disable_thinking: false,
             require_tool_call: false,
             continuation_scope: None,
@@ -2259,6 +2262,7 @@ mod tests {
                 uncertainty_tokens: 1024,
             };
             let request = ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,
@@ -2637,6 +2641,7 @@ mod tests {
                 uncertainty_tokens: 1024,
             };
             let request = ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: None,

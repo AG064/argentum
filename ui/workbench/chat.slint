@@ -910,6 +910,20 @@ export component Composer inherits Rectangle {
                 max-label: 170px;
                 clicked => { App.settings_section = "permissions"; App.open_settings(); }
             }
+            if App.image_picker_available && App.images_module_on: Chip {
+                y: (parent.height - self.height) / 2;
+                icon: "paperclip";
+                label: App.attached_images_label == "" ? "Attach" : App.attached_images_label;
+                trailing-chevron: false;
+                max-label: 170px;
+                clicked => { App.attach_images(); }
+            }
+            if App.images_module_on && App.attached_images_label != "": Btn {
+                y: (parent.height - self.height) / 2;
+                small: true;
+                label: "Remove";
+                clicked => { App.clear_attached_images(); }
+            }
             Rectangle { horizontal-stretch: 1; }
             // While a run works, Enter queues the text and Steer adds it to the run.
             if App.running && input.text != "": Btn {

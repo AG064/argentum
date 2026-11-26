@@ -254,6 +254,23 @@ fn request_merges_same_role_turns_and_drops_empty_text() {
 }
 
 #[test]
+fn prompt_images_go_before_the_prompt_text() {
+    let mut request = empty_model_request();
+    request.prompt = "describe it".into();
+    let image = ModelImage::from_attachment(&crate::tests::tiny_png(3, 3)).expect("png");
+    request.prompt_images = vec![image.clone()];
+    let body =
+        serde_json::to_value(build_messages_request(request).expect("request")).expect("json");
+    let content = &body["messages"][0]["content"];
+    assert_eq!(content[0]["type"], "image");
+    assert_eq!(content[0]["source"]["type"], "base64");
+    assert_eq!(content[0]["source"]["media_type"], "image/png");
+    assert_eq!(content[0]["source"]["data"], image.base64_data());
+    assert_eq!(content[1]["type"], "text");
+    assert_eq!(content[1]["text"], "describe it");
+}
+
+#[test]
 fn request_rejects_unsafe_or_unbound_input() {
     let mut zero = empty_model_request();
     zero.output_limit = 0;

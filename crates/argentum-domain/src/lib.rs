@@ -478,6 +478,24 @@ pub enum ToolInput {
     },
 }
 
+/// A picture attached to a task: a PNG or JPEG file, base64 encoded.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageAttachment {
+    /// File name, for display only.
+    pub name: String,
+    pub data_base64: String,
+}
+
+impl std::fmt::Debug for ImageAttachment {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ImageAttachment")
+            .field("name", &self.name)
+            .field("encoded_bytes", &self.data_base64.len())
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolRequest {
     pub call_id: ToolCallId,
@@ -2517,6 +2535,10 @@ pub struct ProviderModel {
     /// the model has no thinking control here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thinking_levels: Vec<ThinkingMode>,
+    /// Whether the provider's model list says the model reads images.
+    /// `None` when it does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepts_images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2890,6 +2912,12 @@ pub enum AppCommand {
     SubmitTaskWithSkill {
         prompt: String,
         skill: String,
+    },
+    /// A task with pictures attached. Needs the Images module and a model
+    /// that reads images. The pictures are not saved in the session.
+    SubmitTaskWithImages {
+        prompt: String,
+        images: Vec<ImageAttachment>,
     },
     SubmitTaskWithAnswerSchema {
         prompt: String,
@@ -3660,6 +3688,7 @@ mod tests {
             AppEvent::ProviderModelsSnapshot {
                 provider_id: "deepseek".into(),
                 models: vec![ProviderModel {
+                    accepts_images: None,
                     id: "deepseek-chat".into(),
                     label: "DeepSeek Chat".into(),
                     context_window_tokens: Some(65_536),

@@ -230,6 +230,7 @@ async fn active_stream_drains_before_replacement_and_cancelled_wait_keeps_old_ba
         provider
             .stream(
                 ModelRequest {
+                    prompt_images: Vec::new(),
                     disable_thinking: false,
                     require_tool_call: false,
                     continuation_scope: None,

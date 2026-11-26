@@ -75,7 +75,7 @@ module adds a manifest and an implementation, not new branches in the runtime.
 | Order | Module | State |
 | --- | --- | --- |
 | 1 | `web-fetch`, `web-search` | Built in this change |
-| 2 | Images in messages | Planned. The provider layer already carries images for desktop screenshots. The module adds attachments from the composer for models whose catalog entry accepts images |
+| 2 | `images` | Built. See below |
 | 3 | MCP servers and skills | Planned. Today they are in the `extensions` build only. The module moves the existing extension host into the standard build behind `module.extensions` |
 | 4 | Skills marketplace | Planned. See below |
 | 5 | Helpers (subagents) | Planned. See below |
@@ -127,6 +127,32 @@ accepted: a skill cannot widen what a tool may do.
 - The index format has a `kind` field for every entry (`skill` first, then
   `module`, `theme`, `mcp-server` and `model` in 0.2.0), so the 0.2.0
   marketplace reuses the index, the checksum step and the review screen.
+
+## Images in messages
+
+The `images` module (`module.images`) lets the owner attach PNG or JPEG pictures
+to a message, from the composer's Attach button on Windows or with
+`argentum run --image FILE`. It adds no tool and needs no permission beyond the
+model provider already chosen.
+
+- At most four pictures per message, each at most 5 MiB and 8192 pixels a side.
+  The format and size are checked from the file header before anything is sent.
+- A picture is sent only when the selected model reads images: the provider's
+  model list that Argentum last loaded in this app session says so
+  (`input_modalities`, as DeepSeek and OpenRouter report), or the owner listed
+  the model id in the module's `image-models` setting. Otherwise the message is
+  refused with the reason, and nothing is sent.
+- Pictures go with every request of that one run and are then dropped. They are
+  never written to the session database or the event log. The saved message
+  keeps the prompt and a note such as `[1 picture attached: screen.png]`.
+- The OpenAI-compatible, Anthropic and ChatGPT routes send them in their own
+  formats. The local sidecar route refuses them.
+
+```powershell
+argentum harness capability module.images enable
+argentum harness module-setting images image-models=gpt-4o,claude-sonnet-4-5
+argentum run --prompt "What is wrong in this screenshot?" --image error.png
+```
 
 ## Web fetch and web search
 

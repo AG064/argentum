@@ -118,6 +118,10 @@ The first stable release, for Windows x64 and Android arm64:
     refused unless you allow them.
   - **Web search:** the agent searches through a SearXNG-compatible search
     address that you set. The search host asks first.
+  - **Images in messages:** attach PNG or JPEG pictures to a message, from the
+    composer on Windows or with `argentum run --image`, for a model that reads
+    images. Pictures go only to the chosen provider with that message and are
+    not saved in the session.
 
 ## Planned for 0.1.1
 
@@ -269,7 +273,6 @@ are used, including ideas from Claude Code and Codex.
 - **Signing:** code-signed Windows releases.
 - **More agent modules,** in this order, each off by default and behind its own
   switch:
-  - images in messages, for models that can read them;
   - MCP servers and portable skills in the standard build, with the same
     approvals as built-in tools;
   - a skills marketplace: browse a catalog the project publishes, see each

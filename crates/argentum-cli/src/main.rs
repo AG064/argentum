@@ -689,6 +689,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             json,
             goal_id,
             skill,
+            images,
             final_result,
             answer_schema,
             answer_schema_sha256,
@@ -696,6 +697,12 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
             if skill.is_some() && goal_id.is_some() {
                 return Err("--skill cannot be combined with --goal".into());
             }
+            if !images.is_empty() && (skill.is_some() || goal_id.is_some() || final_result) {
+                return Err(
+                    "--image cannot be combined with --skill, --goal or --final-result".into(),
+                );
+            }
+            let images = read_image_attachments(&images)?;
             if final_result {
                 if json {
                     return Err(
@@ -748,7 +755,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                         ServerPayload::CommandAccepted,
                     )
                     .await?;
-                    let command = async { if let Some(goal_id) = goal_id { owner.submit_goal_task(prompt, goal_id).await } else { client.dispatch(task_command(prompt, skill)).await } };
+                    let command = async { if let Some(goal_id) = goal_id { owner.submit_goal_task(prompt, goal_id).await } else { client.dispatch(task_command(prompt, skill, images.clone())).await } };
                     tokio::pin!(command);
                     loop {
                         tokio::select! {
@@ -802,7 +809,7 @@ async fn run(arguments: Arguments) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 } else {
-                    let command = async { if let Some(goal_id) = goal_id { owner.submit_goal_task(prompt, goal_id).await } else { client.dispatch(task_command(prompt, skill)).await } };
+                    let command = async { if let Some(goal_id) = goal_id { owner.submit_goal_task(prompt, goal_id).await } else { client.dispatch(task_command(prompt, skill, images.clone())).await } };
                     tokio::pin!(command);
                     loop {
                         tokio::select! {
@@ -1687,7 +1694,7 @@ async fn run_benchmark_task(args: Vec<String>) -> Result<(), Box<dyn std::error:
             let mut events = client.subscribe();
             let mut stdout = tokio::io::stdout();
             let sequence = AtomicU64::new(0);
-            let command = client.dispatch(task_command(prompt, None));
+            let command = client.dispatch(task_command(prompt, None, Vec::new()));
             tokio::pin!(command);
             loop {
                 tokio::select! {
@@ -6120,6 +6127,7 @@ enum Arguments {
         json: bool,
         goal_id: Option<argentum_domain::GoalId>,
         skill: Option<String>,
+        images: Vec<std::path::PathBuf>,
         final_result: bool,
         answer_schema: Option<String>,
         answer_schema_sha256: Option<argentum_domain::Sha256Digest>,
@@ -6840,6 +6848,7 @@ where
     let mut prompt = None;
     let mut result_run_id = None;
     let mut skill = None;
+    let mut images = Vec::new();
     let mut answer_schema = None;
     let mut answer_schema_sha256 = None;
     let mut skill_action = None;
@@ -7141,6 +7150,12 @@ where
                 }
                 index += 1;
                 skill = Some(required_value(&values, index, "--skill")?.to_owned());
+            }
+            "--image" if command == "run" => {
+                index += 1;
+                images.push(std::path::PathBuf::from(required_value(
+                    &values, index, "--image",
+                )?));
             }
             "--final-result" if command == "run" => {
                 if final_result {
@@ -7610,6 +7625,7 @@ where
             json,
             goal_id: associated_goal,
             skill,
+            images,
             final_result,
             answer_schema,
             answer_schema_sha256,
@@ -9121,11 +9137,47 @@ fn display_workspace(path: &std::path::Path) -> String {
     }
 }
 
-fn task_command(prompt: String, skill: Option<String>) -> AppCommand {
+fn task_command(
+    prompt: String,
+    skill: Option<String>,
+    images: Vec<argentum_domain::ImageAttachment>,
+) -> AppCommand {
     match skill {
         Some(skill) => AppCommand::SubmitTaskWithSkill { prompt, skill },
+        None if !images.is_empty() => AppCommand::SubmitTaskWithImages { prompt, images },
         None => AppCommand::SubmitTask { prompt },
     }
+}
+
+/// Read `--image` files for a task. The runtime checks the format, the
+/// Images module and the model; this only bounds what is read.
+fn read_image_attachments(
+    paths: &[std::path::PathBuf],
+) -> Result<Vec<argentum_domain::ImageAttachment>, Box<dyn std::error::Error>> {
+    use base64::Engine;
+    if paths.len() > argentum_providers::MAX_ATTACHED_IMAGES {
+        return Err("attach at most 4 images with --image".into());
+    }
+    paths
+        .iter()
+        .map(|path| {
+            let size = std::fs::metadata(path)
+                .map_err(|_| format!("cannot read image {}", path.display()))?
+                .len();
+            if size > argentum_providers::MAX_ATTACHED_IMAGE_BYTES as u64 {
+                return Err(format!("image {} is larger than 5 MiB", path.display()).into());
+            }
+            let bytes =
+                std::fs::read(path).map_err(|_| format!("cannot read image {}", path.display()))?;
+            Ok(argentum_domain::ImageAttachment {
+                name: path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "image".into()),
+                data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+            })
+        })
+        .collect()
 }
 
 fn skill_summary_json(summary: &argentum_workspaces::SkillSummary) -> serde_json::Value {
@@ -10853,6 +10905,27 @@ mod tests {
         ));
         assert!(parse_args(["harness", "module-setting", "web-search", "no-equals"]).is_err());
         assert!(matches!(
+            parse_args([
+                "run", "--prompt", "what is this?", "--image", "a.png", "--image", "b.jpg",
+            ])
+            .expect("run with images"),
+            Arguments::Run { images, .. }
+                if images == vec![std::path::PathBuf::from("a.png"), std::path::PathBuf::from("b.jpg")]
+        ));
+        assert!(matches!(
+            task_command("p".into(), None, Vec::new()),
+            AppCommand::SubmitTask { .. }
+        ));
+        let attachment = argentum_domain::ImageAttachment {
+            name: "a.png".into(),
+            data_base64: "AA==".into(),
+        };
+        assert!(matches!(
+            task_command("p".into(), None, vec![attachment.clone()]),
+            AppCommand::SubmitTaskWithImages { images, .. } if images.len() == 1
+        ));
+        assert!(read_image_attachments(&[std::path::PathBuf::from("missing-image.png")]).is_err());
+        assert!(matches!(
             parse_args(["harness", "trajectory", "--json"]).expect("active session trajectory"),
             Arguments::Harness {
                 action: HarnessAction::Trajectory { session_id: None },
@@ -11424,12 +11497,14 @@ mod tests {
     fn model_picker_accepts_bounded_indices_exact_ids_and_optional_manual_entry() {
         let models = vec![
             argentum_domain::ProviderModel {
+                accepts_images: None,
                 id: "qwen-small".into(),
                 label: "Qwen small".into(),
                 context_window_tokens: None,
                 thinking_levels: Vec::new(),
             },
             argentum_domain::ProviderModel {
+                accepts_images: None,
                 id: "remote-model".into(),
                 label: "Remote model".into(),
                 context_window_tokens: Some(32_768),

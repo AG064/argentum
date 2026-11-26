@@ -58,6 +58,8 @@ const MAX_ACTIVITY_ITEMS: usize = 50;
 const MAX_TRAJECTORY_ITEMS: usize = 200;
 
 thread_local! {
+    /// Pictures attached to the next composer message. Held in memory only.
+    static PENDING_IMAGES: RefCell<Vec<argentum_domain::ImageAttachment>> = const { RefCell::new(Vec::new()) };
     static PROVIDER_PRESETS: RefCell<Vec<ProviderPresetSummary>> = const { RefCell::new(Vec::new()) };
     /// Where wide tables sit on screen, by table text, for the swipe axis lock.
     static WIDE_TABLES: RefCell<WideTables> = const { RefCell::new(WideTables(Vec::new())) };
@@ -2686,6 +2688,13 @@ impl UiHandle {
     }
 
     fn apply_harness_snapshot(&self, snapshot: &HarnessSnapshot) {
+        let images_on = snapshot.capabilities.iter().any(|capability| {
+            capability.id == argentum_domain::modules::IMAGES_CAPABILITY && capability.enabled
+        });
+        self.window.global::<App>().set_images_module_on(images_on);
+        if !images_on {
+            let _ = take_pending_images(&self.window);
+        }
         self.window
             .set_diagnostics_enabled(snapshot.diagnostics.is_some());
         if let Some(capture) = &snapshot.diagnostics {
@@ -5443,7 +5452,32 @@ fn goal_start_prompt(objective: &str) -> String {
     format!("Start working on the session goal: {objective}")
 }
 
+/// Attach pictures to the next composer message, replacing any attached
+/// before. The runtime checks them, the Images module and the model.
+pub fn set_pending_images(window: &MainWindow, images: Vec<argentum_domain::ImageAttachment>) {
+    let label = images
+        .iter()
+        .map(|image| image.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    PENDING_IMAGES.with(|pending| *pending.borrow_mut() = images);
+    window
+        .global::<App>()
+        .set_attached_images_label(label.into());
+}
+
+fn take_pending_images(window: &MainWindow) -> Vec<argentum_domain::ImageAttachment> {
+    window
+        .global::<App>()
+        .set_attached_images_label(SharedString::default());
+    PENDING_IMAGES.with(|pending| std::mem::take(&mut *pending.borrow_mut()))
+}
+
 fn composer_submission(window: &MainWindow, prompt: String) -> AppCommand {
+    let images = take_pending_images(window);
+    if !images.is_empty() {
+        return AppCommand::SubmitTaskWithImages { prompt, images };
+    }
     let goal_id = window.get_goal_id();
     let goal_active = window.global::<Mods>().get_goal()
         && window.get_goal_available()
@@ -5842,6 +5876,13 @@ where
         let workbench_dispatch = dispatch.clone();
         workbench::connect(window, move |command| workbench_dispatch(command));
     }
+
+    let clear_window = window.as_weak();
+    window.global::<App>().on_clear_attached_images(move || {
+        if let Some(window) = clear_window.upgrade() {
+            let _ = take_pending_images(&window);
+        }
+    });
 
     let submit_dispatch = dispatch.clone();
     let submit_window = window.as_weak();
@@ -8583,6 +8624,7 @@ mod tests {
         assert_eq!(ui.window().get_provider_models_provider_id(), "deepseek");
         assert!(ui.window().get_provider_models_loading());
         let model = |id: &str, levels: Vec<argentum_domain::ThinkingMode>| ProviderModel {
+            accepts_images: None,
             id: id.into(),
             label: id.into(),
             context_window_tokens: Some(1_000_000),
@@ -10246,6 +10288,7 @@ Second grows
         ui.apply_event(&AppEvent::ProviderModelsSnapshot {
             provider_id: "secondary".into(),
             models: vec![ProviderModel {
+                accepts_images: None,
                 id: "secondary-model".into(),
                 label: "Secondary model".into(),
                 context_window_tokens: Some(32_768),
@@ -10307,6 +10350,7 @@ Second grows
         ui.apply_event(&AppEvent::ProviderModelsSnapshot {
             provider_id: "secondary".into(),
             models: vec![ProviderModel {
+                accepts_images: None,
                 id: "secondary-model".into(),
                 label: "Secondary model".into(),
                 context_window_tokens: Some(32_768),

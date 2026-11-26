@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 AG064
 
-//! The standard Windows folder picker and Save dialog, shown over the Argentum
-//! window. Both return only what the owner chose; they read and write nothing.
+//! The standard Windows folder picker, picture picker and Save dialog, shown
+//! over the Argentum window. They return only what the owner chose; they read
+//! and write nothing.
 
 use std::path::PathBuf;
 
@@ -16,8 +17,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::GetActiveWindow;
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
     FileOpenDialog, FileSaveDialog, IFileOpenDialog, IFileSaveDialog, IShellItem,
-    FOS_FORCEFILESYSTEM, FOS_NOREADONLYRETURN, FOS_OVERWRITEPROMPT, FOS_PATHMUSTEXIST,
-    FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM, FOS_NOREADONLYRETURN,
+    FOS_OVERWRITEPROMPT, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 /// Why a dialog returned no path.
@@ -97,6 +98,48 @@ pub fn pick_folder(title: &str) -> Result<PathBuf, DialogError> {
         dialog.Show(owner()).map_err(map_show_error)?;
         let item = dialog.GetResult().map_err(|_| DialogError::Failed)?;
         item_path(&item)
+    }
+}
+
+/// Shows the Open dialog for PNG and JPEG pictures. Several can be chosen.
+pub fn pick_images(title: &str) -> Result<Vec<PathBuf>, DialogError> {
+    let _com = ComScope::enter();
+    let label = HSTRING::from("Pictures (PNG, JPEG)");
+    let pattern = HSTRING::from("*.png;*.jpg;*.jpeg");
+    let filters = [COMDLG_FILTERSPEC {
+        pszName: windows::core::PCWSTR(label.as_ptr()),
+        pszSpec: windows::core::PCWSTR(pattern.as_ptr()),
+    }];
+    // SAFETY: standard COM use of the shell's file dialog on the UI thread.
+    // The filter strings outlive the dialog.
+    unsafe {
+        let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
+            .map_err(|_| DialogError::Failed)?;
+        let options = dialog.GetOptions().map_err(|_| DialogError::Failed)?;
+        dialog
+            .SetOptions(
+                options
+                    | FOS_ALLOWMULTISELECT
+                    | FOS_FILEMUSTEXIST
+                    | FOS_FORCEFILESYSTEM
+                    | FOS_PATHMUSTEXIST,
+            )
+            .map_err(|_| DialogError::Failed)?;
+        dialog
+            .SetFileTypes(&filters)
+            .map_err(|_| DialogError::Failed)?;
+        dialog
+            .SetTitle(&HSTRING::from(title))
+            .map_err(|_| DialogError::Failed)?;
+        dialog.Show(owner()).map_err(map_show_error)?;
+        let items = dialog.GetResults().map_err(|_| DialogError::Failed)?;
+        let count = items.GetCount().map_err(|_| DialogError::Failed)?;
+        (0..count)
+            .map(|index| {
+                let item = items.GetItemAt(index).map_err(|_| DialogError::Failed)?;
+                item_path(&item)
+            })
+            .collect()
     }
 }
 

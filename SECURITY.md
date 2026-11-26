@@ -70,6 +70,7 @@ Argentum is a single-user app. It limits what the agent can do on your behalf an
 | Local PDF artifacts | Not in any release file. Optional at build time. |
 | Project memory | Notes are stored in the local database with the project, never in the repository unless you export them. The agent can only add notes, each one paragraph of at most 500 characters, and you can delete any. A note that looks like it holds a key or password is refused. Notes reach the model as data and cannot change permissions or approve anything. |
 | Import from other agents | Reads Claude Code, Codex and OpenCode settings only when you open the import list. Imports only what you tick: MCP servers as drafts that are off, without environment or header values; skills and commands as new files in `.agents/skills`, without `allowed-tools`, never replacing a file. It grants no permission and cannot be started by the agent, over JSONL or from a paired device. |
+| Images in messages module | Off. When on, pictures you attach go to the model provider you chose, with that message only, for a model that reads images. They are not saved in the session or its export. |
 | Web fetch and Web search modules | Off. When on, each host asks first, redirects to another host ask again, no cookies are kept and no script runs. Page text and search results reach the model as untrusted data and cannot change permissions. Web search sends your query to the search address you set. |
 
 ## Network use

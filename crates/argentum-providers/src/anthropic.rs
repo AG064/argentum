@@ -50,6 +50,9 @@ enum WireBlock {
     Text {
         text: String,
     },
+    Image {
+        source: WireImageSource,
+    },
     ToolUse {
         id: String,
         name: String,
@@ -59,6 +62,14 @@ enum WireBlock {
         tool_use_id: String,
         content: String,
     },
+}
+
+#[derive(Debug, Serialize)]
+struct WireImageSource {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    media_type: &'static str,
+    data: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -173,7 +184,20 @@ pub(crate) fn build_messages_request(
         };
         push_blocks(&mut messages, role, text_blocks(message.content));
     }
-    push_blocks(&mut messages, "user", text_blocks(request.prompt));
+    // Attached pictures go before the prompt text, as Anthropic recommends.
+    let mut prompt_blocks = request
+        .prompt_images
+        .iter()
+        .map(|image| WireBlock::Image {
+            source: WireImageSource {
+                kind: "base64",
+                media_type: image.media_type(),
+                data: image.base64_data().to_owned(),
+            },
+        })
+        .collect::<Vec<_>>();
+    prompt_blocks.extend(text_blocks(request.prompt));
+    push_blocks(&mut messages, "user", prompt_blocks);
     for exchange in request.tool_exchanges {
         push_exchange(&mut messages, exchange)?;
     }

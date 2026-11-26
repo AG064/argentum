@@ -551,6 +551,7 @@ impl RuntimeService {
                 .to_string(),
             );
             let request = ModelRequest {
+                prompt_images: Vec::new(),
                 disable_thinking: false,
                 require_tool_call: false,
                 continuation_scope: Some(child_context.continuation_scope),

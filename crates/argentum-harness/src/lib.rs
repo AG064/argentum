@@ -1053,11 +1053,16 @@ fn agent_module_capabilities() -> impl Iterator<Item = CapabilityRegistration> {
                 .map(|permission| permission.label())
                 .collect::<Vec<_>>()
                 .join(", ");
+            let needs = if permissions.is_empty() {
+                "Needs no permission beyond the model provider you chose.".to_owned()
+            } else {
+                format!("Needs: {permissions}.")
+            };
             disabled_configurable_capability(
                 module.capability_id,
                 module.label,
                 HarnessCapabilityKind::Integration,
-                &format!("{} Needs: {permissions}.", module.summary),
+                &format!("{} {needs}", module.summary),
                 vec!["approval.write"],
             )
         })
@@ -2048,9 +2053,9 @@ mod tests {
 
         assert_eq!(policy.profile_id, CUSTOM_EXECUTION_PROFILE_ID);
         // Release builds list the Page reader as coming soon, so it is not
-        // configurable there. The last two are the Web fetch and Web search
-        // agent modules.
-        let configurable = if PREVIEW_MODULES { 25 } else { 24 };
+        // configurable there. The last three are the Web fetch, Web search
+        // and Images agent modules.
+        let configurable = if PREVIEW_MODULES { 26 } else { 25 };
         assert_eq!(policy.capability_enabled.len(), configurable);
         assert_eq!(
             policy
@@ -2058,7 +2063,7 @@ mod tests {
                 .get("verification.supplemental-rust"),
             Some(&false)
         );
-        for module in ["module.web-fetch", "module.web-search"] {
+        for module in ["module.web-fetch", "module.web-search", "module.images"] {
             assert_eq!(policy.capability_enabled.get(module), Some(&false));
         }
         assert_eq!(

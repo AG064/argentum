@@ -35,6 +35,7 @@ argentum-execution = { workspace = true, optional = true }
 argentum-artifacts = { workspace = true, optional = true }
 argentum-platform.workspace = true
 argentum-providers.workspace = true
+base64.workspace = true
 argentum-runtime.workspace = true
 argentum-security.workspace = true
 argentum-store.workspace = true

@@ -319,6 +319,15 @@ export global App {
     in-out property <string> workspace_draft: "";
     // True where the host can show the system folder picker.
     in-out property <bool> workspace_picker_available: false;
+    // Images in messages: the host can show a picture picker, and the module
+    // is on in the policy. Both must hold for the composer to offer Attach.
+    in-out property <bool> image_picker_available: false;
+    in-out property <bool> images_module_on: false;
+    // Names of the pictures attached to the next message, or empty.
+    in-out property <string> attached_images_label: "";
+    // Shows the picture picker. The host fills attached_images_label.
+    callback attach_images();
+    callback clear_attached_images();
     // Shows the system folder picker. The host puts a checked path in
     // workspace_draft, or a reason in workspace_notice. Nothing opens until
     // the owner confirms with open_workspace.
