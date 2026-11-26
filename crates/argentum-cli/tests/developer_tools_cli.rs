@@ -149,9 +149,11 @@ fn phase4_cli_lists_tools_profiles_grants_and_verification_evidence() {
 
     let tools = json(run_cli(workspace.path(), &database, &["tool", "list"]));
     let tools = tools["tools"].as_array().expect("tools");
+    // 25 built-in tools and the two Web module tools, which are listed while
+    // their modules stay off.
     assert_eq!(
         tools.len(),
-        25 + usize::from(cfg!(feature = "extensions"))
+        27 + usize::from(cfg!(feature = "extensions"))
             + 6 * usize::from(cfg!(feature = "desktop-control"))
     );
     for id in [
