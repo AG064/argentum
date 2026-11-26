@@ -44,7 +44,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install pinned mdBook
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c
         with:
           tool: mdbook@0.5.4
       - name: Build the site
