@@ -343,6 +343,8 @@ export struct MarketFileView {
     // Fits fully on GPU, with offload, on the CPU, or will not fit.
     fit: string,
     fit_tone: string, // ok | secondary | danger
+    // Reported tokens per second from the community table, or none yet.
+    speed: string,
 }
 
 export struct DiagnosticRecordView {

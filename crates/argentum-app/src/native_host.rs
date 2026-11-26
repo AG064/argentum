@@ -879,6 +879,8 @@ fn wire_host_to_ui(
         ui,
         crate::market::Context {
             secrets: config.secret_store(),
+            local: host.local_handle(),
+            runtime: runtime.handle().clone(),
         },
     );
 

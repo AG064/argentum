@@ -71,7 +71,38 @@ The largest quantization that fits fully on the GPU is marked "recommended for
 this computer". If none does, the largest that runs with offload or on the CPU
 is marked instead.
 
-## Gated models and the token
+## Reported speeds
+
+The Hugging Face Hub publishes no speed field for models, so there is no public
+metadata to show. Speeds come from one file the project controls:
+`community/local-model-speeds.json`, where every entry arrives by a reviewed
+pull request (see `community/README.md`). Each quantization shows the fastest
+reported speed with its GPU and RAM, or "No reported speed yet".
+
+A copy of the table is built into the app, so showing speeds sends nothing.
+"Refresh speeds" fetches the current file from
+`raw.githubusercontent.com/AG064/argentum/development/...`, only when pressed.
+The app refuses a table with unknown fields or implausible values.
+
+### Sharing your own speed
+
+Nothing is measured or shared unless you press a button, and Argentum never
+sends a report itself.
+
+1. Start a local model as usual and approve it.
+2. Press "Measure speed". Argentum sends one fixed prompt to that running model
+   on 127.0.0.1, asks for up to 128 tokens, and times the generation from the
+   first token to the end.
+3. Argentum shows the result and, if you choose to share it, the whole report:
+   repository, quantization, GPU model, RAM size in GB and tokens per second.
+   Nothing else is in it. The repository is known for files downloaded from the
+   marketplace (recorded in `<data>/models/marketplace-sources.json`) and for
+   the add-on's models. For any other file no report is offered.
+4. "Open report on GitHub" opens a prefilled new issue on the Argentum
+   repository in your browser. You submit it there, or close the tab. "Close"
+   discards the report.
+
+
 
 Public models need no account. A gated model needs a Hugging Face token and
 its terms accepted on huggingface.co. "Set Hugging Face token" opens the

@@ -45,6 +45,8 @@ pub use local_fit::{
     LocalModelFit, LocalModelFitEstimate, MemoryFacts,
 };
 mod local_models;
+mod local_speed;
+pub use local_speed::{LocalSpeedMeasurement, SPEED_OUTPUT_TOKENS, SPEED_PROMPT};
 mod minimax_continuation;
 pub use minimax_continuation::{ContinuationScope, MinimaxAssistantState};
 mod sidecar_protocol;

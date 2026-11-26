@@ -322,6 +322,7 @@ dependencies = [
  "argentum-store",
  "argentum-ui",
  "argentum-update",
+ "serde",
  "serde_json",
  "slint",
  "tempfile",
