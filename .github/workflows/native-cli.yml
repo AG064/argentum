@@ -192,7 +192,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Install pinned dependency-policy tool
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c
         with:
           tool: cargo-deny@0.20.2
       - name: Advisory, source and license policy
